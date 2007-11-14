@@ -10,6 +10,10 @@ config SND_SOC_TLV320
 	tristate
 	depends on SND_SOC
 
+config SND_SOC_TLV320AIC3X
+	tristate
+	depends on SND_SOC && I2C
+
 config SND_SOC_UDA1380
 	tristate
 	depends on SND_SOC
@@ -103,5 +107,3 @@ config SND_SOC_WM8991
 config SND_SOC_CS4270_VD33_ERRATA
 	bool
 	depends on SND_SOC_CS4270
-
-
