@@ -40,7 +40,7 @@
 
 struct pglist_data *node_data[MAX_NUMNODES] __read_mostly;
 EXPORT_SYMBOL(node_data);
-bootmem_data_t node0_bdata;
+static bootmem_data_t node0_bdata;
 
 /*
  * numa interface - we expect the numa architecture specific code to have
@@ -103,14 +103,14 @@ extern unsigned long highend_pfn, highstart_pfn;
 
 #define LARGE_PAGE_BYTES (PTRS_PER_PTE * PAGE_SIZE)
 
-unsigned long node_remap_start_pfn[MAX_NUMNODES];
+static unsigned long node_remap_start_pfn[MAX_NUMNODES];
 unsigned long node_remap_size[MAX_NUMNODES];
-unsigned long node_remap_offset[MAX_NUMNODES];
-void *node_remap_start_vaddr[MAX_NUMNODES];
+static unsigned long node_remap_offset[MAX_NUMNODES];
+static void *node_remap_start_vaddr[MAX_NUMNODES];
 void set_pmd_pfn(unsigned long vaddr, unsigned long pfn, pgprot_t flags);
 
-void *node_remap_end_vaddr[MAX_NUMNODES];
-void *node_remap_alloc_vaddr[MAX_NUMNODES];
+static void *node_remap_end_vaddr[MAX_NUMNODES];
+static void *node_remap_alloc_vaddr[MAX_NUMNODES];
 static unsigned long kva_start_pfn;
 static unsigned long kva_pages;
 /*
@@ -273,7 +273,7 @@ unsigned long __init setup_memory(void)
 	 * When mapping a NUMA machine we allocate the node_mem_map arrays
 	 * from node local memory.  They are then mapped directly into KVA
 	 * between zone normal and vmalloc space.  Calculate the size of
-	 * this space and use it to adjust the boundry between ZONE_NORMAL
+	 * this space and use it to adjust the boundary between ZONE_NORMAL
 	 * and ZONE_HIGHMEM.
 	 */
 	find_max_pfn();
@@ -288,8 +288,9 @@ unsigned long __init setup_memory(void)
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* Numa kva area is below the initrd */
-	if (LOADER_TYPE && INITRD_START)
-		kva_start_pfn = PFN_DOWN(INITRD_START)  - kva_pages;
+	if (boot_params.hdr.type_of_loader && boot_params.hdr.ramdisk_image)
+		kva_start_pfn = PFN_DOWN(boot_params.hdr.ramdisk_image)
+			- kva_pages;
 #endif
 	kva_start_pfn -= kva_start_pfn & (PTRS_PER_PTE-1);
 
@@ -403,7 +404,7 @@ void __init set_highmem_pages_init(int bad_ppro)
 }
 
 #ifdef CONFIG_MEMORY_HOTPLUG
-int paddr_to_nid(u64 addr)
+static int paddr_to_nid(u64 addr)
 {
 	int nid;
 	unsigned long pfn = PFN_DOWN(addr);

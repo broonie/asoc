@@ -17,10 +17,7 @@
 #include <linux/threads.h>
 #include <asm/paravirt.h>
 
-#ifndef _I386_BITOPS_H
-#include <asm/bitops.h>
-#endif
-
+#include <linux/bitops.h>
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
@@ -40,7 +37,7 @@ extern spinlock_t pgd_lock;
 extern struct page *pgd_list;
 void check_pgt_cache(void);
 
-void pmd_ctor(void *, struct kmem_cache *, unsigned long);
+void pmd_ctor(struct kmem_cache *, void *);
 void pgtable_cache_init(void);
 void paging_init(void);
 

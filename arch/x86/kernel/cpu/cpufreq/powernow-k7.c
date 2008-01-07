@@ -114,7 +114,7 @@ static int check_fsb(unsigned int fsbspeed)
 
 static int check_powernow(void)
 {
-	struct cpuinfo_x86 *c = cpu_data;
+	struct cpuinfo_x86 *c = &cpu_data(0);
 	unsigned int maxei, eax, ebx, ecx, edx;
 
 	if ((c->x86_vendor != X86_VENDOR_AMD) || (c->x86 !=6)) {
@@ -565,7 +565,7 @@ static unsigned int powernow_get(unsigned int cpu)
 }
 
 
-static int __init acer_cpufreq_pst(struct dmi_system_id *d)
+static int __init acer_cpufreq_pst(const struct dmi_system_id *d)
 {
 	printk(KERN_WARNING "%s laptop with broken PST tables in BIOS detected.\n", d->ident);
 	printk(KERN_WARNING "You need to downgrade to 3A21 (09/09/2002), or try a newer BIOS than 3A71 (01/20/2003)\n");

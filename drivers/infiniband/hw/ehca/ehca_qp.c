@@ -451,7 +451,6 @@ static struct ehca_qp *internal_create_qp(
 		has_srq = 1;
 		parms.ext_type = EQPT_SRQBASE;
 		parms.srq_qpn = my_srq->real_qp_num;
-		parms.srq_token = my_srq->token;
 	}
 
 	if (is_llqp && has_srq) {
@@ -582,6 +581,9 @@ static struct ehca_qp *internal_create_qp(
 		ehca_err(pd->device, "Invalid number of qp");
 		goto create_qp_exit1;
 	}
+
+	if (has_srq)
+		parms.srq_token = my_qp->token;
 
 	parms.servicetype = ibqptype2servicetype(qp_type);
 	if (parms.servicetype < 0) {
@@ -836,7 +838,7 @@ struct ib_srq *ehca_create_srq(struct ib_pd *pd,
 
 	/* copy back return values */
 	srq_init_attr->attr.max_wr = qp_init_attr.cap.max_recv_wr;
-	srq_init_attr->attr.max_sge = qp_init_attr.cap.max_recv_sge;
+	srq_init_attr->attr.max_sge = 3;
 
 	/* drive SRQ into RTR state */
 	mqpcb = ehca_alloc_fw_ctrlblock(GFP_KERNEL);
@@ -1194,10 +1196,6 @@ static int internal_modify_qp(struct ib_qp *ibqp,
 		update_mask |= EHCA_BMASK_SET(MQPCB_MASK_QKEY, 1);
 	}
 	if (attr_mask & IB_QP_AV) {
-		int ah_mult = ib_rate_to_mult(attr->ah_attr.static_rate);
-		int ehca_mult = ib_rate_to_mult(shca->sport[my_qp->
-						init_attr.port_num].rate);
-
 		mqpcb->dlid = attr->ah_attr.dlid;
 		update_mask |= EHCA_BMASK_SET(MQPCB_MASK_DLID, 1);
 		mqpcb->source_path_bits = attr->ah_attr.src_path_bits;
@@ -1205,11 +1203,12 @@ static int internal_modify_qp(struct ib_qp *ibqp,
 		mqpcb->service_level = attr->ah_attr.sl;
 		update_mask |= EHCA_BMASK_SET(MQPCB_MASK_SERVICE_LEVEL, 1);
 
-		if (ah_mult < ehca_mult)
-			mqpcb->max_static_rate = (ah_mult > 0) ?
-			((ehca_mult - 1) / ah_mult) : 0;
-		else
-			mqpcb->max_static_rate = 0;
+		if (ehca_calc_ipd(shca, mqpcb->prim_phys_port,
+				  attr->ah_attr.static_rate,
+				  &mqpcb->max_static_rate)) {
+			ret = -EINVAL;
+			goto modify_qp_exit2;
+		}
 		update_mask |= EHCA_BMASK_SET(MQPCB_MASK_MAX_STATIC_RATE, 1);
 
 		/*
@@ -1278,10 +1277,6 @@ static int internal_modify_qp(struct ib_qp *ibqp,
 			(MQPCB_MASK_RDMA_ATOMIC_OUTST_DEST_QP, 1);
 	}
 	if (attr_mask & IB_QP_ALT_PATH) {
-		int ah_mult = ib_rate_to_mult(attr->alt_ah_attr.static_rate);
-		int ehca_mult = ib_rate_to_mult(
-			shca->sport[my_qp->init_attr.port_num].rate);
-
 		if (attr->alt_port_num < 1
 		    || attr->alt_port_num > shca->num_ports) {
 			ret = -EINVAL;
@@ -1307,10 +1302,12 @@ static int internal_modify_qp(struct ib_qp *ibqp,
 		mqpcb->source_path_bits_al = attr->alt_ah_attr.src_path_bits;
 		mqpcb->service_level_al = attr->alt_ah_attr.sl;
 
-		if (ah_mult > 0 && ah_mult < ehca_mult)
-			mqpcb->max_static_rate_al = (ehca_mult - 1) / ah_mult;
-		else
-			mqpcb->max_static_rate_al = 0;
+		if (ehca_calc_ipd(shca, mqpcb->alt_phys_port,
+				  attr->alt_ah_attr.static_rate,
+				  &mqpcb->max_static_rate_al)) {
+			ret = -EINVAL;
+			goto modify_qp_exit2;
+		}
 
 		/* OpenIB doesn't support alternate retry counts - copy them */
 		mqpcb->retry_count_al = mqpcb->retry_count;
@@ -1753,7 +1750,7 @@ int ehca_query_srq(struct ib_srq *srq, struct ib_srq_attr *srq_attr)
 	}
 
 	srq_attr->max_wr = qpcb->max_nr_outst_recv_wr - 1;
-	srq_attr->max_sge = qpcb->actual_nr_sges_in_rq_wqe;
+	srq_attr->max_sge = 3;
 	srq_attr->srq_limit = EHCA_BMASK_GET(
 		MQPCB_CURR_SRQ_LIMIT, qpcb->curr_srq_limit);
 

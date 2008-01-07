@@ -143,7 +143,7 @@ static void plip_bh(struct work_struct *work);
 static void plip_timer_bh(struct work_struct *work);
 
 /* Interrupt handler */
-static void plip_interrupt(int irq, void *dev_id);
+static void plip_interrupt(void *dev_id);
 
 /* Functions for DEV methods */
 static int plip_tx_packet(struct sk_buff *skb, struct net_device *dev);
@@ -380,7 +380,7 @@ plip_timer_bh(struct work_struct *work)
 		container_of(work, struct net_local, timer.work);
 
 	if (!(atomic_read (&nl->kill_timer))) {
-		plip_interrupt (-1, nl->dev);
+		plip_interrupt (nl->dev);
 
 		schedule_delayed_work(&nl->timer, 1);
 	}
@@ -663,7 +663,7 @@ plip_receive_packet(struct net_device *dev, struct net_local *nl,
 	case PLIP_PK_DONE:
 		/* Inform the upper layer for the arrival of a packet. */
 		rcv->skb->protocol=plip_type_trans(rcv->skb, dev);
-		netif_rx(rcv->skb);
+		netif_rx_ni(rcv->skb);
 		dev->last_rx = jiffies;
 		dev->stats.rx_bytes += rcv->length.h;
 		dev->stats.rx_packets++;
@@ -897,7 +897,7 @@ plip_error(struct net_device *dev, struct net_local *nl,
 
 /* Handle the parallel port interrupts. */
 static void
-plip_interrupt(int irq, void *dev_id)
+plip_interrupt(void *dev_id)
 {
 	struct net_device *dev = dev_id;
 	struct net_local *nl;
@@ -1269,7 +1269,7 @@ static void plip_attach (struct parport *port)
 
 		nl = netdev_priv(dev);
 		nl->dev = dev;
-		nl->pardev = parport_register_device(port, name, plip_preempt,
+		nl->pardev = parport_register_device(port, dev->name, plip_preempt,
 						 plip_wakeup, plip_interrupt,
 						 0, dev);
 

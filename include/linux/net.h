@@ -95,6 +95,12 @@ enum sock_type {
 
 #endif /* ARCH_HAS_SOCKET_TYPES */
 
+enum sock_shutdown_cmd {
+	SHUT_RD		= 0,
+	SHUT_WR		= 1,
+	SHUT_RDWR	= 2,
+};
+
 /**
  *  struct socket - general BSD socket
  *  @state: socket state (%SS_CONNECTED, etc)
@@ -223,6 +229,8 @@ extern int kernel_setsockopt(struct socket *sock, int level, int optname,
 extern int kernel_sendpage(struct socket *sock, struct page *page, int offset,
 			   size_t size, int flags);
 extern int kernel_sock_ioctl(struct socket *sock, int cmd, unsigned long arg);
+extern int kernel_sock_shutdown(struct socket *sock,
+				enum sock_shutdown_cmd how);
 
 #ifndef CONFIG_SMP
 #define SOCKOPS_WRAPPED(name) name
@@ -312,6 +320,10 @@ static const struct proto_ops name##_ops = {			\
 
 #define MODULE_ALIAS_NET_PF_PROTO(pf, proto) \
 	MODULE_ALIAS("net-pf-" __stringify(pf) "-proto-" __stringify(proto))
+
+#define MODULE_ALIAS_NET_PF_PROTO_TYPE(pf, proto, type) \
+	MODULE_ALIAS("net-pf-" __stringify(pf) "-proto-" __stringify(proto) \
+		     "-type-" __stringify(type))
 
 #ifdef CONFIG_SYSCTL
 #include <linux/sysctl.h>

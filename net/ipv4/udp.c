@@ -147,13 +147,14 @@ int __udp_lib_get_port(struct sock *sk, unsigned short snum,
 	write_lock_bh(&udp_hash_lock);
 
 	if (!snum) {
-		int i, low, high;
+		int i, low, high, remaining;
 		unsigned rover, best, best_size_so_far;
 
 		inet_get_local_port_range(&low, &high);
+		remaining = (high - low) + 1;
 
 		best_size_so_far = UINT_MAX;
-		best = rover = net_random() % (high - low) + low;
+		best = rover = net_random() % remaining + low;
 
 		/* 1st pass: look for empty (or shortest) hash chain */
 		for (i = 0; i < UDP_HTABLE_SIZE; i++) {
@@ -1151,7 +1152,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct hlist_head udptable[],
 		return __udp4_lib_mcast_deliver(skb, uh, saddr, daddr, udptable);
 
 	sk = __udp4_lib_lookup(saddr, uh->source, daddr, uh->dest,
-			       skb->dev->ifindex, udptable        );
+			       inet_iif(skb), udptable);
 
 	if (sk != NULL) {
 		int ret = udp_queue_rcv_skb(sk, skb);
@@ -1429,6 +1430,8 @@ unsigned int udp_poll(struct file *file, struct socket *sock, poll_table *wait)
 
 }
 
+DEFINE_PROTO_INUSE(udp)
+
 struct proto udp_prot = {
 	.name		   = "UDP",
 	.owner		   = THIS_MODULE,
@@ -1451,6 +1454,7 @@ struct proto udp_prot = {
 	.compat_setsockopt = compat_udp_setsockopt,
 	.compat_getsockopt = compat_udp_getsockopt,
 #endif
+	REF_PROTO_INUSE(udp)
 };
 
 /* ------------------------------------------------------------------------ */

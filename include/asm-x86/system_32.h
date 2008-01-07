@@ -7,6 +7,7 @@
 #include <asm/cmpxchg.h>
 
 #ifdef __KERNEL__
+#define AT_VECTOR_SIZE_ARCH 2 /* entries in ARCH_DLINFO */
 
 struct task_struct;	/* one of the stranger aspects of C forward declarations.. */
 extern struct task_struct * FASTCALL(__switch_to(struct task_struct *prev, struct task_struct *next));
@@ -141,7 +142,7 @@ static inline unsigned long native_read_cr4_safe(void)
 {
 	unsigned long val;
 	/* This could fault if %cr4 does not exist */
-	asm("1: movl %%cr4, %0		\n"
+	asm volatile("1: movl %%cr4, %0		\n"
 		"2:				\n"
 		".section __ex_table,\"a\"	\n"
 		".long 1b,2b			\n"
@@ -160,6 +161,10 @@ static inline void native_wbinvd(void)
 	asm volatile("wbinvd": : :"memory");
 }
 
+static inline void clflush(volatile void *__p)
+{
+	asm volatile("clflush %0" : "+m" (*(char __force *)__p));
+}
 
 #ifdef CONFIG_PARAVIRT
 #include <asm/paravirt.h>
@@ -310,5 +315,6 @@ extern unsigned long arch_align_stack(unsigned long sp);
 extern void free_init_pages(char *what, unsigned long begin, unsigned long end);
 
 void default_idle(void);
+void __show_registers(struct pt_regs *, int all);
 
 #endif

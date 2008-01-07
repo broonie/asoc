@@ -35,7 +35,11 @@ void __init pre_intr_init_hook(void)
 /*
  * IRQ2 is cascade interrupt to second interrupt controller
  */
-static struct irqaction irq2 = { no_action, 0, CPU_MASK_NONE, "cascade", NULL, NULL};
+static struct irqaction irq2 = {
+	.handler = no_action,
+	.mask = CPU_MASK_NONE,
+	.name = "cascade",
+};
 
 /**
  * intr_init_hook - post gate setup interrupt initialisation
@@ -104,7 +108,7 @@ void __init time_init_hook(void)
  * mca_nmi_hook - hook into MCA specific NMI chain
  *
  * Description:
- *	The MCA (Microchannel Arcitecture) has an NMI chain for NMI sources
+ *	The MCA (Microchannel Architecture) has an NMI chain for NMI sources
  *	along the MCA bus.  Use this to hook into that chain if you will need
  *	it.
  **/
@@ -127,7 +131,7 @@ static __init int no_ipi_broadcast(char *str)
 	return 1;
 }
 
-__setup("no_ipi_broadcast", no_ipi_broadcast);
+__setup("no_ipi_broadcast=", no_ipi_broadcast);
 
 static int __init print_ipi_mode(void)
 {
@@ -159,16 +163,18 @@ char * __init machine_specific_memory_setup(void)
 	 * Otherwise fake a memory map; one section from 0k->640k,
 	 * the next section from 1mb->appropriate_mem_k
 	 */
-	sanitize_e820_map(E820_MAP, &E820_MAP_NR);
-	if (copy_e820_map(E820_MAP, E820_MAP_NR) < 0) {
+	sanitize_e820_map(boot_params.e820_map, &boot_params.e820_entries);
+	if (copy_e820_map(boot_params.e820_map, boot_params.e820_entries)
+	    < 0) {
 		unsigned long mem_size;
 
 		/* compare results from other methods and take the greater */
-		if (ALT_MEM_K < EXT_MEM_K) {
-			mem_size = EXT_MEM_K;
+		if (boot_params.alt_mem_k
+		    < boot_params.screen_info.ext_mem_k) {
+			mem_size = boot_params.screen_info.ext_mem_k;
 			who = "BIOS-88";
 		} else {
-			mem_size = ALT_MEM_K;
+			mem_size = boot_params.alt_mem_k;
 			who = "BIOS-e801";
 		}
 

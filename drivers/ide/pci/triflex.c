@@ -96,42 +96,20 @@ static void triflex_set_pio_mode(ide_drive_t *drive, const u8 pio)
 	triflex_set_mode(drive, XFER_PIO_0 + pio);
 }
 
-static int triflex_config_drive_xfer_rate(ide_drive_t *drive)
-{
-	if (ide_tune_dma(drive))
-		return 0;
-
-	ide_set_max_pio(drive);
-
-	return -1;
-}
-
 static void __devinit init_hwif_triflex(ide_hwif_t *hwif)
 {
 	hwif->set_pio_mode = &triflex_set_pio_mode;
 	hwif->set_dma_mode = &triflex_set_mode;
-
-	if (hwif->dma_base == 0)
-		return;
-
-	hwif->atapi_dma  = 1;
-	hwif->mwdma_mask = 0x07;
-	hwif->swdma_mask = 0x07;
-	hwif->ide_dma_check = &triflex_config_drive_xfer_rate;
-	
-	if (!noautodma)
-		hwif->autodma = 1;
-	hwif->drives[0].autodma = hwif->autodma;
-	hwif->drives[1].autodma = hwif->autodma;
 }
 
-static ide_pci_device_t triflex_device __devinitdata = {
+static const struct ide_port_info triflex_device __devinitdata = {
 	.name		= "TRIFLEX",
 	.init_hwif	= init_hwif_triflex,
-	.autodma	= AUTODMA,
 	.enablebits	= {{0x80, 0x01, 0x01}, {0x80, 0x02, 0x02}},
-	.bootable	= ON_BOARD,
+	.host_flags	= IDE_HFLAG_BOOTABLE,
 	.pio_mask	= ATA_PIO4,
+	.swdma_mask	= ATA_SWDMA2,
+	.mwdma_mask	= ATA_MWDMA2,
 };
 
 static int __devinit triflex_init_one(struct pci_dev *dev, 
@@ -140,9 +118,8 @@ static int __devinit triflex_init_one(struct pci_dev *dev,
 	return ide_setup_pci_device(dev, &triflex_device);
 }
 
-static struct pci_device_id triflex_pci_tbl[] = {
-	{ PCI_VENDOR_ID_COMPAQ, PCI_DEVICE_ID_COMPAQ_TRIFLEX_IDE,
-	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+static const struct pci_device_id triflex_pci_tbl[] = {
+	{ PCI_VDEVICE(COMPAQ, PCI_DEVICE_ID_COMPAQ_TRIFLEX_IDE), 0 },
 	{ 0, },
 };
 MODULE_DEVICE_TABLE(pci, triflex_pci_tbl);

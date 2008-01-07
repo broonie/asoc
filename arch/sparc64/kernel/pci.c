@@ -207,8 +207,7 @@ static struct {
 	{ "SUNW,sun4v-pci", sun4v_pci_init },
 	{ "pciex108e,80f0", fire_pci_init },
 };
-#define PCI_NUM_CONTROLLER_TYPES (sizeof(pci_controller_table) / \
-				  sizeof(pci_controller_table[0]))
+#define PCI_NUM_CONTROLLER_TYPES	ARRAY_SIZE(pci_controller_table)
 
 static int __init pci_controller_init(const char *model_name, int namelen, struct device_node *dp)
 {
@@ -1274,6 +1273,22 @@ int pci_dma_supported(struct pci_dev *pdev, u64 device_mask)
 		return 0;
 
 	return (device_mask & dma_addr_mask) == dma_addr_mask;
+}
+
+void pci_resource_to_user(const struct pci_dev *pdev, int bar,
+			  const struct resource *rp, resource_size_t *start,
+			  resource_size_t *end)
+{
+	struct pci_pbm_info *pbm = pdev->dev.archdata.host_controller;
+	unsigned long offset;
+
+	if (rp->flags & IORESOURCE_IO)
+		offset = pbm->io_space.start;
+	else
+		offset = pbm->mem_space.start;
+
+	*start = rp->start - offset;
+	*end = rp->end - offset;
 }
 
 #endif /* !(CONFIG_PCI) */

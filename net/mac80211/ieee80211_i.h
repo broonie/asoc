@@ -37,8 +37,6 @@
 
 struct ieee80211_local;
 
-#define BIT(x) (1 << (x))
-
 #define IEEE80211_ALIGN32_PAD(a) ((4 - ((a) & 3)) & 3)
 
 /* Maximum number of broadcast/multicast frames to buffer when some of the
@@ -232,6 +230,7 @@ struct ieee80211_if_vlan {
 #define IEEE80211_STA_AUTO_SSID_SEL	BIT(10)
 #define IEEE80211_STA_AUTO_BSSID_SEL	BIT(11)
 #define IEEE80211_STA_AUTO_CHANNEL_SEL	BIT(12)
+#define IEEE80211_STA_PRIVACY_INVOKED	BIT(13)
 struct ieee80211_if_sta {
 	enum {
 		IEEE80211_DISABLED, IEEE80211_AUTHENTICATE,
@@ -243,6 +242,8 @@ struct ieee80211_if_sta {
 	u8 bssid[ETH_ALEN], prev_bssid[ETH_ALEN];
 	u8 ssid[IEEE80211_MAX_SSID_LEN];
 	size_t ssid_len;
+	u8 scan_ssid[IEEE80211_MAX_SSID_LEN];
+	size_t scan_ssid_len;
 	u16 aid;
 	u16 ap_capab, capab;
 	u8 *extra_ie; /* to be added to the end of AssocReq */
@@ -261,7 +262,6 @@ struct ieee80211_if_sta {
 	unsigned long request;
 	struct sk_buff_head skb_queue;
 
-	int key_management_enabled;
 	unsigned long last_probe;
 
 #define IEEE80211_AUTH_ALG_OPEN BIT(0)

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/ide/pci/alim15x3.c		Version 0.26	Jul 14 2007
+ * linux/drivers/ide/pci/alim15x3.c		Version 0.29	Sep 16 2007
  *
  *  Copyright (C) 1998-2000 Michel Aubry, Maintainer
  *  Copyright (C) 1998-2000 Andrzej Krzysztofowicz, Maintainer
@@ -437,26 +437,6 @@ static void ali_set_dma_mode(ide_drive_t *drive, const u8 speed)
 }
 
 /**
- *	ali15x3_config_drive_for_dma	-	configure for DMA
- *	@drive: drive to configure
- *
- *	Configure a drive for DMA operation. If DMA is not possible we
- *	drop the drive into PIO mode instead.
- */
-
-static int ali15x3_config_drive_for_dma(ide_drive_t *drive)
-{
-	drive->init_speed = 0;
-
-	if (ide_tune_dma(drive))
-		return 0;
-
-	ide_set_max_pio(drive);
-
-	return -1;
-}
-
-/**
  *	ali15x3_dma_setup	-	begin a DMA phase
  *	@drive:	target device
  *
@@ -512,6 +492,13 @@ static unsigned int __devinit init_chipset_ali15x3 (struct pci_dev *dev, const c
 		 * clear bit 7
 		 */
 		pci_write_config_byte(dev, 0x4b, tmpbyte & 0x7F);
+		/*
+		 * check m1533, 0x5e, bit 1~4 == 1001 => & 00011110 = 00010010
+		 */
+		if (m5229_revision >= 0x20 && isa_dev) {
+			pci_read_config_byte(isa_dev, 0x5e, &tmpbyte);
+			chip_is_1543c_e = ((tmpbyte & 0x1e) == 0x12) ? 1: 0;
+		}
 		goto out;
 	}
 
@@ -557,7 +544,30 @@ static unsigned int __devinit init_chipset_ali15x3 (struct pci_dev *dev, const c
 			pci_write_config_byte(isa_dev, 0x79, tmpbyte | 0x02);
 		}
 	}
+
 out:
+	/*
+	 * CD_ROM DMA on (m5229, 0x53, bit0)
+	 *      Enable this bit even if we want to use PIO.
+	 * PIO FIFO off (m5229, 0x53, bit1)
+	 *      The hardware will use 0x54h and 0x55h to control PIO FIFO.
+	 *	(Not on later devices it seems)
+	 *
+	 *	0x53 changes meaning on later revs - we must no touch
+	 *	bit 1 on them.  Need to check if 0x20 is the right break.
+	 */
+	if (m5229_revision >= 0x20) {
+		pci_read_config_byte(dev, 0x53, &tmpbyte);
+
+		if (m5229_revision <= 0x20)
+			tmpbyte = (tmpbyte & (~0x02)) | 0x01;
+		else if (m5229_revision == 0xc7 || m5229_revision == 0xc8)
+			tmpbyte |= 0x03;
+		else
+			tmpbyte |= 0x01;
+
+		pci_write_config_byte(dev, 0x53, tmpbyte);
+	}
 	pci_dev_put(north);
 	pci_dev_put(isa_dev);
 	local_irq_restore(flags);
@@ -591,6 +601,11 @@ static int ali_cable_override(struct pci_dev *pdev)
 	/* Fujitsu P2000 */
 	if (pdev->subsystem_vendor == 0x10CF &&
 	    pdev->subsystem_device == 0x10AF)
+		return 1;
+
+	/* Mitac 8317 (Winbook-A) and relatives */
+	if (pdev->subsystem_vendor == 0x1071 &&
+	    pdev->subsystem_device == 0x8317)
 		return 1;
 
 	/* Systems by DMI */
@@ -636,35 +651,7 @@ static u8 __devinit ata66_ali15x3(ide_hwif_t *hwif)
 			if ((tmpbyte & (1 << hwif->channel)) == 0)
 				cbl = ATA_CBL_PATA80;
 		}
-	} else {
-		/*
-		 * check m1533, 0x5e, bit 1~4 == 1001 => & 00011110 = 00010010
-		 */
-		pci_read_config_byte(isa_dev, 0x5e, &tmpbyte);
-		chip_is_1543c_e = ((tmpbyte & 0x1e) == 0x12) ? 1: 0;
 	}
-
-	/*
-	 * CD_ROM DMA on (m5229, 0x53, bit0)
-	 *      Enable this bit even if we want to use PIO
-	 * PIO FIFO off (m5229, 0x53, bit1)
-	 *      The hardware will use 0x54h and 0x55h to control PIO FIFO
-	 *	(Not on later devices it seems)
-	 *
-	 *	0x53 changes meaning on later revs - we must no touch
-	 *	bit 1 on them. Need to check if 0x20 is the right break
-	 */
-	 
-	pci_read_config_byte(dev, 0x53, &tmpbyte);
-	
-	if(m5229_revision <= 0x20)
-		tmpbyte = (tmpbyte & (~0x02)) | 0x01;
-	else if (m5229_revision == 0xc7 || m5229_revision == 0xc8)
-		tmpbyte |= 0x03;
-	else
-		tmpbyte |= 0x01;
-
-	pci_write_config_byte(dev, 0x53, tmpbyte);
 
 	local_irq_restore(flags);
 
@@ -680,52 +667,17 @@ static u8 __devinit ata66_ali15x3(ide_hwif_t *hwif)
  
 static void __devinit init_hwif_common_ali15x3 (ide_hwif_t *hwif)
 {
-	hwif->autodma = 0;
 	hwif->set_pio_mode = &ali_set_pio_mode;
 	hwif->set_dma_mode = &ali_set_dma_mode;
 	hwif->udma_filter = &ali_udma_filter;
 
-	/* don't use LBA48 DMA on ALi devices before rev 0xC5 */
-	hwif->no_lba48_dma = (m5229_revision <= 0xC4) ? 1 : 0;
-
-	if (!hwif->dma_base) {
-		hwif->drives[0].autotune = 1;
-		hwif->drives[1].autotune = 1;
+	if (hwif->dma_base == 0)
 		return;
-	}
 
-	/*
-	 * check in ->init_dma guarantees m5229_revision >= 0x20 here
-	 */
-
-	if (m5229_revision > 0x20)
-		hwif->atapi_dma = 1;
-
-	if (m5229_revision <= 0x20)
-		hwif->ultra_mask = 0x00; /* no udma */
-	else if (m5229_revision < 0xC2)
-		hwif->ultra_mask = 0x07; /* udma0-2 */
-	else if (m5229_revision == 0xC2 || m5229_revision == 0xC3)
-		hwif->ultra_mask = 0x1f; /* udma0-4 */
-	else if (m5229_revision == 0xC4)
-		hwif->ultra_mask = 0x3f; /* udma0-5 */
-	else
-		hwif->ultra_mask = 0x7f; /* udma0-6 */
-
-	hwif->mwdma_mask = 0x07;
-	hwif->swdma_mask = 0x07;
-
-	hwif->ide_dma_check = &ali15x3_config_drive_for_dma;
 	hwif->dma_setup = &ali15x3_dma_setup;
 
 	if (hwif->cbl != ATA_CBL_PATA40_SHORT)
 		hwif->cbl = ata66_ali15x3(hwif);
-
-	if (!noautodma)
-		hwif->autodma = 1;
-
-	hwif->drives[0].autodma = hwif->autodma;
-	hwif->drives[1].autodma = hwif->autodma;
 }
 
 /**
@@ -799,14 +751,15 @@ static void __devinit init_dma_ali15x3 (ide_hwif_t *hwif, unsigned long dmabase)
 	ide_setup_dma(hwif, dmabase, 8);
 }
 
-static ide_pci_device_t ali15x3_chipset __devinitdata = {
+static const struct ide_port_info ali15x3_chipset __devinitdata = {
 	.name		= "ALI15X3",
 	.init_chipset	= init_chipset_ali15x3,
 	.init_hwif	= init_hwif_ali15x3,
 	.init_dma	= init_dma_ali15x3,
-	.autodma	= AUTODMA,
-	.bootable	= ON_BOARD,
+	.host_flags	= IDE_HFLAG_BOOTABLE,
 	.pio_mask	= ATA_PIO5,
+	.swdma_mask	= ATA_SWDMA2,
+	.mwdma_mask	= ATA_MWDMA2,
 };
 
 /**
@@ -824,21 +777,40 @@ static int __devinit alim15x3_init_one(struct pci_dev *dev, const struct pci_dev
 		{ },
 	};
 
-	ide_pci_device_t *d = &ali15x3_chipset;
+	struct ide_port_info d = ali15x3_chipset;
+	u8 rev = dev->revision;
 
 	if (pci_dev_present(ati_rs100))
 		printk(KERN_WARNING "alim15x3: ATI Radeon IGP Northbridge is not yet fully tested.\n");
 
+	/* don't use LBA48 DMA on ALi devices before rev 0xC5 */
+	if (rev <= 0xC4)
+		d.host_flags |= IDE_HFLAG_NO_LBA48_DMA;
+
+	if (rev >= 0x20) {
+		if (rev == 0x20)
+			d.host_flags |= IDE_HFLAG_NO_ATAPI_DMA;
+
+		if (rev < 0xC2)
+			d.udma_mask = ATA_UDMA2;
+		else if (rev == 0xC2 || rev == 0xC3)
+			d.udma_mask = ATA_UDMA4;
+		else if (rev == 0xC4)
+			d.udma_mask = ATA_UDMA5;
+		else
+			d.udma_mask = ATA_UDMA6;
+	}
+
 #if defined(CONFIG_SPARC64)
-	d->init_hwif = init_hwif_common_ali15x3;
+	d.init_hwif = init_hwif_common_ali15x3;
 #endif /* CONFIG_SPARC64 */
-	return ide_setup_pci_device(dev, d);
+	return ide_setup_pci_device(dev, &d);
 }
 
 
-static struct pci_device_id alim15x3_pci_tbl[] = {
-	{ PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M5229, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
-	{ PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M5228, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+static const struct pci_device_id alim15x3_pci_tbl[] = {
+	{ PCI_VDEVICE(AL, PCI_DEVICE_ID_AL_M5229), 0 },
+	{ PCI_VDEVICE(AL, PCI_DEVICE_ID_AL_M5228), 0 },
 	{ 0, },
 };
 MODULE_DEVICE_TABLE(pci, alim15x3_pci_tbl);

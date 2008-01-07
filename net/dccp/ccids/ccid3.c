@@ -40,6 +40,8 @@
 #include "lib/tfrc.h"
 #include "ccid3.h"
 
+#include <asm/unaligned.h>
+
 #ifdef CONFIG_IP_DCCP_CCID3_DEBUG
 static int ccid3_debug;
 #define ccid3_pr_debug(format, a...)	DCCP_PR_DEBUG(ccid3_debug, format, ##a)
@@ -237,7 +239,7 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
 			       ccid3_tx_state_name(hctx->ccid3hctx_state),
 			       (unsigned)(hctx->ccid3hctx_x >> 6));
 		/* The value of R is still undefined and so we can not recompute
-		 * the timout value. Keep initial value as per [RFC 4342, 5]. */
+		 * the timeout value. Keep initial value as per [RFC 4342, 5]. */
 		t_nfb = TFRC_INITIAL_TIMEOUT;
 		ccid3_update_send_interval(hctx);
 		break;
@@ -544,6 +546,7 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
 	const struct dccp_sock *dp = dccp_sk(sk);
 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
 	struct ccid3_options_received *opt_recv;
+	__be32 opt_val;
 
 	opt_recv = &hctx->ccid3hctx_options_received;
 
@@ -563,8 +566,8 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
 				  dccp_role(sk), sk, len);
 			rc = -EINVAL;
 		} else {
-			opt_recv->ccid3or_loss_event_rate =
-						ntohl(*(__be32 *)value);
+			opt_val = get_unaligned((__be32 *)value);
+			opt_recv->ccid3or_loss_event_rate = ntohl(opt_val);
 			ccid3_pr_debug("%s(%p), LOSS_EVENT_RATE=%u\n",
 				       dccp_role(sk), sk,
 				       opt_recv->ccid3or_loss_event_rate);
@@ -585,8 +588,8 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
 				  dccp_role(sk), sk, len);
 			rc = -EINVAL;
 		} else {
-			opt_recv->ccid3or_receive_rate =
-						ntohl(*(__be32 *)value);
+			opt_val = get_unaligned((__be32 *)value);
+			opt_recv->ccid3or_receive_rate = ntohl(opt_val);
 			ccid3_pr_debug("%s(%p), RECEIVE_RATE=%u\n",
 				       dccp_role(sk), sk,
 				       opt_recv->ccid3or_receive_rate);
@@ -601,8 +604,6 @@ static int ccid3_hc_tx_init(struct ccid *ccid, struct sock *sk)
 {
 	struct ccid3_hc_tx_sock *hctx = ccid_priv(ccid);
 
-	hctx->ccid3hctx_s     = 0;
-	hctx->ccid3hctx_rtt   = 0;
 	hctx->ccid3hctx_state = TFRC_SSTATE_NO_SENT;
 	INIT_LIST_HEAD(&hctx->ccid3hctx_hist);
 
@@ -963,8 +964,6 @@ static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
 	INIT_LIST_HEAD(&hcrx->ccid3hcrx_li_hist);
 	hcrx->ccid3hcrx_tstamp_last_feedback =
 		hcrx->ccid3hcrx_tstamp_last_ack = ktime_get_real();
-	hcrx->ccid3hcrx_s   = 0;
-	hcrx->ccid3hcrx_rtt = 0;
 	return 0;
 }
 

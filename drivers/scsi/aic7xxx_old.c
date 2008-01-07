@@ -8417,7 +8417,7 @@ aic7xxx_alloc(struct scsi_host_template *sht, struct aic7xxx_host *temp)
     p->host = host;
 
     p->scb_data = kzalloc(sizeof(scb_data_type), GFP_ATOMIC);
-    if (!p->scb_data)
+    if (p->scb_data)
     {
       scbq_init (&p->scb_data->free_scbs);
     }
@@ -11142,6 +11142,7 @@ static struct scsi_host_template driver_template = {
 	.max_sectors		= 2048,
 	.cmd_per_lun		= 3,
 	.use_clustering		= ENABLE_CLUSTERING,
+	.use_sg_chaining	= ENABLE_SG_CHAINING,
 };
 
 #include "scsi_module.c"

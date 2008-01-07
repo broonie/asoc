@@ -255,11 +255,6 @@ static void addrconf_mod_timer(struct inet6_ifaddr *ifp,
 
 static int snmp6_alloc_dev(struct inet6_dev *idev)
 {
-	int err = -ENOMEM;
-
-	if (!idev || !idev->dev)
-		return -EINVAL;
-
 	if (snmp_mib_init((void **)idev->stats.ipv6,
 			  sizeof(struct ipstats_mib),
 			  __alignof__(struct ipstats_mib)) < 0)
@@ -280,15 +275,14 @@ err_icmpmsg:
 err_icmp:
 	snmp_mib_free((void **)idev->stats.ipv6);
 err_ip:
-	return err;
+	return -ENOMEM;
 }
 
-static int snmp6_free_dev(struct inet6_dev *idev)
+static void snmp6_free_dev(struct inet6_dev *idev)
 {
 	snmp_mib_free((void **)idev->stats.icmpv6msg);
 	snmp_mib_free((void **)idev->stats.icmpv6);
 	snmp_mib_free((void **)idev->stats.ipv6);
-	return 0;
 }
 
 /* Nobody refers to this device, we may destroy it. */
@@ -973,7 +967,7 @@ int ipv6_dev_get_saddr(struct net_device *daddr_dev,
 			if (unlikely(score.addr_type == IPV6_ADDR_ANY ||
 				     score.addr_type & IPV6_ADDR_MULTICAST)) {
 				LIMIT_NETDEBUG(KERN_DEBUG
-					       "ADDRCONF: unspecified / multicast address"
+					       "ADDRCONF: unspecified / multicast address "
 					       "assigned as unicast address on %s",
 					       dev->name);
 				continue;
@@ -2299,6 +2293,9 @@ static int addrconf_notify(struct notifier_block *this, unsigned long event,
 				break;
 			}
 
+			if (!idev && dev->mtu >= IPV6_MIN_MTU)
+				idev = ipv6_add_dev(dev);
+
 			if (idev)
 				idev->if_flags |= IF_READY;
 		} else {
@@ -2363,10 +2360,16 @@ static int addrconf_notify(struct notifier_block *this, unsigned long event,
 		break;
 
 	case NETDEV_CHANGEMTU:
-		if ( idev && dev->mtu >= IPV6_MIN_MTU) {
+		if (idev && dev->mtu >= IPV6_MIN_MTU) {
 			rt6_mtu_change(dev, dev->mtu);
 			idev->cnf.mtu6 = dev->mtu;
 			break;
+		}
+
+		if (!idev && dev->mtu >= IPV6_MIN_MTU) {
+			idev = ipv6_add_dev(dev);
+			if (idev)
+				break;
 		}
 
 		/* MTU falled under IPV6_MIN_MTU. Stop IPv6 on this interface. */
@@ -4294,8 +4297,4 @@ void __exit addrconf_cleanup(void)
 	del_timer(&addr_chk_timer);
 
 	rtnl_unlock();
-
-#ifdef CONFIG_PROC_FS
-	proc_net_remove(&init_net, "if_inet6");
-#endif
 }

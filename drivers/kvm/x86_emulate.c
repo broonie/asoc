@@ -167,7 +167,7 @@ static u8 opcode_table[256] = {
 static u16 twobyte_table[256] = {
 	/* 0x00 - 0x0F */
 	0, SrcMem | ModRM | DstReg, 0, 0, 0, 0, ImplicitOps, 0,
-	0, ImplicitOps, 0, 0, 0, ImplicitOps | ModRM, 0, 0,
+	ImplicitOps, ImplicitOps, 0, 0, 0, ImplicitOps | ModRM, 0, 0,
 	/* 0x10 - 0x1F */
 	0, 0, 0, 0, 0, 0, 0, 0, ImplicitOps | ModRM, 0, 0, 0, 0, 0, 0, 0,
 	/* 0x20 - 0x2F */
@@ -212,7 +212,8 @@ static u16 twobyte_table[256] = {
 	0, 0, ByteOp | DstReg | SrcMem | ModRM | Mov,
 	    DstReg | SrcMem16 | ModRM | Mov,
 	/* 0xC0 - 0xCF */
-	0, 0, 0, 0, 0, 0, 0, ImplicitOps | ModRM, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, DstMem | SrcReg | ModRM | Mov, 0, 0, 0, ImplicitOps | ModRM,
+	0, 0, 0, 0, 0, 0, 0, 0,
 	/* 0xD0 - 0xDF */
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	/* 0xE0 - 0xEF */
@@ -447,8 +448,7 @@ struct operand {
 
 #define JMP_REL(rel) 							\
 	do {								\
-		_eip += (int)(rel);					\
-		_eip = ((op_bytes == 2) ? (uint16_t)_eip : (uint32_t)_eip); \
+		register_address_increment(_eip, rel);			\
 	} while (0)
 
 /*
@@ -596,10 +596,9 @@ x86_emulate_memop(struct x86_emulate_ctxt *ctxt, struct x86_emulate_ops *ops)
 		case 0xf0:	/* LOCK */
 			lock_prefix = 1;
 			break;
+		case 0xf2:	/* REPNE/REPNZ */
 		case 0xf3:	/* REP/REPE/REPZ */
 			rep_prefix = 1;
-			break;
-		case 0xf2:	/* REPNE/REPNZ */
 			break;
 		default:
 			goto done_prefixes;
@@ -825,6 +824,14 @@ done_prefixes:
 		if (twobyte && b == 0x01 && modrm_reg == 7)
 			break;
 	      srcmem_common:
+		/*
+		 * For instructions with a ModR/M byte, switch to register
+		 * access if Mod = 3.
+		 */
+		if ((d & ModRM) && modrm_mod == 3) {
+			src.type = OP_REG;
+			break;
+		}
 		src.type = OP_MEM;
 		src.ptr = (unsigned long *)cr2;
 		src.val = 0;
@@ -893,6 +900,14 @@ done_prefixes:
 		dst.ptr = (unsigned long *)cr2;
 		dst.bytes = (d & ByteOp) ? 1 : op_bytes;
 		dst.val = 0;
+		/*
+		 * For instructions with a ModR/M byte, switch to register
+		 * access if Mod = 3.
+		 */
+		if ((d & ModRM) && modrm_mod == 3) {
+			dst.type = OP_REG;
+			break;
+		}
 		if (d & BitOp) {
 			unsigned long mask = ~(dst.bytes * 8 - 1);
 
@@ -963,17 +978,6 @@ done_prefixes:
 		if (mode != X86EMUL_MODE_PROT64)
 			goto cannot_emulate;
 		dst.val = (s32) src.val;
-		break;
-	case 0x6a: /* push imm8 */
-		src.val = 0L;
-		src.val = insn_fetch(s8, 1, _eip);
-push:
-		dst.type  = OP_MEM;
-		dst.bytes = op_bytes;
-		dst.val = src.val;
-		register_address_increment(_regs[VCPU_REGS_RSP], -op_bytes);
-		dst.ptr = (void *) register_address(ctxt->ss_base,
-							_regs[VCPU_REGS_RSP]);
 		break;
 	case 0x80 ... 0x83:	/* Grp1 */
 		switch (modrm_reg) {
@@ -1083,31 +1087,6 @@ push:
 	case 0xd2 ... 0xd3:	/* Grp2 */
 		src.val = _regs[VCPU_REGS_RCX];
 		goto grp2;
-	case 0xe8: /* call (near) */ {
-		long int rel;
-		switch (op_bytes) {
-		case 2:
-			rel = insn_fetch(s16, 2, _eip);
-			break;
-		case 4:
-			rel = insn_fetch(s32, 4, _eip);
-			break;
-		case 8:
-			rel = insn_fetch(s64, 8, _eip);
-			break;
-		default:
-			DPRINTF("Call: Invalid op_bytes\n");
-			goto cannot_emulate;
-		}
-		src.val = (unsigned long) _eip;
-		JMP_REL(rel);
-		goto push;
-	}
-	case 0xe9: /* jmp rel */
-	case 0xeb: /* jmp rel short */
-		JMP_REL(src.val);
-		no_wb = 1; /* Disable writeback. */
-		break;
 	case 0xf6 ... 0xf7:	/* Grp3 */
 		switch (modrm_reg) {
 		case 0 ... 1:	/* test */
@@ -1167,7 +1146,7 @@ push:
 			}
 			register_address_increment(_regs[VCPU_REGS_RSP],
 						   -dst.bytes);
-			if ((rc = ops->write_std(
+			if ((rc = ops->write_emulated(
 				     register_address(ctxt->ss_base,
 						      _regs[VCPU_REGS_RSP]),
 				     &dst.val, dst.bytes, ctxt->vcpu)) != 0)
@@ -1251,6 +1230,17 @@ special_insn:
 
 		register_address_increment(_regs[VCPU_REGS_RSP], op_bytes);
 		no_wb = 1; /* Disable writeback. */
+		break;
+	case 0x6a: /* push imm8 */
+		src.val = 0L;
+		src.val = insn_fetch(s8, 1, _eip);
+	push:
+		dst.type  = OP_MEM;
+		dst.bytes = op_bytes;
+		dst.val = src.val;
+		register_address_increment(_regs[VCPU_REGS_RSP], -op_bytes);
+		dst.ptr = (void *) register_address(ctxt->ss_base,
+							_regs[VCPU_REGS_RSP]);
 		break;
 	case 0x6c:		/* insb */
 	case 0x6d:		/* insw/insd */
@@ -1350,6 +1340,33 @@ special_insn:
 	case 0xae ... 0xaf:	/* scas */
 		DPRINTF("Urk! I don't handle SCAS.\n");
 		goto cannot_emulate;
+	case 0xe8: /* call (near) */ {
+		long int rel;
+		switch (op_bytes) {
+		case 2:
+			rel = insn_fetch(s16, 2, _eip);
+			break;
+		case 4:
+			rel = insn_fetch(s32, 4, _eip);
+			break;
+		case 8:
+			rel = insn_fetch(s64, 8, _eip);
+			break;
+		default:
+			DPRINTF("Call: Invalid op_bytes\n");
+			goto cannot_emulate;
+		}
+		src.val = (unsigned long) _eip;
+		JMP_REL(rel);
+		op_bytes = ad_bytes;
+		goto push;
+	}
+	case 0xe9: /* jmp rel */
+	case 0xeb: /* jmp rel short */
+		JMP_REL(src.val);
+		no_wb = 1; /* Disable writeback. */
+		break;
+
 
 	}
 	goto writeback;
@@ -1501,6 +1518,10 @@ twobyte_insn:
 		dst.bytes = op_bytes;
 		dst.val = (d & ByteOp) ? (s8) src.val : (s16) src.val;
 		break;
+	case 0xc3:		/* movnti */
+		dst.bytes = op_bytes;
+		dst.val = (op_bytes == 4) ? (u32) src.val : (u64) src.val;
+		break;
 	}
 	goto writeback;
 
@@ -1510,6 +1531,8 @@ twobyte_special_insn:
 	switch (b) {
 	case 0x06:
 		emulate_clts(ctxt->vcpu);
+		break;
+	case 0x08:		/* invd */
 		break;
 	case 0x09:		/* wbinvd */
 		break;

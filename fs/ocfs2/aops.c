@@ -729,6 +729,27 @@ static void ocfs2_clear_page_regions(struct page *page,
 }
 
 /*
+ * Nonsparse file systems fully allocate before we get to the write
+ * code. This prevents ocfs2_write() from tagging the write as an
+ * allocating one, which means ocfs2_map_page_blocks() might try to
+ * read-in the blocks at the tail of our file. Avoid reading them by
+ * testing i_size against each block offset.
+ */
+static int ocfs2_should_read_blk(struct inode *inode, struct page *page,
+				 unsigned int block_start)
+{
+	u64 offset = page_offset(page) + block_start;
+
+	if (ocfs2_sparse_alloc(OCFS2_SB(inode->i_sb)))
+		return 1;
+
+	if (i_size_read(inode) > offset)
+		return 1;
+
+	return 0;
+}
+
+/*
  * Some of this taken from block_prepare_write(). We already have our
  * mapping by now though, and the entire write will be allocating or
  * it won't, so not much need to use BH_New.
@@ -781,6 +802,7 @@ int ocfs2_map_page_blocks(struct page *page, u64 *p_blkno,
 				set_buffer_uptodate(bh);
 		} else if (!buffer_uptodate(bh) && !buffer_delay(bh) &&
 			   !buffer_new(bh) &&
+			   ocfs2_should_read_blk(inode, page, block_start) &&
 			   (block_start < from || block_end > to)) {
 			ll_rw_block(READ, 1, &bh);
 			*wait_bh++=bh;
@@ -1492,7 +1514,7 @@ int ocfs2_size_fits_inline_data(struct buffer_head *di_bh, u64 new_size)
 {
 	struct ocfs2_dinode *di = (struct ocfs2_dinode *)di_bh->b_data;
 
-	if (new_size < le16_to_cpu(di->id2.i_data.id_count))
+	if (new_size <= le16_to_cpu(di->id2.i_data.id_count))
 		return 1;
 	return 0;
 }
@@ -1724,9 +1746,9 @@ out:
 	return ret;
 }
 
-int ocfs2_write_begin(struct file *file, struct address_space *mapping,
-		      loff_t pos, unsigned len, unsigned flags,
-		      struct page **pagep, void **fsdata)
+static int ocfs2_write_begin(struct file *file, struct address_space *mapping,
+			     loff_t pos, unsigned len, unsigned flags,
+			     struct page **pagep, void **fsdata)
 {
 	int ret;
 	struct buffer_head *di_bh = NULL;
@@ -1877,9 +1899,9 @@ out_write_size:
 	return copied;
 }
 
-int ocfs2_write_end(struct file *file, struct address_space *mapping,
-		    loff_t pos, unsigned len, unsigned copied,
-		    struct page *page, void *fsdata)
+static int ocfs2_write_end(struct file *file, struct address_space *mapping,
+			   loff_t pos, unsigned len, unsigned copied,
+			   struct page *page, void *fsdata)
 {
 	int ret;
 	struct inode *inode = mapping->host;
@@ -1896,6 +1918,8 @@ int ocfs2_write_end(struct file *file, struct address_space *mapping,
 const struct address_space_operations ocfs2_aops = {
 	.readpage	= ocfs2_readpage,
 	.writepage	= ocfs2_writepage,
+	.write_begin	= ocfs2_write_begin,
+	.write_end	= ocfs2_write_end,
 	.bmap		= ocfs2_bmap,
 	.sync_page	= block_sync_page,
 	.direct_IO	= ocfs2_direct_IO,

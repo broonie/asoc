@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/ide/pci/slc90e66.c	Version 0.16	Jul 14, 2007
+ *  linux/drivers/ide/pci/slc90e66.c	Version 0.19	Sep 24, 2007
  *
  *  Copyright (C) 2000-2002 Andre Hedrick <andre@linux-ide.org>
  *  Copyright (C) 2006-2007 MontaVista Software, Inc. <source@mvista.com>
@@ -21,26 +21,7 @@
 
 #include <asm/io.h>
 
-static u8 slc90e66_dma_2_pio (u8 xfer_rate) {
-	switch(xfer_rate) {
-		case XFER_UDMA_4:
-		case XFER_UDMA_3:
-		case XFER_UDMA_2:
-		case XFER_UDMA_1:
-		case XFER_UDMA_0:
-		case XFER_MW_DMA_2:
-			return 4;
-		case XFER_MW_DMA_1:
-			return 3;
-		case XFER_SW_DMA_2:
-			return 2;
-		case XFER_MW_DMA_0:
-		case XFER_SW_DMA_1:
-		case XFER_SW_DMA_0:
-		default:
-			return 0;
-	}
-}
+static DEFINE_SPINLOCK(slc90e66_lock);
 
 static void slc90e66_set_pio_mode(ide_drive_t *drive, const u8 pio)
 {
@@ -61,7 +42,7 @@ static void slc90e66_set_pio_mode(ide_drive_t *drive, const u8 pio)
 					{ 2, 1 },
 					{ 2, 3 }, };
 
-	spin_lock_irqsave(&ide_lock, flags);
+	spin_lock_irqsave(&slc90e66_lock, flags);
 	pci_read_config_word(dev, master_port, &master_data);
 
 	if (pio > 1)
@@ -92,7 +73,7 @@ static void slc90e66_set_pio_mode(ide_drive_t *drive, const u8 pio)
 	pci_write_config_word(dev, master_port, master_data);
 	if (is_slave)
 		pci_write_config_byte(dev, slave_port, slave_data);
-	spin_unlock_irqrestore(&ide_lock, flags);
+	spin_unlock_irqrestore(&slc90e66_lock, flags);
 }
 
 static void slc90e66_set_dma_mode(ide_drive_t *drive, const u8 speed)
@@ -132,26 +113,21 @@ static void slc90e66_set_dma_mode(ide_drive_t *drive, const u8 speed)
 			pci_write_config_word(dev, 0x4a, reg4a|u_speed);
 		}
 	} else {
+		const u8 mwdma_to_pio[] = { 0, 3, 4 };
+		u8 pio;
+
 		if (reg48 & u_flag)
 			pci_write_config_word(dev, 0x48, reg48 & ~u_flag);
 		if (reg4a & a_speed)
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
+
+		if (speed >= XFER_MW_DMA_0)
+			pio = mwdma_to_pio[speed - XFER_MW_DMA_0];
+		else
+			pio = 2; /* only SWDMA2 is allowed */
+
+		slc90e66_set_pio_mode(drive, pio);
 	}
-
-	slc90e66_set_pio_mode(drive, slc90e66_dma_2_pio(speed));
-}
-
-static int slc90e66_config_drive_xfer_rate (ide_drive_t *drive)
-{
-	drive->init_speed = 0;
-
-	if (ide_tune_dma(drive))
-		return 0;
-
-	if (ide_use_fast_pio(drive))
-		ide_set_max_pio(drive);
-
-	return -1;
 }
 
 static void __devinit init_hwif_slc90e66 (ide_hwif_t *hwif)
@@ -159,46 +135,28 @@ static void __devinit init_hwif_slc90e66 (ide_hwif_t *hwif)
 	u8 reg47 = 0;
 	u8 mask = hwif->channel ? 0x01 : 0x02;  /* bit0:Primary */
 
-	hwif->autodma = 0;
-
-	if (!hwif->irq)
-		hwif->irq = hwif->channel ? 15 : 14;
-
 	hwif->set_pio_mode = &slc90e66_set_pio_mode;
 	hwif->set_dma_mode = &slc90e66_set_dma_mode;
 
 	pci_read_config_byte(hwif->pci_dev, 0x47, &reg47);
 
-	if (!hwif->dma_base) {
-		hwif->drives[0].autotune = 1;
-		hwif->drives[1].autotune = 1;
+	if (hwif->dma_base == 0)
 		return;
-	}
-
-	hwif->atapi_dma = 1;
-	hwif->ultra_mask = 0x1f;
-	hwif->mwdma_mask = 0x06;
-	hwif->swdma_mask = 0x04;
 
 	if (hwif->cbl != ATA_CBL_PATA40_SHORT)
 		/* bit[0(1)]: 0:80, 1:40 */
 		hwif->cbl = (reg47 & mask) ? ATA_CBL_PATA40 : ATA_CBL_PATA80;
-
-	hwif->ide_dma_check = &slc90e66_config_drive_xfer_rate;
-
-	if (!noautodma)
-		hwif->autodma = 1;
-	hwif->drives[0].autodma = hwif->autodma;
-	hwif->drives[1].autodma = hwif->autodma;
 }
 
-static ide_pci_device_t slc90e66_chipset __devinitdata = {
+static const struct ide_port_info slc90e66_chipset __devinitdata = {
 	.name		= "SLC90E66",
 	.init_hwif	= init_hwif_slc90e66,
-	.autodma	= AUTODMA,
 	.enablebits	= {{0x41,0x80,0x80}, {0x43,0x80,0x80}},
-	.bootable	= ON_BOARD,
+	.host_flags	= IDE_HFLAG_LEGACY_IRQS | IDE_HFLAG_BOOTABLE,
 	.pio_mask	= ATA_PIO4,
+	.swdma_mask	= ATA_SWDMA2_ONLY,
+	.mwdma_mask	= ATA_MWDMA12_ONLY,
+	.udma_mask	= ATA_UDMA4,
 };
 
 static int __devinit slc90e66_init_one(struct pci_dev *dev, const struct pci_device_id *id)
@@ -206,8 +164,8 @@ static int __devinit slc90e66_init_one(struct pci_dev *dev, const struct pci_dev
 	return ide_setup_pci_device(dev, &slc90e66_chipset);
 }
 
-static struct pci_device_id slc90e66_pci_tbl[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_EFAR, PCI_DEVICE_ID_EFAR_SLC90E66_1), 0},
+static const struct pci_device_id slc90e66_pci_tbl[] = {
+	{ PCI_VDEVICE(EFAR, PCI_DEVICE_ID_EFAR_SLC90E66_1), 0 },
 	{ 0, },
 };
 MODULE_DEVICE_TABLE(pci, slc90e66_pci_tbl);

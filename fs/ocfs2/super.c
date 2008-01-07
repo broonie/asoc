@@ -438,14 +438,14 @@ unlock_osb:
 	}
 
 	if (!ret) {
-		if (!ocfs2_is_hard_readonly(osb))
-			ocfs2_set_journal_params(osb);
-
 		/* Only save off the new mount options in case of a successful
 		 * remount. */
 		osb->s_mount_opt = parsed_options.mount_opt;
 		osb->s_atime_quantum = parsed_options.atime_quantum;
 		osb->preferred_slot = parsed_options.slot;
+
+		if (!ocfs2_is_hard_readonly(osb))
+			ocfs2_set_journal_params(osb);
 	}
 out:
 	return ret;
@@ -1000,9 +1000,7 @@ bail:
 	return status;
 }
 
-static void ocfs2_inode_init_once(void *data,
-				  struct kmem_cache *cachep,
-				  unsigned long flags)
+static void ocfs2_inode_init_once(struct kmem_cache *cachep, void *data)
 {
 	struct ocfs2_inode_info *oi = data;
 

@@ -49,7 +49,7 @@
 #define ATAC_BM0_PRD		0x04
 #define CS5535_CABLE_DETECT	0x48
 
-/* Format I PIO settings. We seperate out cmd and data for safer timings */
+/* Format I PIO settings. We separate out cmd and data for safer timings */
 
 static unsigned int cs5535_pio_cmd_timings[5] =
 { 0xF7F4, 0x53F3, 0x13F1, 0x5131, 0x1131 };
@@ -84,7 +84,7 @@ static void cs5535_set_speed(ide_drive_t *drive, const u8 speed)
 
 	/* Set the PIO timings */
 	if ((speed & XFER_MODE) == XFER_PIO) {
-		ide_drive_t *pair = &drive->hwif->drives[drive->dn ^ 1];
+		ide_drive_t *pair = ide_get_paired_drive(drive);
 		u8 cmd, pioa;
 
 		cmd = pioa = speed - XFER_PIO_0;
@@ -157,19 +157,6 @@ static void cs5535_set_pio_mode(ide_drive_t *drive, const u8 pio)
 	cs5535_set_speed(drive, XFER_PIO_0 + pio);
 }
 
-static int cs5535_dma_check(ide_drive_t *drive)
-{
-	drive->init_speed = 0;
-
-	if (ide_tune_dma(drive))
-		return 0;
-
-	if (ide_use_fast_pio(drive))
-		ide_set_max_pio(drive);
-
-	return -1;
-}
-
 static u8 __devinit cs5535_cable_detect(struct pci_dev *dev)
 {
 	u8 bit;
@@ -190,37 +177,23 @@ static u8 __devinit cs5535_cable_detect(struct pci_dev *dev)
  */
 static void __devinit init_hwif_cs5535(ide_hwif_t *hwif)
 {
-	hwif->autodma = 0;
-
 	hwif->set_pio_mode = &cs5535_set_pio_mode;
 	hwif->set_dma_mode = &cs5535_set_dma_mode;
-
-	hwif->drives[1].autotune = hwif->drives[0].autotune = 1;
 
 	if (hwif->dma_base == 0)
 		return;
 
-	hwif->ide_dma_check = &cs5535_dma_check;
-
-	hwif->atapi_dma = 1;
-	hwif->ultra_mask = 0x1F;
-	hwif->mwdma_mask = 0x07;
-
 	hwif->cbl = cs5535_cable_detect(hwif->pci_dev);
-
-	if (!noautodma)
-		hwif->autodma = 1;
-
-	hwif->drives[1].autodma = hwif->drives[0].autodma = hwif->autodma;
 }
 
-static ide_pci_device_t cs5535_chipset __devinitdata = {
+static const struct ide_port_info cs5535_chipset __devinitdata = {
 	.name		= "CS5535",
 	.init_hwif	= init_hwif_cs5535,
-	.autodma	= AUTODMA,
-	.bootable	= ON_BOARD,
-	.host_flags	= IDE_HFLAG_SINGLE | IDE_HFLAG_POST_SET_MODE,
+	.host_flags	= IDE_HFLAG_SINGLE | IDE_HFLAG_POST_SET_MODE |
+			  IDE_HFLAG_BOOTABLE,
 	.pio_mask	= ATA_PIO4,
+	.mwdma_mask	= ATA_MWDMA2,
+	.udma_mask	= ATA_UDMA4,
 };
 
 static int __devinit cs5535_init_one(struct pci_dev *dev,
@@ -229,10 +202,8 @@ static int __devinit cs5535_init_one(struct pci_dev *dev,
 	return ide_setup_pci_device(dev, &cs5535_chipset);
 }
 
-static struct pci_device_id cs5535_pci_tbl[] =
-{
-	{ PCI_VENDOR_ID_NS, PCI_DEVICE_ID_NS_CS5535_IDE, PCI_ANY_ID,
-		PCI_ANY_ID, 0, 0, 0},
+static const struct pci_device_id cs5535_pci_tbl[] = {
+	{ PCI_VDEVICE(NS, PCI_DEVICE_ID_NS_CS5535_IDE), 0 },
 	{ 0, },
 };
 

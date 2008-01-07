@@ -1,5 +1,5 @@
 /*
- * linux/drivers/ide/pci/sc1200.c		Version 0.95	Jun 16 2007
+ * linux/drivers/ide/pci/sc1200.c		Version 0.97	Aug 3 2007
  *
  * Copyright (C) 2000-2002		Mark Lord <mlord@pobox.com>
  * Copyright (C)      2007		Bartlomiej Zolnierkiewicz
@@ -186,8 +186,7 @@ static void sc1200_set_dma_mode(ide_drive_t *drive, const u8 mode)
 			}
 			break;
 		default:
-			BUG();
-			break;
+			return;
 	}
 
 	if (unit == 0) {			/* are we configuring drive0? */
@@ -198,19 +197,6 @@ static void sc1200_set_dma_mode(ide_drive_t *drive, const u8 mode)
 		pci_write_config_dword(hwif->pci_dev, basereg+12, timings);
 	}
 }
-
-/*
- * sc1200_config_dma() handles selection/setting of DMA/UDMA modes
- * for both the chipset and drive.
- */
-static int sc1200_config_dma (ide_drive_t *drive)
-{
-	if (ide_tune_dma(drive))
-		return 0;
-
-	return 1;
-}
-
 
 /*  Replacement for the standard ide_dma_end action in
  *  dma_proc.
@@ -337,17 +323,18 @@ static int sc1200_suspend (struct pci_dev *dev, pm_message_t state)
 
 	pci_disable_device(dev);
 	pci_set_power_state(dev, pci_choose_state(dev, state));
-	dev->current_state = state.event;
 	return 0;
 }
 
 static int sc1200_resume (struct pci_dev *dev)
 {
 	ide_hwif_t	*hwif = NULL;
+	int		i;
 
-	pci_set_power_state(dev, PCI_D0);	// bring chip back from sleep state
-	dev->current_state = PM_EVENT_ON;
-	pci_enable_device(dev);
+	i = pci_enable_device(dev);
+	if (i)
+		return i;
+
 	//
 	// loop over all interfaces that are part of this pci device:
 	//
@@ -375,10 +362,6 @@ static int sc1200_resume (struct pci_dev *dev)
  */
 static void __devinit init_hwif_sc1200 (ide_hwif_t *hwif)
 {
-	if (hwif->mate)
-		hwif->serialized = hwif->mate->serialized = 1;
-	hwif->autodma = 0;
-
 	hwif->set_pio_mode = &sc1200_set_pio_mode;
 	hwif->set_dma_mode = &sc1200_set_dma_mode;
 
@@ -386,27 +369,19 @@ static void __devinit init_hwif_sc1200 (ide_hwif_t *hwif)
 		return;
 
 	hwif->udma_filter = sc1200_udma_filter;
-	hwif->ide_dma_check = &sc1200_config_dma;
 	hwif->ide_dma_end   = &sc1200_ide_dma_end;
-
-	if (!noautodma)
-		hwif->autodma = 1;
-
-        hwif->atapi_dma = 1;
-        hwif->ultra_mask = 0x07;
-        hwif->mwdma_mask = 0x07;
-
-        hwif->drives[0].autodma = hwif->autodma;
-        hwif->drives[1].autodma = hwif->autodma;
 }
 
-static ide_pci_device_t sc1200_chipset __devinitdata = {
+static const struct ide_port_info sc1200_chipset __devinitdata = {
 	.name		= "SC1200",
 	.init_hwif	= init_hwif_sc1200,
-	.autodma	= AUTODMA,
-	.bootable	= ON_BOARD,
-	.host_flags	= IDE_HFLAG_ABUSE_DMA_MODES | IDE_HFLAG_POST_SET_MODE,
+	.host_flags	= IDE_HFLAG_SERIALIZE |
+			  IDE_HFLAG_POST_SET_MODE |
+			  IDE_HFLAG_ABUSE_DMA_MODES |
+			  IDE_HFLAG_BOOTABLE,
 	.pio_mask	= ATA_PIO4,
+	.mwdma_mask	= ATA_MWDMA2,
+	.udma_mask	= ATA_UDMA2,
 };
 
 static int __devinit sc1200_init_one(struct pci_dev *dev, const struct pci_device_id *id)
@@ -414,8 +389,8 @@ static int __devinit sc1200_init_one(struct pci_dev *dev, const struct pci_devic
 	return ide_setup_pci_device(dev, &sc1200_chipset);
 }
 
-static struct pci_device_id sc1200_pci_tbl[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_NS, PCI_DEVICE_ID_NS_SCx200_IDE), 0},
+static const struct pci_device_id sc1200_pci_tbl[] = {
+	{ PCI_VDEVICE(NS, PCI_DEVICE_ID_NS_SCx200_IDE), 0},
 	{ 0, },
 };
 MODULE_DEVICE_TABLE(pci, sc1200_pci_tbl);

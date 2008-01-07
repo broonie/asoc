@@ -959,7 +959,7 @@ S: 2037 Walnut #6
 S: Boulder, Colorado 80302
 S: USA
 
-N: Heiko Eissfeldt
+N: Heiko Eißfeldt
 E: heiko@colossus.escape.de heiko@unifix.de
 D: verify_area stuff, generic SCSI fixes
 D: SCSI Programming HOWTO
@@ -1163,6 +1163,12 @@ D: Original BusLogic driver and original UltraStor driver
 S: Whitfield Software Services
 S: 600 North Bell Avenue, Suite 160
 S: Carnegie, Pennsylvania 15106-4304
+S: USA
+
+N: Kai Germaschewski
+E: kai@germaschewski.name
+D: Major kbuild rework during the 2.5 cycle
+D: ISDN Maintainer
 S: USA
 
 N: Philip Gladstone
@@ -1933,7 +1939,7 @@ M: seasons@makosteszta.sote.hu
 D: Original author of software suspend
 
 N: Jaroslav Kysela
-E: perex@suse.cz
+E: perex@perex.cz
 W: http://www.perex.cz
 D: Original Author and Maintainer for HP 10/100 Mbit Network Adapters
 D: ISA PnP
@@ -1982,8 +1988,8 @@ N: Volker Lendecke
 E: vl@kki.org
 D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
 D: NCP filesystem support (to mount NetWare volumes)
-S: Von Ossietzky Str. 12
-S: 37085 Goettingen
+S: Von-Ossietzky-Str. 12
+S: 37085 Göttingen
 S: Germany
 
 N: Kevin Lentin
@@ -2425,11 +2431,11 @@ S: 12725 SW Millikan Way, Suite 400
 S: Beaverton, Oregon 97005
 S: USA
 
-N: Eberhard Moenkeberg
+N: Eberhard Mönkeberg
 E: emoenke@gwdg.de
 D: CDROM driver "sbpcd" (Matsushita/Panasonic/Soundblaster)
-S: Ruhstrathoehe 2 b.
-S: D-37085 Goettingen
+S: Ruhstrathöhe 2 b.
+S: D-37085 Göttingen
 S: Germany
 
 N: Thomas Molina
@@ -2702,7 +2708,7 @@ S: Canada K2P 0X8
 
 N: Mikael Pettersson
 E: mikpe@it.uu.se
-W: http://www.csd.uu.se/~mikpe/
+W: http://user.it.uu.se/~mikpe/linux/
 D: Miscellaneous fixes
 
 N: Reed H. Petty

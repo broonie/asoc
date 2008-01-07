@@ -25,6 +25,7 @@
 
 #include <asm/smp.h>
 #include <asm/nmi.h>
+#include <asm/timer.h>
 
 #include "mach_traps.h"
 
@@ -51,13 +52,13 @@ static int unknown_nmi_panic_callback(struct pt_regs *regs, int cpu);
 
 static int endflag __initdata = 0;
 
-#ifdef CONFIG_SMP
 /* The performance counters used by NMI_LOCAL_APIC don't trigger when
  * the CPU is idle. To make sure the NMI watchdog really ticks on all
  * CPUs during the test make them busy.
  */
 static __init void nmi_cpu_busy(void *data)
 {
+#ifdef CONFIG_SMP
 	local_irq_enable_in_hardirq();
 	/* Intentionally don't use cpu_relax here. This is
 	   to make sure that the performance counter really ticks,
@@ -67,8 +68,8 @@ static __init void nmi_cpu_busy(void *data)
 	   care if they get somewhat less cycles. */
 	while (endflag == 0)
 		mb();
-}
 #endif
+}
 
 static int __init check_nmi_watchdog(void)
 {
@@ -83,7 +84,7 @@ static int __init check_nmi_watchdog(void)
 
 	prev_nmi_count = kmalloc(NR_CPUS * sizeof(int), GFP_KERNEL);
 	if (!prev_nmi_count)
-		return -1;
+		goto error;
 
 	printk(KERN_INFO "Testing NMI watchdog ... ");
 
@@ -105,7 +106,8 @@ static int __init check_nmi_watchdog(void)
 		if (!per_cpu(wd_enabled, cpu))
 			continue;
 		if (nmi_count(cpu) - prev_nmi_count[cpu] <= 5) {
-			printk("CPU#%d: NMI appears to be stuck (%d->%d)!\n",
+			printk(KERN_WARNING "WARNING: CPU#%d: NMI "
+				"appears to be stuck (%d->%d)!\n",
 				cpu,
 				prev_nmi_count[cpu],
 				nmi_count(cpu));
@@ -117,7 +119,7 @@ static int __init check_nmi_watchdog(void)
 	if (!atomic_read(&nmi_active)) {
 		kfree(prev_nmi_count);
 		atomic_set(&nmi_active, -1);
-		return -1;
+		goto error;
 	}
 	printk("OK.\n");
 
@@ -128,6 +130,10 @@ static int __init check_nmi_watchdog(void)
 
 	kfree(prev_nmi_count);
 	return 0;
+error:
+	timer_ack = !cpu_has_tsc;
+
+	return -1;
 }
 /* This needs to happen later in boot so counters are working */
 late_initcall(check_nmi_watchdog);

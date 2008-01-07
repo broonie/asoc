@@ -165,7 +165,7 @@ static unsigned long convert_eip_to_linear(struct task_struct *child, struct pt_
 
 		seg &= ~7UL;
 
-		down(&child->mm->context.sem);
+		mutex_lock(&child->mm->context.lock);
 		if (unlikely((seg >> 3) >= child->mm->context.size))
 			addr = -1L; /* bogus selector, access would fault */
 		else {
@@ -179,7 +179,7 @@ static unsigned long convert_eip_to_linear(struct task_struct *child, struct pt_
 				addr &= 0xffff;
 			addr += base;
 		}
-		up(&child->mm->context.sem);
+		mutex_unlock(&child->mm->context.lock);
 	}
 	return addr;
 }
@@ -524,11 +524,6 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 		ret = 0;
 		break;
 
-	case PTRACE_DETACH:
-		/* detach a process that was attached. */
-		ret = ptrace_detach(child, data);
-		break;
-
 	case PTRACE_GETREGS: { /* Get all gp regs from the child. */
 	  	if (!access_ok(VERIFY_WRITE, datap, FRAME_SIZE*sizeof(long))) {
 			ret = -EIO;
@@ -637,7 +632,7 @@ void send_sigtrap(struct task_struct *tsk, struct pt_regs *regs, int error_code)
 	/* User-mode eip? */
 	info.si_addr = user_mode_vm(regs) ? (void __user *) regs->eip : NULL;
 
-	/* Send us the fakey SIGTRAP */
+	/* Send us the fake SIGTRAP */
 	force_sig_info(SIGTRAP, &info, tsk);
 }
 

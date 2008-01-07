@@ -509,9 +509,11 @@ ieee80211_rx_h_decrypt(struct ieee80211_txrx_data *rx)
 		rx->key->tx_rx_count++;
 		/* TODO: add threshold stuff again */
 	} else {
+#ifdef CONFIG_MAC80211_DEBUG
 		if (net_ratelimit())
 			printk(KERN_DEBUG "%s: RX protected frame,"
 			       " but have no key\n", rx->dev->name);
+#endif /* CONFIG_MAC80211_DEBUG */
 		return TXRX_DROP;
 	}
 
@@ -995,7 +997,7 @@ ieee80211_rx_h_drop_unencrypted(struct ieee80211_txrx_data *rx)
 	if (unlikely(!(rx->fc & IEEE80211_FCTL_PROTECTED) &&
 		     (rx->fc & IEEE80211_FCTL_FTYPE) == IEEE80211_FTYPE_DATA &&
 		     (rx->fc & IEEE80211_FCTL_STYPE) != IEEE80211_STYPE_NULLFUNC &&
-		     rx->sdata->drop_unencrypted &&
+		     (rx->key || rx->sdata->drop_unencrypted) &&
 		     (rx->sdata->eapol == 0 || !ieee80211_is_eapol(rx->skb)))) {
 		if (net_ratelimit())
 			printk(KERN_DEBUG "%s: RX non-WEP frame, but expected "
@@ -1441,6 +1443,7 @@ void __ieee80211_rx(struct ieee80211_hw *hw, struct sk_buff *skb,
 	struct ieee80211_sub_if_data *prev = NULL;
 	struct sk_buff *skb_new;
 	u8 *bssid;
+	int hdrlen;
 
 	/*
 	 * key references and virtual interfaces are protected using RCU
@@ -1469,6 +1472,18 @@ void __ieee80211_rx(struct ieee80211_hw *hw, struct sk_buff *skb,
 	rx.u.rx.status = status;
 	rx.fc = le16_to_cpu(hdr->frame_control);
 	type = rx.fc & IEEE80211_FCTL_FTYPE;
+
+	/*
+	 * Drivers are required to align the payload data to a four-byte
+	 * boundary, so the last two bits of the address where it starts
+	 * may not be set. The header is required to be directly before
+	 * the payload data, padding like atheros hardware adds which is
+	 * inbetween the 802.11 header and the payload is not supported,
+	 * the driver is required to move the 802.11 header further back
+	 * in that case.
+	 */
+	hdrlen = ieee80211_get_hdrlen(rx.fc);
+	WARN_ON_ONCE(((unsigned long)(skb->data + hdrlen)) & 3);
 
 	if (type == IEEE80211_FTYPE_DATA || type == IEEE80211_FTYPE_MGMT)
 		local->dot11ReceivedFragmentCount++;

@@ -44,7 +44,6 @@ struct user_struct root_user = {
 	.processes	= ATOMIC_INIT(1),
 	.files		= ATOMIC_INIT(0),
 	.sigpending	= ATOMIC_INIT(0),
-	.mq_bytes	= 0,
 	.locked_shm     = 0,
 #ifdef CONFIG_KEYS
 	.uid_keyring	= &root_user_keyring,
@@ -58,19 +57,17 @@ struct user_struct root_user = {
 /*
  * These routines must be called with the uidhash spinlock held!
  */
-static inline void uid_hash_insert(struct user_struct *up,
-						struct hlist_head *hashent)
+static void uid_hash_insert(struct user_struct *up, struct hlist_head *hashent)
 {
 	hlist_add_head(&up->uidhash_node, hashent);
 }
 
-static inline void uid_hash_remove(struct user_struct *up)
+static void uid_hash_remove(struct user_struct *up)
 {
 	hlist_del_init(&up->uidhash_node);
 }
 
-static inline struct user_struct *uid_hash_find(uid_t uid,
-						struct hlist_head *hashent)
+static struct user_struct *uid_hash_find(uid_t uid, struct hlist_head *hashent)
 {
 	struct user_struct *user;
 	struct hlist_node *h;
@@ -86,9 +83,6 @@ static inline struct user_struct *uid_hash_find(uid_t uid,
 }
 
 #ifdef CONFIG_FAIR_USER_SCHED
-
-static struct kobject uids_kobject; /* represents /sys/kernel/uids directory */
-static DEFINE_MUTEX(uids_mutex);
 
 static void sched_destroy_user(struct user_struct *up)
 {
@@ -111,6 +105,19 @@ static void sched_switch_user(struct task_struct *p)
 	sched_move_task(p);
 }
 
+#else	/* CONFIG_FAIR_USER_SCHED */
+
+static void sched_destroy_user(struct user_struct *up) { }
+static int sched_create_user(struct user_struct *up) { return 0; }
+static void sched_switch_user(struct task_struct *p) { }
+
+#endif	/* CONFIG_FAIR_USER_SCHED */
+
+#if defined(CONFIG_FAIR_USER_SCHED) && defined(CONFIG_SYSFS)
+
+static struct kobject uids_kobject; /* represents /sys/kernel/uids directory */
+static DEFINE_MUTEX(uids_mutex);
+
 static inline void uids_mutex_lock(void)
 {
 	mutex_lock(&uids_mutex);
@@ -122,7 +129,7 @@ static inline void uids_mutex_unlock(void)
 }
 
 /* return cpu shares held by the user */
-ssize_t cpu_shares_show(struct kset *kset, char *buffer)
+static ssize_t cpu_shares_show(struct kset *kset, char *buffer)
 {
 	struct user_struct *up = container_of(kset, struct user_struct, kset);
 
@@ -130,7 +137,8 @@ ssize_t cpu_shares_show(struct kset *kset, char *buffer)
 }
 
 /* modify cpu shares held by the user */
-ssize_t cpu_shares_store(struct kset *kset, const char *buffer, size_t size)
+static ssize_t cpu_shares_store(struct kset *kset, const char *buffer,
+				size_t size)
 {
 	struct user_struct *up = container_of(kset, struct user_struct, kset);
 	unsigned long shares;
@@ -257,11 +265,8 @@ static inline void free_user(struct user_struct *up, unsigned long flags)
 	schedule_work(&up->work);
 }
 
-#else	/* CONFIG_FAIR_USER_SCHED */
+#else	/* CONFIG_FAIR_USER_SCHED && CONFIG_SYSFS */
 
-static void sched_destroy_user(struct user_struct *up) { }
-static int sched_create_user(struct user_struct *up) { return 0; }
-static void sched_switch_user(struct task_struct *p) { }
 static inline int user_kobject_create(struct user_struct *up) { return 0; }
 static inline void uids_mutex_lock(void) { }
 static inline void uids_mutex_unlock(void) { }
@@ -280,7 +285,7 @@ static inline void free_user(struct user_struct *up, unsigned long flags)
 	kmem_cache_free(uid_cachep, up);
 }
 
-#endif	/* CONFIG_FAIR_USER_SCHED */
+#endif
 
 /*
  * Locate the user_struct for the passed UID.  If found, take a ref on it.  The
@@ -332,8 +337,11 @@ struct user_struct * alloc_uid(struct user_namespace *ns, uid_t uid)
 		struct user_struct *new;
 
 		new = kmem_cache_alloc(uid_cachep, GFP_KERNEL);
-		if (!new)
+		if (!new) {
+			uids_mutex_unlock();
 			return NULL;
+		}
+
 		new->uid = uid;
 		atomic_set(&new->__count, 1);
 		atomic_set(&new->processes, 0);
@@ -343,12 +351,14 @@ struct user_struct * alloc_uid(struct user_namespace *ns, uid_t uid)
 		atomic_set(&new->inotify_watches, 0);
 		atomic_set(&new->inotify_devs, 0);
 #endif
-
+#ifdef CONFIG_POSIX_MQUEUE
 		new->mq_bytes = 0;
+#endif
 		new->locked_shm = 0;
 
 		if (alloc_uid_keyring(new, current) < 0) {
 			kmem_cache_free(uid_cachep, new);
+			uids_mutex_unlock();
 			return NULL;
 		}
 
@@ -356,6 +366,7 @@ struct user_struct * alloc_uid(struct user_namespace *ns, uid_t uid)
 			key_put(new->uid_keyring);
 			key_put(new->session_keyring);
 			kmem_cache_free(uid_cachep, new);
+			uids_mutex_unlock();
 			return NULL;
 		}
 

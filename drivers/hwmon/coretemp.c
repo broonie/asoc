@@ -150,7 +150,7 @@ static struct coretemp_data *coretemp_update_device(struct device *dev)
 static int __devinit coretemp_probe(struct platform_device *pdev)
 {
 	struct coretemp_data *data;
-	struct cpuinfo_x86 *c = &(cpu_data)[pdev->id];
+	struct cpuinfo_x86 *c = &cpu_data(pdev->id);
 	int err;
 	u32 eax, edx;
 
@@ -337,11 +337,10 @@ static int coretemp_cpu_callback(struct notifier_block *nfb,
 
 	switch (action) {
 	case CPU_ONLINE:
-	case CPU_ONLINE_FROZEN:
+	case CPU_DOWN_FAILED:
 		coretemp_device_add(cpu);
 		break;
-	case CPU_DEAD:
-	case CPU_DEAD_FROZEN:
+	case CPU_DOWN_PREPARE:
 		coretemp_device_remove(cpu);
 		break;
 	}
@@ -359,7 +358,7 @@ static int __init coretemp_init(void)
 	struct pdev_entry *p, *n;
 
 	/* quick check if we run Intel */
-	if (cpu_data[0].x86_vendor != X86_VENDOR_INTEL)
+	if (cpu_data(0).x86_vendor != X86_VENDOR_INTEL)
 		goto exit;
 
 	err = platform_driver_register(&coretemp_driver);
@@ -367,7 +366,7 @@ static int __init coretemp_init(void)
 		goto exit;
 
 	for_each_online_cpu(i) {
-		struct cpuinfo_x86 *c = &(cpu_data)[i];
+		struct cpuinfo_x86 *c = &cpu_data(i);
 
 		/* check if family 6, models e, f, 16 */
 		if ((c->cpuid_level < 0) || (c->x86 != 0x6) ||

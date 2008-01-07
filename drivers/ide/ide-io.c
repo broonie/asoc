@@ -47,15 +47,15 @@
 #include <linux/device.h>
 #include <linux/kmod.h>
 #include <linux/scatterlist.h>
+#include <linux/bitops.h>
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
-#include <asm/bitops.h>
 
 static int __ide_end_request(ide_drive_t *drive, struct request *rq,
-			     int uptodate, unsigned int nr_bytes)
+			     int uptodate, unsigned int nr_bytes, int dequeue)
 {
 	int ret = 1;
 
@@ -80,9 +80,11 @@ static int __ide_end_request(ide_drive_t *drive, struct request *rq,
 
 	if (!end_that_request_chunk(rq, uptodate, nr_bytes)) {
 		add_disk_randomness(rq->rq_disk);
-		if (!list_empty(&rq->queuelist))
-			blkdev_dequeue_request(rq);
-		HWGROUP(drive)->rq = NULL;
+		if (dequeue) {
+			if (!list_empty(&rq->queuelist))
+				blkdev_dequeue_request(rq);
+			HWGROUP(drive)->rq = NULL;
+		}
 		end_that_request_last(rq, uptodate);
 		ret = 0;
 	}
@@ -122,7 +124,7 @@ int ide_end_request (ide_drive_t *drive, int uptodate, int nr_sectors)
 			nr_bytes = rq->hard_cur_sectors << 9;
 	}
 
-	ret = __ide_end_request(drive, rq, uptodate, nr_bytes);
+	ret = __ide_end_request(drive, rq, uptodate, nr_bytes, 1);
 
 	spin_unlock_irqrestore(&ide_lock, flags);
 	return ret;
@@ -219,11 +221,11 @@ static ide_startstop_t ide_start_power_step(ide_drive_t *drive, struct request *
 
 	case ide_pm_restore_dma:	/* Resume step 3 (restore DMA) */
 		/*
-		 * Right now, all we do is call hwif->ide_dma_check(drive),
+		 * Right now, all we do is call ide_set_dma(drive),
 		 * we could be smarter and check for current xfer_speed
 		 * in struct drive etc...
 		 */
-		if (drive->hwif->ide_dma_check == NULL)
+		if (drive->hwif->ide_dma_on == NULL)
 			break;
 		drive->hwif->dma_off_quietly(drive);
 		/*
@@ -255,39 +257,13 @@ int ide_end_dequeued_request(ide_drive_t *drive, struct request *rq,
 			     int uptodate, int nr_sectors)
 {
 	unsigned long flags;
-	int ret = 1;
+	int ret;
 
 	spin_lock_irqsave(&ide_lock, flags);
-
 	BUG_ON(!blk_rq_started(rq));
-
-	/*
-	 * if failfast is set on a request, override number of sectors and
-	 * complete the whole request right now
-	 */
-	if (blk_noretry_request(rq) && end_io_error(uptodate))
-		nr_sectors = rq->hard_nr_sectors;
-
-	if (!blk_fs_request(rq) && end_io_error(uptodate) && !rq->errors)
-		rq->errors = -EIO;
-
-	/*
-	 * decide whether to reenable DMA -- 3 is a random magic for now,
-	 * if we DMA timeout more than 3 times, just stay in PIO
-	 */
-	if (drive->state == DMA_PIO_RETRY && drive->retry_pio <= 3) {
-		drive->state = 0;
-		HWGROUP(drive)->hwif->ide_dma_on(drive);
-	}
-
-	if (!end_that_request_first(rq, uptodate, nr_sectors)) {
-		add_disk_randomness(rq->rq_disk);
-		if (blk_rq_tagged(rq))
-			blk_queue_end_tag(drive->queue, rq);
-		end_that_request_last(rq, uptodate);
-		ret = 0;
-	}
+	ret = __ide_end_request(drive, rq, uptodate, nr_sectors << 9, 0);
 	spin_unlock_irqrestore(&ide_lock, flags);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(ide_end_dequeued_request);
@@ -321,41 +297,6 @@ static void ide_complete_pm_request (ide_drive_t *drive, struct request *rq)
 	end_that_request_last(rq, 1);
 	spin_unlock_irqrestore(&ide_lock, flags);
 }
-
-/*
- * FIXME: probably move this somewhere else, name is bad too :)
- */
-u64 ide_get_error_location(ide_drive_t *drive, char *args)
-{
-	u32 high, low;
-	u8 hcyl, lcyl, sect;
-	u64 sector;
-
-	high = 0;
-	hcyl = args[5];
-	lcyl = args[4];
-	sect = args[3];
-
-	if (ide_id_has_flush_cache_ext(drive->id)) {
-		low = (hcyl << 16) | (lcyl << 8) | sect;
-		HWIF(drive)->OUTB(drive->ctl|0x80, IDE_CONTROL_REG);
-		high = ide_read_24(drive);
-	} else {
-		u8 cur = HWIF(drive)->INB(IDE_SELECT_REG);
-		if (cur & 0x40) {
-			high = cur & 0xf;
-			low = (hcyl << 16) | (lcyl << 8) | sect;
-		} else {
-			low = hcyl * drive->head * drive->sect;
-			low += lcyl * drive->sect;
-			low += sect - 1;
-		}
-	}
-
-	sector = ((u64) high << 24) | low;
-	return sector;
-}
-EXPORT_SYMBOL(ide_get_error_location);
 
 /**
  *	ide_end_drive_cmd	-	end an explicit drive command
@@ -399,6 +340,8 @@ void ide_end_drive_cmd (ide_drive_t *drive, u8 stat, u8 err)
 		if (args) {
 			args[0] = stat;
 			args[1] = err;
+			/* be sure we're looking at the low order bits */
+			hwif->OUTB(drive->ctl & ~0x80, IDE_CONTROL_REG);
 			args[2] = hwif->INB(IDE_NSECTOR_REG);
 			args[3] = hwif->INB(IDE_SECTOR_REG);
 			args[4] = hwif->INB(IDE_LCYL_REG);
@@ -519,7 +462,8 @@ static ide_startstop_t ide_ata_error(ide_drive_t *drive, struct request *rq, u8 
 		}
 	}
 
-	if ((stat & DRQ_STAT) && rq_data_dir(rq) == READ && hwif->err_stops_fifo == 0)
+	if ((stat & DRQ_STAT) && rq_data_dir(rq) == READ &&
+	    (hwif->host_flags & IDE_HFLAG_ERROR_STOPS_FIFO) == 0)
 		try_to_flush_leftover_data(drive);
 
 	if (rq->errors >= ERROR_MAX || blk_noretry_request(rq)) {
@@ -712,7 +656,8 @@ static ide_startstop_t drive_cmd_intr (ide_drive_t *drive)
 	int retries = 10;
 
 	local_irq_enable_in_hardirq();
-	if ((stat & DRQ_STAT) && args && args[3]) {
+	if (rq->cmd_type == REQ_TYPE_ATA_CMD &&
+	    (stat & DRQ_STAT) && args && args[3]) {
 		u8 io_32bit = drive->io_32bit;
 		drive->io_32bit = 0;
 		hwif->ata_input_data(drive, &args[4], args[3] * SECTOR_WORDS);
@@ -834,7 +779,20 @@ static ide_startstop_t do_special (ide_drive_t *drive)
 		s->b.set_tune = 0;
 
 		if (set_pio_mode_abuse(drive->hwif, req_pio)) {
-			if (hwif->set_pio_mode)
+
+			if (hwif->set_pio_mode == NULL)
+				return ide_stopped;
+
+			/*
+			 * take ide_lock for drive->[no_]unmask/[no_]io_32bit
+			 */
+			if (req_pio == 8 || req_pio == 9) {
+				unsigned long flags;
+
+				spin_lock_irqsave(&ide_lock, flags);
+				hwif->set_pio_mode(drive, req_pio);
+				spin_unlock_irqrestore(&ide_lock, flags);
+			} else
 				hwif->set_pio_mode(drive, req_pio);
 		} else {
 			int keep_dma = drive->using_dma;
@@ -881,7 +839,8 @@ void ide_init_sg_cmd(ide_drive_t *drive, struct request *rq)
 	ide_hwif_t *hwif = drive->hwif;
 
 	hwif->nsect = hwif->nleft = rq->nr_sectors;
-	hwif->cursg = hwif->cursg_ofs = 0;
+	hwif->cursg_ofs = 0;
+	hwif->cursg = NULL;
 }
 
 EXPORT_SYMBOL_GPL(ide_init_sg_cmd);
@@ -926,7 +885,6 @@ static ide_startstop_t execute_drive_cmd (ide_drive_t *drive,
 		return do_rw_taskfile(drive, args);
 	} else if (rq->cmd_type == REQ_TYPE_ATA_TASK) {
 		u8 *args = rq->buffer;
-		u8 sel;
  
 		if (!args)
 			goto done;
@@ -944,10 +902,7 @@ static ide_startstop_t execute_drive_cmd (ide_drive_t *drive,
  		hwif->OUTB(args[3], IDE_SECTOR_REG);
  		hwif->OUTB(args[4], IDE_LCYL_REG);
  		hwif->OUTB(args[5], IDE_HCYL_REG);
- 		sel = (args[6] & ~0x10);
- 		if (drive->select.b.unit)
- 			sel |= 0x10;
- 		hwif->OUTB(sel, IDE_SELECT_REG);
+ 		hwif->OUTB((args[6] & 0xEF)|drive->select.all, IDE_SELECT_REG);
  		ide_cmd(drive, args[0], args[2], &drive_cmd_intr);
  		return ide_started;
  	} else if (rq->cmd_type == REQ_TYPE_ATA_CMD) {
@@ -1015,7 +970,8 @@ static void ide_check_pm_state(ide_drive_t *drive, struct request *rq)
 		if (rc)
 			printk(KERN_WARNING "%s: bus not ready on wakeup\n", drive->name);
 		SELECT_DRIVE(drive);
-		HWIF(drive)->OUTB(8, HWIF(drive)->io_ports[IDE_CONTROL_OFFSET]);
+		if (IDE_CONTROL_REG)
+			HWIF(drive)->OUTB(drive->ctl, IDE_CONTROL_REG);
 		rc = ide_wait_not_busy(HWIF(drive), 100000);
 		if (rc)
 			printk(KERN_WARNING "%s: drive not ready on wakeup\n", drive->name);

@@ -66,7 +66,7 @@ cflags-y	+= $(isaflags-y) -ffreestanding
 cflags-$(CONFIG_MORE_COMPILE_OPTIONS)	+= \
 	$(shell echo $(CONFIG_COMPILE_OPTIONS) | sed -e 's/"//g')
 
-OBJCOPYFLAGS	:= -O binary -R .note -R .comment -R .stab -R .stabstr -S
+OBJCOPYFLAGS	:= -O binary -R .note -R .note.gnu.build-id -R .comment -R .stab -R .stabstr -S
 
 #
 # arch/sh/defconfig doesn't reflect any real hardware, and as such should
@@ -91,12 +91,12 @@ LDFLAGS_vmlinux		+= --defsym 'jiffies=jiffies_64+4'
 LDFLAGS			+= -EB
 endif
 
-CFLAGS		+= -pipe $(cflags-y)
-AFLAGS		+= $(cflags-y)
+KBUILD_CFLAGS		+= -pipe $(cflags-y)
+KBUILD_AFLAGS		+= $(cflags-y)
 
 head-y := arch/sh/kernel/head.o arch/sh/kernel/init_task.o
 
-LIBGCC := $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
+LIBGCC := $(shell $(CC) $(KBUILD_CFLAGS) -print-libgcc-file-name)
 
 core-y				+= arch/sh/kernel/ arch/sh/mm/
 core-$(CONFIG_SH_FPU_EMU)	+= arch/sh/math-emu/

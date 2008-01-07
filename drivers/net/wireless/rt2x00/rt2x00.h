@@ -418,7 +418,7 @@ struct rt2x00lib_ops {
 	int (*write_tx_data) (struct rt2x00_dev *rt2x00dev,
 			      struct data_ring *ring, struct sk_buff *skb,
 			      struct ieee80211_tx_control *control);
-	int (*get_tx_data_len) (struct rt2x00_dev *rt2x00dev, int maxpacket,
+	int (*get_tx_data_len) (struct rt2x00_dev *rt2x00dev,
 				struct sk_buff *skb);
 	void (*kick_tx_queue) (struct rt2x00_dev *rt2x00dev,
 			       unsigned int queue);
@@ -599,6 +599,11 @@ struct rt2x00_dev {
 	u32 *rf;
 
 	/*
+	 * USB Max frame size (for rt2500usb & rt73usb).
+	 */
+	u16 usb_maxpacket;
+
+	/*
 	 * Current TX power value.
 	 */
 	u16 tx_power;
@@ -751,14 +756,16 @@ static inline char rt2x00_rf(const struct rt2x00_chip *chipset, const u16 chip)
 	return (chipset->rf == chip);
 }
 
-static inline u16 rt2x00_get_rev(const struct rt2x00_chip *chipset)
+static inline u16 rt2x00_rev(const struct rt2x00_chip *chipset)
 {
 	return chipset->rev;
 }
 
-static inline u16 rt2x00_rev(const struct rt2x00_chip *chipset, const u32 mask)
+static inline u16 rt2x00_check_rev(const struct rt2x00_chip *chipset,
+				   const u32 rev)
 {
-	return chipset->rev & mask;
+	return (((chipset->rev & 0xffff0) == rev) &&
+		!!(chipset->rev & 0x0000f));
 }
 
 /*

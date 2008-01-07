@@ -378,7 +378,7 @@ static struct irq_cpu_info {
 
 #define IRQ_ALLOWED(cpu, allowed_mask)	cpu_isset(cpu, allowed_mask)
 
-#define CPU_TO_PACKAGEINDEX(i) (first_cpu(cpu_sibling_map[i]))
+#define CPU_TO_PACKAGEINDEX(i) (first_cpu(per_cpu(cpu_sibling_map, i)))
 
 static cpumask_t balance_irq_affinity[NR_IRQS] = {
 	[0 ... NR_IRQS-1] = CPU_MASK_ALL
@@ -584,7 +584,7 @@ tryanotherirq:
 
 	imbalance = move_this_load;
 	
-	/* For physical_balance case, we accumlated both load
+	/* For physical_balance case, we accumulated both load
 	 * values in the one of the siblings cpu_irq[],
 	 * to use the same code for physical and logical processors
 	 * as much as possible. 
@@ -598,7 +598,7 @@ tryanotherirq:
 	 * (A+B)/2 vs B
 	 */
 	load = CPU_IRQ(min_loaded) >> 1;
-	for_each_cpu_mask(j, cpu_sibling_map[min_loaded]) {
+	for_each_cpu_mask(j, per_cpu(cpu_sibling_map, min_loaded)) {
 		if (load > CPU_IRQ(j)) {
 			/* This won't change cpu_sibling_map[min_loaded] */
 			load = CPU_IRQ(j);
@@ -962,7 +962,7 @@ static int EISA_ELCR(unsigned int irq)
 #define default_MCA_trigger(idx)	(1)
 #define default_MCA_polarity(idx)	(0)
 
-static int __init MPBIOS_polarity(int idx)
+static int MPBIOS_polarity(int idx)
 {
 	int bus = mp_irqs[idx].mpc_srcbus;
 	int polarity;
@@ -1198,7 +1198,7 @@ static u8 irq_vector[NR_IRQ_VECTORS] __read_mostly = { FIRST_DEVICE_VECTOR , 0 }
 static int __assign_irq_vector(int irq)
 {
 	static int current_vector = FIRST_DEVICE_VECTOR, current_offset = 0;
-	int vector, offset, i;
+	int vector, offset;
 
 	BUG_ON((unsigned)irq >= NR_IRQ_VECTORS);
 
@@ -1215,11 +1215,8 @@ next:
 	}
 	if (vector == current_vector)
 		return -ENOSPC;
-	if (vector == SYSCALL_VECTOR)
+	if (test_and_set_bit(vector, used_vectors))
 		goto next;
-	for (i = 0; i < NR_IRQ_VECTORS; i++)
-		if (irq_vector[i] == vector)
-			goto next;
 
 	current_vector = vector;
 	current_offset = offset;
@@ -1294,6 +1291,11 @@ static void __init setup_IO_APIC_irqs(void)
 				apic_printk(APIC_VERBOSE, ", %d-%d",
 					mp_ioapics[apic].mpc_apicid, pin);
 			continue;
+		}
+
+		if (!first_notcon) {
+			apic_printk(APIC_VERBOSE, " not connected.\n");
+			first_notcon = 1;
 		}
 
 		entry.trigger = irq_trigger(idx);
@@ -1880,13 +1882,16 @@ __setup("no_timer_check", notimercheck);
 static int __init timer_irq_works(void)
 {
 	unsigned long t1 = jiffies;
+	unsigned long flags;
 
 	if (no_timer_check)
 		return 1;
 
+	local_save_flags(flags);
 	local_irq_enable();
 	/* Let ten ticks pass... */
 	mdelay((10 * 1000) / HZ);
+	local_irq_restore(flags);
 
 	/*
 	 * Expect a few ticks at least, to be sure some possible
@@ -2164,6 +2169,13 @@ static inline void __init check_timer(void)
 {
 	int apic1, pin1, apic2, pin2;
 	int vector;
+	unsigned int ver;
+	unsigned long flags;
+
+	local_irq_save(flags);
+
+	ver = apic_read(APIC_LVR);
+	ver = GET_APIC_VERSION(ver);
 
 	/*
 	 * get/set the timer IRQ vector:
@@ -2177,11 +2189,15 @@ static inline void __init check_timer(void)
 	 * mode for the 8259A whenever interrupts are routed
 	 * through I/O APICs.  Also IRQ0 has to be enabled in
 	 * the 8259A which implies the virtual wire has to be
-	 * disabled in the local APIC.
+	 * disabled in the local APIC.  Finally timer interrupts
+	 * need to be acknowledged manually in the 8259A for
+	 * timer_interrupt() and for the i82489DX when using
+	 * the NMI watchdog.
 	 */
 	apic_write_around(APIC_LVT0, APIC_LVT_MASKED | APIC_DM_EXTINT);
 	init_8259A(1);
-	timer_ack = 1;
+	timer_ack = !cpu_has_tsc;
+	timer_ack |= (nmi_watchdog == NMI_IO_APIC && !APIC_INTEGRATED(ver));
 	if (timer_over_8254 > 0)
 		enable_8259A_irq(0);
 
@@ -2209,7 +2225,7 @@ static inline void __init check_timer(void)
 			}
 			if (disable_timer_pin_1 > 0)
 				clear_IO_APIC_pin(0, pin1);
-			return;
+			goto out;
 		}
 		clear_IO_APIC_pin(apic1, pin1);
 		printk(KERN_ERR "..MP-BIOS bug: 8254 timer not connected to "
@@ -2232,7 +2248,7 @@ static inline void __init check_timer(void)
 			if (nmi_watchdog == NMI_IO_APIC) {
 				setup_nmi();
 			}
-			return;
+			goto out;
 		}
 		/*
 		 * Cleanup, just in case ...
@@ -2256,7 +2272,7 @@ static inline void __init check_timer(void)
 
 	if (timer_irq_works()) {
 		printk(" works.\n");
-		return;
+		goto out;
 	}
 	apic_write_around(APIC_LVT0, APIC_LVT_MASKED | APIC_DM_FIXED | vector);
 	printk(" failed.\n");
@@ -2272,11 +2288,13 @@ static inline void __init check_timer(void)
 
 	if (timer_irq_works()) {
 		printk(" works.\n");
-		return;
+		goto out;
 	}
 	printk(" failed :(.\n");
 	panic("IO-APIC + timer doesn't work!  Boot with apic=debug and send a "
 		"report.  Then try booting with the 'noapic' option");
+out:
+	local_irq_restore(flags);
 }
 
 /*
@@ -2290,6 +2308,12 @@ static inline void __init check_timer(void)
 
 void __init setup_IO_APIC(void)
 {
+	int i;
+
+	/* Reserve all the system vectors. */
+	for (i = FIRST_SYSTEM_VECTOR; i < NR_VECTORS; i++)
+		set_bit(i, used_vectors);
+
 	enable_IO_APIC();
 
 	if (acpi_ioapic)
@@ -2467,7 +2491,7 @@ void destroy_irq(unsigned int irq)
 }
 
 /*
- * MSI mesage composition
+ * MSI message composition
  */
 #ifdef CONFIG_PCI_MSI
 static int msi_compose_msg(struct pci_dev *pdev, unsigned int irq, struct msi_msg *msg)
@@ -2819,6 +2843,25 @@ int io_apic_set_pci_routing (int ioapic, int pin, int irq, int edge_level, int a
 	__ioapic_write_entry(ioapic, pin, entry);
 	spin_unlock_irqrestore(&ioapic_lock, flags);
 
+	return 0;
+}
+
+int acpi_get_override_irq(int bus_irq, int *trigger, int *polarity)
+{
+	int i;
+
+	if (skip_ioapic_setup)
+		return -1;
+
+	for (i = 0; i < mp_irq_entries; i++)
+		if (mp_irqs[i].mpc_irqtype == mp_INT &&
+		    mp_irqs[i].mpc_srcbusirq == bus_irq)
+			break;
+	if (i >= mp_irq_entries)
+		return -1;
+
+	*trigger = irq_trigger(i);
+	*polarity = irq_polarity(i);
 	return 0;
 }
 

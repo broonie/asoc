@@ -164,9 +164,13 @@ enum {
 	MV_PCI_ERR_ATTRIBUTE	= 0x1d48,
 	MV_PCI_ERR_COMMAND	= 0x1d50,
 
-	PCI_IRQ_CAUSE_OFS		= 0x1d58,
-	PCI_IRQ_MASK_OFS		= 0x1d5c,
+	PCI_IRQ_CAUSE_OFS	= 0x1d58,
+	PCI_IRQ_MASK_OFS	= 0x1d5c,
 	PCI_UNMASK_ALL_IRQS	= 0x7fffff,	/* bits 22-0 */
+
+	PCIE_IRQ_CAUSE_OFS	= 0x1900,
+	PCIE_IRQ_MASK_OFS	= 0x1910,
+	PCIE_UNMASK_ALL_IRQS	= 0x70a,	/* assorted bits */
 
 	HC_MAIN_IRQ_CAUSE_OFS	= 0x1d60,
 	HC_MAIN_IRQ_MASK_OFS	= 0x1d64,
@@ -303,6 +307,7 @@ enum {
 	MV_HP_GEN_I		= (1 << 6),	/* Generation I: 50xx */
 	MV_HP_GEN_II		= (1 << 7),	/* Generation II: 60xx */
 	MV_HP_GEN_IIE		= (1 << 8),	/* Generation IIE: 6042/7042 */
+	MV_HP_PCIE		= (1 << 9),	/* PCIe bus/regs: 7042 */
 
 	/* Port private flags (pp_flags) */
 	MV_PP_FLAG_EDMA_EN	= (1 << 0),	/* is EDMA engine enabled? */
@@ -388,7 +393,15 @@ struct mv_port_signal {
 	u32			pre;
 };
 
-struct mv_host_priv;
+struct mv_host_priv {
+	u32			hp_flags;
+	struct mv_port_signal	signal[8];
+	const struct mv_hw_ops	*ops;
+	u32			irq_cause_ofs;
+	u32			irq_mask_ofs;
+	u32			unmask_all_irqs;
+};
+
 struct mv_hw_ops {
 	void (*phy_errata)(struct mv_host_priv *hpriv, void __iomem *mmio,
 			   unsigned int port);
@@ -399,12 +412,6 @@ struct mv_hw_ops {
 			unsigned int n_hc);
 	void (*reset_flash)(struct mv_host_priv *hpriv, void __iomem *mmio);
 	void (*reset_bus)(struct pci_dev *pdev, void __iomem *mmio);
-};
-
-struct mv_host_priv {
-	u32			hp_flags;
-	struct mv_port_signal	signal[8];
-	const struct mv_hw_ops	*ops;
 };
 
 static void mv_irq_clear(struct ata_port *ap);
@@ -421,7 +428,6 @@ static void mv_error_handler(struct ata_port *ap);
 static void mv_post_int_cmd(struct ata_queued_cmd *qc);
 static void mv_eh_freeze(struct ata_port *ap);
 static void mv_eh_thaw(struct ata_port *ap);
-static int mv_slave_config(struct scsi_device *sdev);
 static int mv_init_one(struct pci_dev *pdev, const struct pci_device_id *ent);
 
 static void mv5_phy_errata(struct mv_host_priv *hpriv, void __iomem *mmio,
@@ -459,7 +465,7 @@ static struct scsi_host_template mv5_sht = {
 	.use_clustering		= 1,
 	.proc_name		= DRV_NAME,
 	.dma_boundary		= MV_DMA_BOUNDARY,
-	.slave_configure	= mv_slave_config,
+	.slave_configure	= ata_scsi_slave_config,
 	.slave_destroy		= ata_scsi_slave_destroy,
 	.bios_param		= ata_std_bios_param,
 };
@@ -477,7 +483,7 @@ static struct scsi_host_template mv6_sht = {
 	.use_clustering		= 1,
 	.proc_name		= DRV_NAME,
 	.dma_boundary		= MV_DMA_BOUNDARY,
-	.slave_configure	= mv_slave_config,
+	.slave_configure	= ata_scsi_slave_config,
 	.slave_destroy		= ata_scsi_slave_destroy,
 	.bios_param		= ata_std_bios_param,
 };
@@ -632,10 +638,12 @@ static const struct pci_device_id mv_pci_tbl[] = {
 	/* Adaptec 1430SA */
 	{ PCI_VDEVICE(ADAPTEC2, 0x0243), chip_7042 },
 
-	{ PCI_VDEVICE(TTI, 0x2310), chip_7042 },
-
-	/* add Marvell 7042 support */
+	/* Marvell 7042 support */
 	{ PCI_VDEVICE(MARVELL, 0x7042), chip_7042 },
+
+	/* Highpoint RocketRAID PCIe series */
+	{ PCI_VDEVICE(TTI, 0x2300), chip_7042 },
+	{ PCI_VDEVICE(TTI, 0x2310), chip_7042 },
 
 	{ }			/* terminate list */
 };
@@ -756,17 +764,6 @@ static void mv_irq_clear(struct ata_port *ap)
 {
 }
 
-static int mv_slave_config(struct scsi_device *sdev)
-{
-	int rc = ata_scsi_slave_config(sdev);
-	if (rc)
-		return rc;
-
-	blk_queue_max_phys_segments(sdev->request_queue, MV_MAX_SG_CT / 2);
-
-	return 0;	/* scsi layer doesn't check return value, sigh */
-}
-
 static void mv_set_edma_ptrs(void __iomem *port_mmio,
 			     struct mv_host_priv *hpriv,
 			     struct mv_port_priv *pp)
@@ -857,7 +854,7 @@ static int __mv_stop_dma(struct ata_port *ap)
 		pp->pp_flags &= ~MV_PP_FLAG_EDMA_EN;
 	} else {
 		WARN_ON(EDMA_EN & readl(port_mmio + EDMA_CMD_OFS));
-  	}
+	}
 
 	/* now properly wait for the eDMA to stop */
 	for (i = 1000; i > 0; i--) {
@@ -895,7 +892,7 @@ static void mv_dump_mem(void __iomem *start, unsigned bytes)
 	for (b = 0; b < bytes; ) {
 		DPRINTK("%p: ", start + b);
 		for (w = 0; b < bytes && w < 4; w++) {
-			printk("%08x ",readl(start + b));
+			printk("%08x ", readl(start + b));
 			b += sizeof(u32);
 		}
 		printk("\n");
@@ -911,8 +908,8 @@ static void mv_dump_pci_cfg(struct pci_dev *pdev, unsigned bytes)
 	for (b = 0; b < bytes; ) {
 		DPRINTK("%02x: ", b);
 		for (w = 0; b < bytes && w < 4; w++) {
-			(void) pci_read_config_dword(pdev,b,&dw);
-			printk("%08x ",dw);
+			(void) pci_read_config_dword(pdev, b, &dw);
+			printk("%08x ", dw);
 			b += sizeof(u32);
 		}
 		printk("\n");
@@ -956,9 +953,9 @@ static void mv_dump_all_regs(void __iomem *mmio_base, int port,
 	}
 	for (p = start_port; p < start_port + num_ports; p++) {
 		port_base = mv_port_base(mmio_base, p);
-		DPRINTK("EDMA regs (port %i):\n",p);
+		DPRINTK("EDMA regs (port %i):\n", p);
 		mv_dump_mem(port_base, 0x54);
-		DPRINTK("SATA regs (port %i):\n",p);
+		DPRINTK("SATA regs (port %i):\n", p);
 		mv_dump_mem(port_base+0x300, 0x60);
 	}
 #endif
@@ -1138,7 +1135,7 @@ static void mv_fill_sg(struct ata_queued_cmd *qc)
 {
 	struct mv_port_priv *pp = qc->ap->private_data;
 	struct scatterlist *sg;
-	struct mv_sg *mv_sg;
+	struct mv_sg *mv_sg, *last_sg = NULL;
 
 	mv_sg = pp->sg_tbl;
 	ata_for_each_sg(sg, qc) {
@@ -1159,16 +1156,16 @@ static void mv_fill_sg(struct ata_queued_cmd *qc)
 			sg_len -= len;
 			addr += len;
 
-			if (!sg_len && ata_sg_is_last(sg, qc))
-				mv_sg->flags_size |= cpu_to_le32(EPRD_FLAG_END_OF_TBL);
-
+			last_sg = mv_sg;
 			mv_sg++;
 		}
-
 	}
+
+	if (likely(last_sg))
+		last_sg->flags_size |= cpu_to_le32(EPRD_FLAG_END_OF_TBL);
 }
 
-static inline void mv_crqb_pack_cmd(__le16 *cmdw, u8 data, u8 addr, unsigned last)
+static void mv_crqb_pack_cmd(__le16 *cmdw, u8 data, u8 addr, unsigned last)
 {
 	u16 tmp = data | (addr << CRQB_CMD_ADDR_SHIFT) | CRQB_CMD_CS |
 		(last ? CRQB_CMD_LAST : 0);
@@ -1196,7 +1193,7 @@ static void mv_qc_prep(struct ata_queued_cmd *qc)
 	u16 flags = 0;
 	unsigned in_index;
 
- 	if (qc->tf.protocol != ATA_PROT_DMA)
+	if (qc->tf.protocol != ATA_PROT_DMA)
 		return;
 
 	/* Fill in command request block
@@ -1288,7 +1285,7 @@ static void mv_qc_prep_iie(struct ata_queued_cmd *qc)
 	unsigned in_index;
 	u32 flags = 0;
 
- 	if (qc->tf.protocol != ATA_PROT_DMA)
+	if (qc->tf.protocol != ATA_PROT_DMA)
 		return;
 
 	/* Fill in Gen IIE command request block
@@ -1618,7 +1615,7 @@ static void mv_host_intr(struct ata_host *host, u32 relevant, unsigned int hc)
 	writelfl(~hc_irq_cause, hc_mmio + HC_IRQ_CAUSE_OFS);
 
 	VPRINTK("ENTER, hc%u relevant=0x%08x HC IRQ cause=0x%08x\n",
-		hc,relevant,hc_irq_cause);
+		hc, relevant, hc_irq_cause);
 
 	for (port = port0; port < port0 + MV_PORTS_PER_HC; port++) {
 		struct ata_port *ap = host->ports[port];
@@ -1660,13 +1657,14 @@ static void mv_host_intr(struct ata_host *host, u32 relevant, unsigned int hc)
 
 static void mv_pci_error(struct ata_host *host, void __iomem *mmio)
 {
+	struct mv_host_priv *hpriv = host->private_data;
 	struct ata_port *ap;
 	struct ata_queued_cmd *qc;
 	struct ata_eh_info *ehi;
 	unsigned int i, err_mask, printed = 0;
 	u32 err_cause;
 
-	err_cause = readl(mmio + PCI_IRQ_CAUSE_OFS);
+	err_cause = readl(mmio + hpriv->irq_cause_ofs);
 
 	dev_printk(KERN_ERR, host->dev, "PCI ERROR; PCI IRQ cause=0x%08x\n",
 		   err_cause);
@@ -1674,7 +1672,7 @@ static void mv_pci_error(struct ata_host *host, void __iomem *mmio)
 	DPRINTK("All regs @ PCI error\n");
 	mv_dump_all_regs(mmio, -1, to_pci_dev(host->dev));
 
-	writelfl(0, mmio + PCI_IRQ_CAUSE_OFS);
+	writelfl(0, mmio + hpriv->irq_cause_ofs);
 
 	for (i = 0; i < host->n_ports; i++) {
 		ap = host->ports[i];
@@ -1938,6 +1936,8 @@ static int mv5_reset_hc(struct mv_host_priv *hpriv, void __iomem *mmio,
 #define ZERO(reg) writel(0, mmio + (reg))
 static void mv_reset_pci_bus(struct pci_dev *pdev, void __iomem *mmio)
 {
+	struct ata_host     *host = dev_get_drvdata(&pdev->dev);
+	struct mv_host_priv *hpriv = host->private_data;
 	u32 tmp;
 
 	tmp = readl(mmio + MV_PCI_MODE);
@@ -1949,8 +1949,8 @@ static void mv_reset_pci_bus(struct pci_dev *pdev, void __iomem *mmio)
 	writel(0x000100ff, mmio + MV_PCI_XBAR_TMOUT);
 	ZERO(HC_MAIN_IRQ_MASK_OFS);
 	ZERO(MV_PCI_SERR_MASK);
-	ZERO(PCI_IRQ_CAUSE_OFS);
-	ZERO(PCI_IRQ_MASK_OFS);
+	ZERO(hpriv->irq_cause_ofs);
+	ZERO(hpriv->irq_mask_ofs);
 	ZERO(MV_PCI_ERR_LOW_ADDRESS);
 	ZERO(MV_PCI_ERR_HIGH_ADDRESS);
 	ZERO(MV_PCI_ERR_ATTRIBUTE);
@@ -1995,9 +1995,8 @@ static int mv6_reset_hc(struct mv_host_priv *hpriv, void __iomem *mmio,
 	for (i = 0; i < 1000; i++) {
 		udelay(1);
 		t = readl(reg);
-		if (PCI_MASTER_EMPTY & t) {
+		if (PCI_MASTER_EMPTY & t)
 			break;
-		}
 	}
 	if (!(PCI_MASTER_EMPTY & t)) {
 		printk(KERN_ERR DRV_NAME ": PCI master won't flush\n");
@@ -2183,7 +2182,7 @@ static void mv_phy_reset(struct ata_port *ap, unsigned int *class,
 		mv_scr_read(ap, SCR_ERROR, &serror);
 		mv_scr_read(ap, SCR_CONTROL, &scontrol);
 		DPRINTK("S-regs after ATA_RST: SStat 0x%08x SErr 0x%08x "
-			"SCtrl 0x%08x\n", status, serror, scontrol);
+			"SCtrl 0x%08x\n", sstatus, serror, scontrol);
 	}
 #endif
 
@@ -2442,7 +2441,7 @@ static int mv_chip_id(struct ata_host *host, unsigned int board_idx)
 	struct mv_host_priv *hpriv = host->private_data;
 	u32 hp_flags = hpriv->hp_flags;
 
-	switch(board_idx) {
+	switch (board_idx) {
 	case chip_5080:
 		hpriv->ops = &mv5xxx_ops;
 		hp_flags |= MV_HP_GEN_I;
@@ -2503,6 +2502,36 @@ static int mv_chip_id(struct ata_host *host, unsigned int board_idx)
 		break;
 
 	case chip_7042:
+		hp_flags |= MV_HP_PCIE;
+		if (pdev->vendor == PCI_VENDOR_ID_TTI &&
+		    (pdev->device == 0x2300 || pdev->device == 0x2310))
+		{
+			/*
+			 * Highpoint RocketRAID PCIe 23xx series cards:
+			 *
+			 * Unconfigured drives are treated as "Legacy"
+			 * by the BIOS, and it overwrites sector 8 with
+			 * a "Lgcy" metadata block prior to Linux boot.
+			 *
+			 * Configured drives (RAID or JBOD) leave sector 8
+			 * alone, but instead overwrite a high numbered
+			 * sector for the RAID metadata.  This sector can
+			 * be determined exactly, by truncating the physical
+			 * drive capacity to a nice even GB value.
+			 *
+			 * RAID metadata is at: (dev->n_sectors & ~0xfffff)
+			 *
+			 * Warn the user, lest they think we're just buggy.
+			 */
+			printk(KERN_WARNING DRV_NAME ": Highpoint RocketRAID"
+				" BIOS CORRUPTS DATA on all attached drives,"
+				" regardless of if/how they are configured."
+				" BEWARE!\n");
+			printk(KERN_WARNING DRV_NAME ": For data safety, do not"
+				" use sectors 8-9 on \"Legacy\" drives,"
+				" and avoid the final two gigabytes on"
+				" all RocketRAID BIOS initialized drives.\n");
+		}
 	case chip_6042:
 		hpriv->ops = &mv6xxx_ops;
 		hp_flags |= MV_HP_GEN_IIE;
@@ -2523,11 +2552,21 @@ static int mv_chip_id(struct ata_host *host, unsigned int board_idx)
 		break;
 
 	default:
-		printk(KERN_ERR DRV_NAME ": BUG: invalid board index %u\n", board_idx);
+		dev_printk(KERN_ERR, &pdev->dev,
+			   "BUG: invalid board index %u\n", board_idx);
 		return 1;
 	}
 
 	hpriv->hp_flags = hp_flags;
+	if (hp_flags & MV_HP_PCIE) {
+		hpriv->irq_cause_ofs	= PCIE_IRQ_CAUSE_OFS;
+		hpriv->irq_mask_ofs	= PCIE_IRQ_MASK_OFS;
+		hpriv->unmask_all_irqs	= PCIE_UNMASK_ALL_IRQS;
+	} else {
+		hpriv->irq_cause_ofs	= PCI_IRQ_CAUSE_OFS;
+		hpriv->irq_mask_ofs	= PCI_IRQ_MASK_OFS;
+		hpriv->unmask_all_irqs	= PCI_UNMASK_ALL_IRQS;
+	}
 
 	return 0;
 }
@@ -2607,10 +2646,10 @@ static int mv_init_host(struct ata_host *host, unsigned int board_idx)
 	}
 
 	/* Clear any currently outstanding host interrupt conditions */
-	writelfl(0, mmio + PCI_IRQ_CAUSE_OFS);
+	writelfl(0, mmio + hpriv->irq_cause_ofs);
 
 	/* and unmask interrupt generation for host regs */
-	writelfl(PCI_UNMASK_ALL_IRQS, mmio + PCI_IRQ_MASK_OFS);
+	writelfl(hpriv->unmask_all_irqs, mmio + hpriv->irq_mask_ofs);
 
 	if (IS_GEN_I(hpriv))
 		writelfl(~HC_MAIN_MASKED_IRQS_5, mmio + HC_MAIN_IRQ_MASK_OFS);
@@ -2621,8 +2660,8 @@ static int mv_init_host(struct ata_host *host, unsigned int board_idx)
 		"PCI int cause/mask=0x%08x/0x%08x\n",
 		readl(mmio + HC_MAIN_IRQ_CAUSE_OFS),
 		readl(mmio + HC_MAIN_IRQ_MASK_OFS),
-		readl(mmio + PCI_IRQ_CAUSE_OFS),
-		readl(mmio + PCI_IRQ_MASK_OFS));
+		readl(mmio + hpriv->irq_cause_ofs),
+		readl(mmio + hpriv->irq_mask_ofs));
 
 done:
 	return rc;
@@ -2680,7 +2719,7 @@ static void mv_print_info(struct ata_host *host)
  */
 static int mv_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	static int printed_version = 0;
+	static int printed_version;
 	unsigned int board_idx = (unsigned int)ent->driver_data;
 	const struct ata_port_info *ppi[] = { &mv_port_info[board_idx], NULL };
 	struct ata_host *host;

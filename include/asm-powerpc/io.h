@@ -498,23 +498,6 @@ static inline void name at					\
 #define writeq	writeq
 #endif
 
-#ifdef CONFIG_NOT_COHERENT_CACHE
-
-#define dma_cache_inv(_start,_size) \
-	invalidate_dcache_range(_start, (_start + _size))
-#define dma_cache_wback(_start,_size) \
-	clean_dcache_range(_start, (_start + _size))
-#define dma_cache_wback_inv(_start,_size) \
-	flush_dcache_range(_start, (_start + _size))
-
-#else /* CONFIG_NOT_COHERENT_CACHE */
-
-#define dma_cache_inv(_start,_size)		do { } while (0)
-#define dma_cache_wback(_start,_size)		do { } while (0)
-#define dma_cache_wback_inv(_start,_size)	do { } while (0)
-
-#endif /* !CONFIG_NOT_COHERENT_CACHE */
-
 /*
  * Convert a physical pointer to a virtual kernel pointer for /dev/mem
  * access
@@ -539,7 +522,7 @@ static inline void name at					\
 #else
 /*
  * Enforce synchronisation of stores vs. spin_unlock
- * (this does it explicitely, though our implementation of spin_unlock
+ * (this does it explicitly, though our implementation of spin_unlock
  * does it implicitely too)
  */
 static inline void mmiowb(void)

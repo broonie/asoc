@@ -17,7 +17,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
 /* ------------------------------------------------------------------------- */
 
-/* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi>.
+/* With some changes from KyÃ¶sti MÃ¤lkki <kmalkki@cc.hut.fi>.
    All SMBus-related things are written by Frodo Looijaard <frodol@dds.nl>
    SMBus 2.0 support by Mark Studebaker <mdsxyz123@yahoo.com> and
    Jean Delvare <khali@linux-fr.org> */
@@ -673,7 +673,7 @@ static int __i2c_check_addr(struct i2c_adapter *adapter, unsigned int addr)
 	return 0;
 }
 
-int i2c_check_addr(struct i2c_adapter *adapter, int addr)
+static int i2c_check_addr(struct i2c_adapter *adapter, int addr)
 {
 	int rval;
 
@@ -683,7 +683,6 @@ int i2c_check_addr(struct i2c_adapter *adapter, int addr)
 
 	return rval;
 }
-EXPORT_SYMBOL(i2c_check_addr);
 
 int i2c_attach_client(struct i2c_client *client)
 {

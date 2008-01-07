@@ -399,7 +399,7 @@ static int ocfs2_truncate_file(struct inode *inode,
 
 	if (OCFS2_I(inode)->ip_dyn_features & OCFS2_INLINE_DATA_FL) {
 		status = ocfs2_truncate_inline(inode, di_bh, new_i_size,
-					       i_size_read(inode), 0);
+					       i_size_read(inode), 1);
 		if (status)
 			mlog_errno(status);
 
@@ -1521,6 +1521,7 @@ static int ocfs2_remove_inode_range(struct inode *inode,
 	u32 trunc_start, trunc_len, cpos, phys_cpos, alloc_size;
 	struct ocfs2_super *osb = OCFS2_SB(inode->i_sb);
 	struct ocfs2_cached_dealloc_ctxt dealloc;
+	struct address_space *mapping = inode->i_mapping;
 
 	ocfs2_init_dealloc_ctxt(&dealloc);
 
@@ -1529,10 +1530,20 @@ static int ocfs2_remove_inode_range(struct inode *inode,
 
 	if (OCFS2_I(inode)->ip_dyn_features & OCFS2_INLINE_DATA_FL) {
 		ret = ocfs2_truncate_inline(inode, di_bh, byte_start,
-					    byte_start + byte_len, 1);
-		if (ret)
+					    byte_start + byte_len, 0);
+		if (ret) {
 			mlog_errno(ret);
-		return ret;
+			goto out;
+		}
+		/*
+		 * There's no need to get fancy with the page cache
+		 * truncate of an inline-data inode. We're talking
+		 * about less than a page here, which will be cached
+		 * in the dinode buffer anyway.
+		 */
+		unmap_mapping_range(mapping, 0, 0, 0);
+		truncate_inode_pages(mapping, 0);
+		goto out;
 	}
 
 	trunc_start = ocfs2_clusters_for_bytes(osb->sb, byte_start);
@@ -1881,149 +1892,21 @@ out:
 	return ret;
 }
 
-static inline void
-ocfs2_set_next_iovec(const struct iovec **iovp, size_t *basep, size_t bytes)
-{
-	const struct iovec *iov = *iovp;
-	size_t base = *basep;
-
-	do {
-		int copy = min(bytes, iov->iov_len - base);
-
-		bytes -= copy;
-		base += copy;
-		if (iov->iov_len == base) {
-			iov++;
-			base = 0;
-		}
-	} while (bytes);
-	*iovp = iov;
-	*basep = base;
-}
-
-static struct page * ocfs2_get_write_source(char **ret_src_buf,
-					    const struct iovec *cur_iov,
-					    size_t iov_offset)
-{
-	int ret;
-	char *buf = cur_iov->iov_base + iov_offset;
-	struct page *src_page = NULL;
-	unsigned long off;
-
-	off = (unsigned long)(buf) & ~PAGE_CACHE_MASK;
-
-	if (!segment_eq(get_fs(), KERNEL_DS)) {
-		/*
-		 * Pull in the user page. We want to do this outside
-		 * of the meta data locks in order to preserve locking
-		 * order in case of page fault.
-		 */
-		ret = get_user_pages(current, current->mm,
-				     (unsigned long)buf & PAGE_CACHE_MASK, 1,
-				     0, 0, &src_page, NULL);
-		if (ret == 1)
-			*ret_src_buf = kmap(src_page) + off;
-		else
-			src_page = ERR_PTR(-EFAULT);
-	} else {
-		*ret_src_buf = buf;
-	}
-
-	return src_page;
-}
-
-static void ocfs2_put_write_source(struct page *page)
-{
-	if (page) {
-		kunmap(page);
-		page_cache_release(page);
-	}
-}
-
-static ssize_t ocfs2_file_buffered_write(struct file *file, loff_t *ppos,
-					 const struct iovec *iov,
-					 unsigned long nr_segs,
-					 size_t count,
-					 ssize_t o_direct_written)
-{
-	int ret = 0;
-	ssize_t copied, total = 0;
-	size_t iov_offset = 0, bytes;
-	loff_t pos;
-	const struct iovec *cur_iov = iov;
-	struct page *user_page, *page;
-	char * uninitialized_var(buf);
-	char *dst;
-	void *fsdata;
-
-	/*
-	 * handle partial DIO write.  Adjust cur_iov if needed.
-	 */
-	ocfs2_set_next_iovec(&cur_iov, &iov_offset, o_direct_written);
-
-	do {
-		pos = *ppos;
-
-		user_page = ocfs2_get_write_source(&buf, cur_iov, iov_offset);
-		if (IS_ERR(user_page)) {
-			ret = PTR_ERR(user_page);
-			goto out;
-		}
-
-		/* Stay within our page boundaries */
-		bytes = min((PAGE_CACHE_SIZE - ((unsigned long)pos & ~PAGE_CACHE_MASK)),
-			    (PAGE_CACHE_SIZE - ((unsigned long)buf & ~PAGE_CACHE_MASK)));
-		/* Stay within the vector boundary */
-		bytes = min_t(size_t, bytes, cur_iov->iov_len - iov_offset);
-		/* Stay within count */
-		bytes = min(bytes, count);
-
-		page = NULL;
-		ret = ocfs2_write_begin(file, file->f_mapping, pos, bytes, 0,
-					&page, &fsdata);
-		if (ret) {
-			mlog_errno(ret);
-			goto out;
-		}
-
-		dst = kmap_atomic(page, KM_USER0);
-		memcpy(dst + (pos & (loff_t)(PAGE_CACHE_SIZE - 1)), buf, bytes);
-		kunmap_atomic(dst, KM_USER0);
-		flush_dcache_page(page);
-		ocfs2_put_write_source(user_page);
-
-		copied = ocfs2_write_end(file, file->f_mapping, pos, bytes,
-					 bytes, page, fsdata);
-		if (copied < 0) {
-			mlog_errno(copied);
-			ret = copied;
-			goto out;
-		}
-
-		total += copied;
-		*ppos = pos + copied;
-		count -= copied;
-
-		ocfs2_set_next_iovec(&cur_iov, &iov_offset, copied);
-	} while(count);
-
-out:
-	return total ? total : ret;
-}
-
 static ssize_t ocfs2_file_aio_write(struct kiocb *iocb,
 				    const struct iovec *iov,
 				    unsigned long nr_segs,
 				    loff_t pos)
 {
 	int ret, direct_io, appending, rw_level, have_alloc_sem  = 0;
-	int can_do_direct, sync = 0;
+	int can_do_direct;
 	ssize_t written = 0;
 	size_t ocount;		/* original count */
 	size_t count;		/* after file limit checks */
-	loff_t *ppos = &iocb->ki_pos;
+	loff_t old_size, *ppos = &iocb->ki_pos;
+	u32 old_clusters;
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file->f_path.dentry->d_inode;
+	struct ocfs2_super *osb = OCFS2_SB(inode->i_sb);
 
 	mlog_entry("(0x%p, %u, '%.*s')\n", file,
 		   (unsigned int)nr_segs,
@@ -2032,12 +1915,6 @@ static ssize_t ocfs2_file_aio_write(struct kiocb *iocb,
 
 	if (iocb->ki_left == 0)
 		return 0;
-
-	ret = generic_segment_checks(iov, &nr_segs, &ocount, VERIFY_READ);
-	if (ret)
-		return ret;
-
-	count = ocount;
 
 	vfs_check_frozen(inode->i_sb, SB_FREEZE_WRITE);
 
@@ -2082,33 +1959,30 @@ relock:
 		rw_level = -1;
 
 		direct_io = 0;
-		sync = 1;
 		goto relock;
 	}
 
-	if (!sync && ((file->f_flags & O_SYNC) || IS_SYNC(inode)))
-		sync = 1;
-
 	/*
-	 * XXX: Is it ok to execute these checks a second time?
+	 * To later detect whether a journal commit for sync writes is
+	 * necessary, we sample i_size, and cluster count here.
 	 */
-	ret = generic_write_checks(file, ppos, &count, S_ISBLK(inode->i_mode));
-	if (ret)
-		goto out;
-
-	/*
-	 * Set pos so that sync_page_range_nolock() below understands
-	 * where to start from. We might've moved it around via the
-	 * calls above. The range we want to actually sync starts from
-	 * *ppos here.
-	 *
-	 */
-	pos = *ppos;
+	old_size = i_size_read(inode);
+	old_clusters = OCFS2_I(inode)->ip_clusters;
 
 	/* communicate with ocfs2_dio_end_io */
 	ocfs2_iocb_set_rw_locked(iocb, rw_level);
 
 	if (direct_io) {
+		ret = generic_segment_checks(iov, &nr_segs, &ocount,
+					     VERIFY_READ);
+		if (ret)
+			goto out_dio;
+
+		ret = generic_write_checks(file, ppos, &count,
+					   S_ISBLK(inode->i_mode));
+		if (ret)
+			goto out_dio;
+
 		written = generic_file_direct_write(iocb, iov, &nr_segs, *ppos,
 						    ppos, count, ocount);
 		if (written < 0) {
@@ -2116,19 +1990,28 @@ relock:
 			goto out_dio;
 		}
 	} else {
-		written = ocfs2_file_buffered_write(file, ppos, iov, nr_segs,
-						    count, written);
-		if (written < 0) {
-			ret = written;
-			if (ret != -EFAULT || ret != -ENOSPC)
-				mlog_errno(ret);
-			goto out;
-		}
+		written = generic_file_aio_write_nolock(iocb, iov, nr_segs,
+							*ppos);
 	}
 
 out_dio:
 	/* buffered aio wouldn't have proper lock coverage today */
 	BUG_ON(ret == -EIOCBQUEUED && !(file->f_flags & O_DIRECT));
+
+	if ((file->f_flags & O_SYNC && !direct_io) || IS_SYNC(inode)) {
+		/*
+		 * The generic write paths have handled getting data
+		 * to disk, but since we don't make use of the dirty
+		 * inode list, a manual journal commit is necessary
+		 * here.
+		 */
+		if (old_size != i_size_read(inode) ||
+		    old_clusters != OCFS2_I(inode)->ip_clusters) {
+			ret = journal_force_commit(osb->journal->j_journal);
+			if (ret < 0)
+				written = ret;
+		}
+	}
 
 	/* 
 	 * deep in g_f_a_w_n()->ocfs2_direct_IO we pass in a ocfs2_dio_end_io
@@ -2153,95 +2036,10 @@ out_sems:
 	if (have_alloc_sem)
 		up_read(&inode->i_alloc_sem);
 
-	if (written > 0 && sync) {
-		ssize_t err;
-
-		err = sync_page_range_nolock(inode, file->f_mapping, pos, count);
-		if (err < 0)
-			written = err;
-	}
-
 	mutex_unlock(&inode->i_mutex);
 
 	mlog_exit(ret);
 	return written ? written : ret;
-}
-
-static int ocfs2_splice_write_actor(struct pipe_inode_info *pipe,
-				    struct pipe_buffer *buf,
-				    struct splice_desc *sd)
-{
-	int ret, count;
-	ssize_t copied = 0;
-	struct file *file = sd->u.file;
-	unsigned int offset;
-	struct page *page = NULL;
-	void *fsdata;
-	char *src, *dst;
-
-	ret = buf->ops->confirm(pipe, buf);
-	if (ret)
-		goto out;
-
-	offset = sd->pos & ~PAGE_CACHE_MASK;
-	count = sd->len;
-	if (count + offset > PAGE_CACHE_SIZE)
-		count = PAGE_CACHE_SIZE - offset;
-
-	ret = ocfs2_write_begin(file, file->f_mapping, sd->pos, count, 0,
-				&page, &fsdata);
-	if (ret) {
-		mlog_errno(ret);
-		goto out;
-	}
-
-	src = buf->ops->map(pipe, buf, 1);
-	dst = kmap_atomic(page, KM_USER1);
-	memcpy(dst + offset, src + buf->offset, count);
-	kunmap_atomic(dst, KM_USER1);
-	buf->ops->unmap(pipe, buf, src);
-
-	copied = ocfs2_write_end(file, file->f_mapping, sd->pos, count, count,
-				 page, fsdata);
-	if (copied < 0) {
-		mlog_errno(copied);
-		ret = copied;
-		goto out;
-	}
-out:
-
-	return copied ? copied : ret;
-}
-
-static ssize_t __ocfs2_file_splice_write(struct pipe_inode_info *pipe,
-					 struct file *out,
-					 loff_t *ppos,
-					 size_t len,
-					 unsigned int flags)
-{
-	int ret, err;
-	struct address_space *mapping = out->f_mapping;
-	struct inode *inode = mapping->host;
-	struct splice_desc sd = {
-		.total_len = len,
-		.flags = flags,
-		.pos = *ppos,
-		.u.file = out,
-	};
-
-	ret = __splice_from_pipe(pipe, &sd, ocfs2_splice_write_actor);
-	if (ret > 0) {
-		*ppos += ret;
-
-		if (unlikely((out->f_flags & O_SYNC) || IS_SYNC(inode))) {
-			err = generic_osync_inode(inode, mapping,
-						  OSYNC_METADATA|OSYNC_DATA);
-			if (err)
-				ret = err;
-		}
-	}
-
-	return ret;
 }
 
 static ssize_t ocfs2_file_splice_write(struct pipe_inode_info *pipe,
@@ -2273,8 +2071,7 @@ static ssize_t ocfs2_file_splice_write(struct pipe_inode_info *pipe,
 		goto out_unlock;
 	}
 
-	/* ok, we're done with i_size and alloc work */
-	ret = __ocfs2_file_splice_write(pipe, out, ppos, len, flags);
+	ret = generic_file_splice_write_nolock(pipe, out, ppos, len, flags);
 
 out_unlock:
 	ocfs2_rw_unlock(inode, 1);

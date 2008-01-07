@@ -212,23 +212,45 @@ static u64 read_purr(void)
 }
 
 /*
+ * Read the SPURR on systems that have it, otherwise the purr
+ */
+static u64 read_spurr(u64 purr)
+{
+	if (cpu_has_feature(CPU_FTR_SPURR))
+		return mfspr(SPRN_SPURR);
+	return purr;
+}
+
+/*
  * Account time for a transition between system, hard irq
  * or soft irq state.
  */
 void account_system_vtime(struct task_struct *tsk)
 {
-	u64 now, delta;
+	u64 now, nowscaled, delta, deltascaled;
 	unsigned long flags;
 
 	local_irq_save(flags);
 	now = read_purr();
 	delta = now - get_paca()->startpurr;
 	get_paca()->startpurr = now;
+	nowscaled = read_spurr(now);
+	deltascaled = nowscaled - get_paca()->startspurr;
+	get_paca()->startspurr = nowscaled;
 	if (!in_interrupt()) {
+		/* deltascaled includes both user and system time.
+		 * Hence scale it based on the purr ratio to estimate
+		 * the system time */
+		if (get_paca()->user_time)
+			deltascaled = deltascaled * get_paca()->system_time /
+			     (get_paca()->system_time + get_paca()->user_time);
 		delta += get_paca()->system_time;
 		get_paca()->system_time = 0;
 	}
 	account_system_time(tsk, 0, delta);
+	get_paca()->purrdelta = delta;
+	account_system_time_scaled(tsk, deltascaled);
+	get_paca()->spurrdelta = deltascaled;
 	local_irq_restore(flags);
 }
 
@@ -238,25 +260,19 @@ void account_system_vtime(struct task_struct *tsk)
  * user and system time records.
  * Must be called with interrupts disabled.
  */
-void account_process_vtime(struct task_struct *tsk)
+void account_process_tick(struct task_struct *tsk, int user_tick)
 {
-	cputime_t utime;
+	cputime_t utime, utimescaled;
 
 	utime = get_paca()->user_time;
 	get_paca()->user_time = 0;
 	account_user_time(tsk, utime);
-}
 
-static void account_process_time(struct pt_regs *regs)
-{
-	int cpu = smp_processor_id();
-
-	account_process_vtime(current);
-	run_local_timers();
-	if (rcu_pending(cpu))
-		rcu_check_callbacks(cpu, user_mode(regs));
-	scheduler_tick();
- 	run_posix_cpu_timers(current);
+	/* Estimate the scaled utime by scaling the real utime based
+	 * on the last spurr to purr ratio */
+	utimescaled = utime * get_paca()->spurrdelta / get_paca()->purrdelta;
+	get_paca()->spurrdelta = get_paca()->purrdelta = 0;
+	account_user_time_scaled(tsk, utimescaled);
 }
 
 /*
@@ -266,6 +282,7 @@ struct cpu_purr_data {
 	int	initialized;			/* thread is running */
 	u64	tb;			/* last TB value read */
 	u64	purr;			/* last PURR value read */
+	u64	spurr;			/* last SPURR value read */
 };
 
 /*
@@ -347,7 +364,6 @@ static void snapshot_purr(void)
 
 #else /* ! CONFIG_VIRT_CPU_ACCOUNTING */
 #define calc_cputime_factors()
-#define account_process_time(regs)	update_process_times(user_mode(regs))
 #define calculate_steal_time()		do { } while (0)
 #endif
 
@@ -558,7 +574,7 @@ void timer_interrupt(struct pt_regs * regs)
 		/* not time for this event yet */
 		now = per_cpu(decrementer_next_tb, cpu) - now;
 		if (now <= DECREMENTER_MAX)
-			set_dec((unsigned int)now - 1);
+			set_dec((int)now);
 		return;
 	}
 	old_regs = set_irq_regs(regs);
@@ -571,20 +587,8 @@ void timer_interrupt(struct pt_regs * regs)
 		get_lppaca()->int_dword.fields.decr_int = 0;
 #endif
 
-	/*
-	 * We cannot disable the decrementer, so in the period
-	 * between this cpu's being marked offline in cpu_online_map
-	 * and calling stop-self, it is taking timer interrupts.
-	 * Avoid calling into the scheduler rebalancing code if this
-	 * is the case.
-	 */
-	if (!cpu_is_offline(cpu))
-		account_process_time(regs);
-
 	if (evt->event_handler)
 		evt->event_handler(evt);
-	else
-		evt->set_next_event(DECREMENTER_MAX, evt);
 
 #ifdef CONFIG_PPC_ISERIES
 	if (firmware_has_feature(FW_FEATURE_ISERIES) && hvlpevent_is_pending())
@@ -808,9 +812,6 @@ static int decrementer_set_next_event(unsigned long evt,
 				      struct clock_event_device *dev)
 {
 	__get_cpu_var(decrementer_next_tb) = get_tb_or_rtc() + evt;
-	/* The decrementer interrupts on the 0 -> -1 transition */
-	if (evt)
-		--evt;
 	set_dec(evt);
 	return 0;
 }
@@ -829,7 +830,7 @@ static void register_decrementer_clockevent(int cpu)
 	*dec = decrementer_clockevent;
 	dec->cpumask = cpumask_of_cpu(cpu);
 
-	printk(KERN_ERR "clockevent: %s mult[%lx] shift[%d] cpu[%d]\n",
+	printk(KERN_DEBUG "clockevent: %s mult[%lx] shift[%d] cpu[%d]\n",
 	       dec->name, dec->mult, dec->shift, cpu);
 
 	clockevents_register_device(dec);
@@ -843,7 +844,8 @@ void init_decrementer_clockevent(void)
 					     decrementer_clockevent.shift);
 	decrementer_clockevent.max_delta_ns =
 		clockevent_delta2ns(DECREMENTER_MAX, &decrementer_clockevent);
-	decrementer_clockevent.min_delta_ns = 1000;
+	decrementer_clockevent.min_delta_ns =
+		clockevent_delta2ns(2, &decrementer_clockevent);
 
 	register_decrementer_clockevent(cpu);
 }

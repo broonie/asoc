@@ -287,6 +287,20 @@ void disable_local_APIC(void)
 	apic_write(APIC_SPIV, value);
 }
 
+void lapic_shutdown(void)
+{
+	unsigned long flags;
+
+	if (!cpu_has_apic)
+		return;
+
+	local_irq_save(flags);
+
+	disable_local_APIC();
+
+	local_irq_restore(flags);
+}
+
 /*
  * This is to verify that we're looking at a real local APIC.
  * Check these against your board if the CPUs aren't getting
@@ -974,15 +988,12 @@ void __init setup_boot_APIC_clock (void)
  */
 void __cpuinit check_boot_apic_timer_broadcast(void)
 {
-	struct clock_event_device *levt = &per_cpu(lapic_events, boot_cpu_id);
-
 	if (!disable_apic_timer ||
 	    (lapic_clockevent.features & CLOCK_EVT_FEAT_DUMMY))
 		return;
 
 	printk(KERN_INFO "AMD C1E detected late. Force timer broadcast.\n");
 	lapic_clockevent.features |= CLOCK_EVT_FEAT_DUMMY;
-	levt->features |= CLOCK_EVT_FEAT_DUMMY;
 
 	local_irq_enable();
 	clockevents_notify(CLOCK_EVT_NOTIFY_BROADCAST_FORCE, &boot_cpu_id);
@@ -1143,6 +1154,7 @@ asmlinkage void smp_spurious_interrupt(void)
 	if (v & (1 << (SPURIOUS_APIC_VECTOR & 0x1f)))
 		ack_APIC_irq();
 
+	add_pda(irq_spurious_count, 1);
 	irq_exit();
 }
 

@@ -1151,7 +1151,7 @@ static inline int myri10ge_clean_rx_done(struct myri10ge_priv *mgp, int budget)
 	u16 length;
 	__wsum checksum;
 
-	while (rx_done->entry[idx].length != 0 && work_done++ < budget) {
+	while (rx_done->entry[idx].length != 0 && work_done < budget) {
 		length = ntohs(rx_done->entry[idx].length);
 		rx_done->entry[idx].length = 0;
 		checksum = csum_unfold(rx_done->entry[idx].checksum);
@@ -1167,6 +1167,7 @@ static inline int myri10ge_clean_rx_done(struct myri10ge_priv *mgp, int budget)
 		rx_bytes += rx_ok * (unsigned long)length;
 		cnt++;
 		idx = cnt & (myri10ge_max_intr_slots - 1);
+		work_done++;
 	}
 	rx_done->idx = idx;
 	rx_done->cnt = cnt;
@@ -1233,13 +1234,12 @@ static int myri10ge_poll(struct napi_struct *napi, int budget)
 	struct myri10ge_priv *mgp =
 	    container_of(napi, struct myri10ge_priv, napi);
 	struct net_device *netdev = mgp->dev;
-	struct myri10ge_rx_done *rx_done = &mgp->rx_done;
 	int work_done;
 
 	/* process as many rx events as NAPI will allow */
 	work_done = myri10ge_clean_rx_done(mgp, budget);
 
-	if (rx_done->entry[rx_done->idx].length == 0 || !netif_running(netdev)) {
+	if (work_done < budget || !netif_running(netdev)) {
 		netif_rx_complete(netdev, napi);
 		put_be32(htonl(3), mgp->irq_claim);
 	}
@@ -1979,6 +1979,7 @@ static int myri10ge_open(struct net_device *dev)
 	lro_mgr->lro_arr = mgp->rx_done.lro_desc;
 	lro_mgr->get_frag_header = myri10ge_get_frag_header;
 	lro_mgr->max_aggr = myri10ge_lro_max_pkts;
+	lro_mgr->frag_align_pad = 2;
 	if (lro_mgr->max_aggr > MAX_SKB_FRAGS)
 		lro_mgr->max_aggr = MAX_SKB_FRAGS;
 
@@ -3058,7 +3059,8 @@ static int myri10ge_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (status != 0) {
 		dac_enabled = 0;
 		dev_err(&pdev->dev,
-			"64-bit pci address mask was refused, trying 32-bit");
+			"64-bit pci address mask was refused, "
+			"trying 32-bit\n");
 		status = pci_set_dma_mask(pdev, DMA_32BIT_MASK);
 	}
 	if (status != 0) {

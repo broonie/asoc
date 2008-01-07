@@ -117,8 +117,10 @@ static struct pktcdvd_kobj* pkt_kobj_create(struct pktcdvd_device *pd,
 	p->kobj.parent = parent;
 	p->kobj.ktype = ktype;
 	p->pd = pd;
-	if (kobject_register(&p->kobj) != 0)
+	if (kobject_register(&p->kobj) != 0) {
+		kobject_put(&p->kobj);
 		return NULL;
+	}
 	return p;
 }
 /*
@@ -358,10 +360,19 @@ static ssize_t class_pktcdvd_store_add(struct class *c, const char *buf,
 					size_t count)
 {
 	unsigned int major, minor;
+
 	if (sscanf(buf, "%u:%u", &major, &minor) == 2) {
+		/* pkt_setup_dev() expects caller to hold reference to self */
+		if (!try_module_get(THIS_MODULE))
+			return -ENODEV;
+
 		pkt_setup_dev(MKDEV(major, minor), NULL);
+
+		module_put(THIS_MODULE);
+
 		return count;
 	}
+
 	return -EINVAL;
 }
 
@@ -1133,16 +1144,21 @@ static void pkt_gather_data(struct pktcdvd_device *pd, struct packet_data *pkt)
 	 * Schedule reads for missing parts of the packet.
 	 */
 	for (f = 0; f < pkt->frames; f++) {
+		struct bio_vec *vec;
+
 		int p, offset;
 		if (written[f])
 			continue;
 		bio = pkt->r_bios[f];
+		vec = bio->bi_io_vec;
 		bio_init(bio);
 		bio->bi_max_vecs = 1;
 		bio->bi_sector = pkt->sector + f * (CD_FRAMESIZE >> 9);
 		bio->bi_bdev = pd->bdev;
 		bio->bi_end_io = pkt_end_io_read;
 		bio->bi_private = pkt;
+		bio->bi_io_vec = vec;
+		bio->bi_destructor = pkt_bio_destructor;
 
 		p = (f * CD_FRAMESIZE) / PAGE_SIZE;
 		offset = (f * CD_FRAMESIZE) % PAGE_SIZE;
@@ -1439,6 +1455,8 @@ static void pkt_start_write(struct pktcdvd_device *pd, struct packet_data *pkt)
 	pkt->w_bio->bi_bdev = pd->bdev;
 	pkt->w_bio->bi_end_io = pkt_end_io_packet_write;
 	pkt->w_bio->bi_private = pkt;
+	pkt->w_bio->bi_io_vec = bvec;
+	pkt->w_bio->bi_destructor = pkt_bio_destructor;
 	for (f = 0; f < pkt->frames; f++)
 		if (!bio_add_page(pkt->w_bio, bvec[f].bv_page, CD_FRAMESIZE, bvec[f].bv_offset))
 			BUG();

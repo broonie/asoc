@@ -1251,7 +1251,7 @@ static void rt73usb_write_tx_desc(struct rt2x00_dev *rt2x00dev,
 }
 
 static int rt73usb_get_tx_data_len(struct rt2x00_dev *rt2x00dev,
-				   int maxpacket, struct sk_buff *skb)
+				   struct sk_buff *skb)
 {
 	int length;
 
@@ -1260,7 +1260,7 @@ static int rt73usb_get_tx_data_len(struct rt2x00_dev *rt2x00dev,
 	 * but it must _not_ be a multiple of the USB packet size.
 	 */
 	length = roundup(skb->len, 4);
-	length += (4 * !(length % maxpacket));
+	length += (4 * !(length % rt2x00dev->usb_maxpacket));
 
 	return length;
 }
@@ -1486,7 +1486,7 @@ static int rt73usb_init_eeprom(struct rt2x00_dev *rt2x00dev)
 	rt73usb_register_read(rt2x00dev, MAC_CSR0, &reg);
 	rt2x00_set_chip(rt2x00dev, RT2571, value, reg);
 
-	if (!rt2x00_rev(&rt2x00dev->chip, 0x25730)) {
+	if (!rt2x00_check_rev(&rt2x00dev->chip, 0x25730)) {
 		ERROR(rt2x00dev, "Invalid RT chipset detected.\n");
 		return -ENODEV;
 	}
@@ -2029,6 +2029,7 @@ static struct usb_device_id rt73usb_device_table[] = {
 	{ USB_DEVICE(0x050d, 0x7050), USB_DEVICE_DATA(&rt73usb_ops) },
 	{ USB_DEVICE(0x050d, 0x705a), USB_DEVICE_DATA(&rt73usb_ops) },
 	{ USB_DEVICE(0x050d, 0x905b), USB_DEVICE_DATA(&rt73usb_ops) },
+	{ USB_DEVICE(0x050d, 0x905c), USB_DEVICE_DATA(&rt73usb_ops) },
 	/* Billionton */
 	{ USB_DEVICE(0x1631, 0xc019), USB_DEVICE_DATA(&rt73usb_ops) },
 	/* Buffalo */

@@ -308,21 +308,23 @@ zfcp_erp_adisc(struct zfcp_port *port)
 	if (send_els == NULL)
 		goto nomem;
 
-	send_els->req = kzalloc(sizeof(struct scatterlist), GFP_ATOMIC);
+	send_els->req = kmalloc(sizeof(struct scatterlist), GFP_ATOMIC);
 	if (send_els->req == NULL)
 		goto nomem;
+	sg_init_table(send_els->req, 1);
 
-	send_els->resp = kzalloc(sizeof(struct scatterlist), GFP_ATOMIC);
+	send_els->resp = kmalloc(sizeof(struct scatterlist), GFP_ATOMIC);
 	if (send_els->resp == NULL)
 		goto nomem;
+	sg_init_table(send_els->resp, 1);
 
 	address = (void *) get_zeroed_page(GFP_ATOMIC);
 	if (address == NULL)
 		goto nomem;
 
-	zfcp_address_to_sg(address, send_els->req);
+	zfcp_address_to_sg(address, send_els->req, sizeof(struct zfcp_ls_adisc));
 	address += PAGE_SIZE >> 1;
-	zfcp_address_to_sg(address, send_els->resp);
+	zfcp_address_to_sg(address, send_els->resp, sizeof(struct zfcp_ls_adisc_acc));
 	send_els->req_count = send_els->resp_count = 1;
 
 	send_els->adapter = adapter;
@@ -333,9 +335,6 @@ zfcp_erp_adisc(struct zfcp_port *port)
 
 	adisc = zfcp_sg_to_address(send_els->req);
 	send_els->ls_code = adisc->code = ZFCP_LS_ADISC;
-
-	send_els->req->length = sizeof(struct zfcp_ls_adisc);
-	send_els->resp->length = sizeof(struct zfcp_ls_adisc_acc);
 
 	/* acc. to FC-FS, hard_nport_id in ADISC should not be set for ports
 	   without FC-AL-2 capability, so we don't set it */
@@ -363,7 +362,7 @@ zfcp_erp_adisc(struct zfcp_port *port)
 	retval = -ENOMEM;
  freemem:
 	if (address != NULL)
-		__free_pages(send_els->req->page, 0);
+		__free_pages(sg_page(send_els->req), 0);
 	if (send_els != NULL) {
 		kfree(send_els->req);
 		kfree(send_els->resp);
@@ -437,7 +436,7 @@ zfcp_erp_adisc_handler(unsigned long data)
 
  out:
 	zfcp_port_put(port);
-	__free_pages(send_els->req->page, 0);
+	__free_pages(sg_page(send_els->req), 0);
 	kfree(send_els->req);
 	kfree(send_els->resp);
 	kfree(send_els);
@@ -978,7 +977,9 @@ static void zfcp_erp_action_dismiss(struct zfcp_erp_action *erp_action)
 	debug_text_event(adapter->erp_dbf, 2, "a_adis");
 	debug_event(adapter->erp_dbf, 2, &erp_action->action, sizeof (int));
 
-	zfcp_erp_async_handler_nolock(erp_action, ZFCP_STATUS_ERP_DISMISSED);
+	erp_action->status |= ZFCP_STATUS_ERP_DISMISSED;
+	if (zfcp_erp_action_exists(erp_action) == ZFCP_ERP_ACTION_RUNNING)
+		zfcp_erp_action_ready(erp_action);
 }
 
 int
@@ -1064,7 +1065,7 @@ zfcp_erp_thread(void *data)
 				 &adapter->status)) {
 
 		write_lock_irqsave(&adapter->erp_lock, flags);
-		next = adapter->erp_ready_head.prev;
+		next = adapter->erp_ready_head.next;
 		write_unlock_irqrestore(&adapter->erp_lock, flags);
 
 		if (next != &adapter->erp_ready_head) {
@@ -1154,15 +1155,13 @@ zfcp_erp_strategy(struct zfcp_erp_action *erp_action)
 
 	/*
 	 * check for dismissed status again to avoid follow-up actions,
-	 * failing of targets and so on for dismissed actions
+	 * failing of targets and so on for dismissed actions,
+	 * we go through down() here because there has been an up()
 	 */
-	retval = zfcp_erp_strategy_check_action(erp_action, retval);
+	if (erp_action->status & ZFCP_STATUS_ERP_DISMISSED)
+		retval = ZFCP_ERP_CONTINUES;
 
 	switch (retval) {
-	case ZFCP_ERP_DISMISSED:
-		/* leave since this action has ridden to its ancestors */
-		debug_text_event(adapter->erp_dbf, 6, "a_st_dis2");
-		goto unlock;
 	case ZFCP_ERP_NOMEM:
 		/* no memory to continue immediately, let it sleep */
 		if (!(erp_action->status & ZFCP_STATUS_ERP_LOWMEM)) {
@@ -3090,7 +3089,7 @@ zfcp_erp_action_enqueue(int action,
 	++adapter->erp_total_count;
 
 	/* finally put it into 'ready' queue and kick erp thread */
-	list_add(&erp_action->list, &adapter->erp_ready_head);
+	list_add_tail(&erp_action->list, &adapter->erp_ready_head);
 	up(&adapter->erp_ready_sem);
 	retval = 0;
  out:

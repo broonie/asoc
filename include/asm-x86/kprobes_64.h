@@ -42,7 +42,7 @@ typedef u8 kprobe_opcode_t;
 	: (((unsigned long)current_thread_info()) + THREAD_SIZE - (ADDR)))
 
 #define ARCH_SUPPORTS_KRETPROBES
-#define  ARCH_INACTIVE_KPROBE_COUNT 1
+extern const int kretprobe_blacklist_size;
 
 void kretprobe_trampoline(void);
 extern void arch_remove_kprobe(struct kprobe *p);
@@ -66,7 +66,7 @@ struct kprobe_ctlblk {
 	unsigned long kprobe_status;
 	unsigned long kprobe_old_rflags;
 	unsigned long kprobe_saved_rflags;
-	long *jprobe_saved_rsp;
+	unsigned long *jprobe_saved_rsp;
 	struct pt_regs jprobe_saved_regs;
 	kprobe_opcode_t jprobes_stack[MAX_STACK_SIZE];
 	struct prev_kprobe prev_kprobe;

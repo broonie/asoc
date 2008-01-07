@@ -18,37 +18,6 @@
 #include <asm/io.h>
 
 /**
- *	it8213_dma_2_pio		-	return the PIO mode matching DMA
- *	@xfer_rate: transfer speed
- *
- *	Returns the nearest equivalent PIO timing for the DMA
- *	mode requested by the controller.
- */
-
-static u8 it8213_dma_2_pio (u8 xfer_rate) {
-	switch(xfer_rate) {
-		case XFER_UDMA_6:
-		case XFER_UDMA_5:
-		case XFER_UDMA_4:
-		case XFER_UDMA_3:
-		case XFER_UDMA_2:
-		case XFER_UDMA_1:
-		case XFER_UDMA_0:
-		case XFER_MW_DMA_2:
-			return 4;
-		case XFER_MW_DMA_1:
-			return 3;
-		case XFER_SW_DMA_2:
-			return 2;
-		case XFER_MW_DMA_0:
-		case XFER_SW_DMA_1:
-		case XFER_SW_DMA_0:
-		default:
-			return 0;
-	}
-}
-
-/**
  *	it8213_set_pio_mode	-	set host controller for PIO mode
  *	@drive: drive
  *	@pio: PIO mode number
@@ -166,6 +135,9 @@ static void it8213_set_dma_mode(ide_drive_t *drive, const u8 speed)
 		} else
 			pci_write_config_byte(dev, 0x54, reg54 & ~v_flag);
 	} else {
+		const u8 mwdma_to_pio[] = { 0, 3, 4 };
+		u8 pio;
+
 		if (reg48 & u_flag)
 			pci_write_config_byte(dev, 0x48, reg48 & ~u_flag);
 		if (reg4a & a_speed)
@@ -174,38 +146,21 @@ static void it8213_set_dma_mode(ide_drive_t *drive, const u8 speed)
 			pci_write_config_byte(dev, 0x54, reg54 & ~v_flag);
 		if (reg55 & w_flag)
 			pci_write_config_byte(dev, 0x55, (u8) reg55 & ~w_flag);
+
+		if (speed >= XFER_MW_DMA_0)
+			pio = mwdma_to_pio[speed - XFER_MW_DMA_0];
+		else
+			pio = 2; /* only SWDMA2 is allowed */
+
+		it8213_set_pio_mode(drive, pio);
 	}
-
-	it8213_set_pio_mode(drive, it8213_dma_2_pio(speed));
-}
-
-/**
- *	it8213_configure_drive_for_dma	-	set up for DMA transfers
- *	@drive: drive we are going to set up
- *
- *	Set up the drive for DMA, tune the controller and drive as
- *	required. If the drive isn't suitable for DMA or we hit
- *	other problems then we will drop down to PIO and set up
- *	PIO appropriately
- */
-
-static int it8213_config_drive_for_dma (ide_drive_t *drive)
-{
-	if (ide_tune_dma(drive))
-		return 0;
-
-	ide_set_max_pio(drive);
-
-	return -1;
 }
 
 /**
  *	init_hwif_it8213	-	set up hwif structs
  *	@hwif: interface to set up
  *
- *	We do the basic set up of the interface structure. The IT8212
- *	requires several custom handlers so we override the default
- *	ide DMA handlers appropriately
+ *	We do the basic set up of the interface structure.
  */
 
 static void __devinit init_hwif_it8213(ide_hwif_t *hwif)
@@ -215,35 +170,13 @@ static void __devinit init_hwif_it8213(ide_hwif_t *hwif)
 	hwif->set_dma_mode = &it8213_set_dma_mode;
 	hwif->set_pio_mode = &it8213_set_pio_mode;
 
-	hwif->autodma = 0;
-
-	hwif->drives[0].autotune = 1;
-	hwif->drives[1].autotune = 1;
-
 	if (!hwif->dma_base)
 		return;
 
-	hwif->atapi_dma = 1;
-	hwif->ultra_mask = 0x7f;
-	hwif->mwdma_mask = 0x06;
-	hwif->swdma_mask = 0x04;
-
 	pci_read_config_byte(hwif->pci_dev, 0x42, &reg42h);
-
-	hwif->ide_dma_check = &it8213_config_drive_for_dma;
 
 	if (hwif->cbl != ATA_CBL_PATA40_SHORT)
 		hwif->cbl = (reg42h & 0x02) ? ATA_CBL_PATA40 : ATA_CBL_PATA80;
-
-	/*
-	 *	The BIOS often doesn't set up DMA on this controller
-	 *	so we always do it.
-	 */
-	if (!noautodma)
-		hwif->autodma = 1;
-
-	hwif->drives[0].autodma = hwif->autodma;
-	hwif->drives[1].autodma = hwif->autodma;
 }
 
 
@@ -251,14 +184,16 @@ static void __devinit init_hwif_it8213(ide_hwif_t *hwif)
 	{						\
 		.name		= name_str,		\
 		.init_hwif	= init_hwif_it8213,	\
-		.autodma	= AUTODMA,		\
 		.enablebits	= {{0x41,0x80,0x80}}, \
-		.bootable	= ON_BOARD,		\
-		.host_flags	= IDE_HFLAG_SINGLE,	\
+		.host_flags	= IDE_HFLAG_SINGLE |	\
+				  IDE_HFLAG_BOOTABLE,	\
 		.pio_mask	= ATA_PIO4,		\
+		.swdma_mask	= ATA_SWDMA2_ONLY,	\
+		.mwdma_mask	= ATA_MWDMA12_ONLY,	\
+		.udma_mask	= ATA_UDMA6,		\
 	}
 
-static ide_pci_device_t it8213_chipsets[] __devinitdata = {
+static const struct ide_port_info it8213_chipsets[] __devinitdata = {
 	/* 0 */ DECLARE_ITE_DEV("IT8213"),
 };
 
@@ -279,9 +214,8 @@ static int __devinit it8213_init_one(struct pci_dev *dev, const struct pci_devic
 	return 0;
 }
 
-
-static struct pci_device_id it8213_pci_tbl[] = {
-	{ PCI_VENDOR_ID_ITE, 0x8213, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+static const struct pci_device_id it8213_pci_tbl[] = {
+	{ PCI_VDEVICE(ITE, PCI_DEVICE_ID_ITE_8213), 0 },
 	{ 0, },
 };
 

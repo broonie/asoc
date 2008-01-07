@@ -706,7 +706,7 @@ void ivtv_call_i2c_clients(struct ivtv *itv, unsigned int cmd, void *arg)
 }
 
 /* init + register i2c algo-bit adapter */
-int __devinit init_ivtv_i2c(struct ivtv *itv)
+int init_ivtv_i2c(struct ivtv *itv)
 {
 	IVTV_DEBUG_I2C("i2c init\n");
 
@@ -718,6 +718,9 @@ int __devinit init_ivtv_i2c(struct ivtv *itv)
 		       sizeof(struct i2c_adapter));
 		memcpy(&itv->i2c_algo, &ivtv_i2c_algo_template,
 		       sizeof(struct i2c_algo_bit_data));
+		/* The mspx4xx chips need a longer delay for some reason */
+		if (itv->hw_flags & IVTV_HW_MSP34XX)
+			itv->i2c_algo.udelay = 10;
 		itv->i2c_algo.data = itv;
 		itv->i2c_adap.algo_data = &itv->i2c_algo;
 	}
@@ -741,7 +744,7 @@ int __devinit init_ivtv_i2c(struct ivtv *itv)
 		return i2c_bit_add_bus(&itv->i2c_adap);
 }
 
-void __devexit exit_ivtv_i2c(struct ivtv *itv)
+void exit_ivtv_i2c(struct ivtv *itv)
 {
 	IVTV_DEBUG_I2C("i2c exit\n");
 

@@ -52,7 +52,6 @@ static void flat_init_apic_ldr(void)
 
 	num = smp_processor_id();
 	id = 1UL << num;
-	x86_cpu_to_log_apicid[num] = id;
 	apic_write(APIC_DFR, APIC_DFR_FLAT);
 	val = apic_read(APIC_LDR) & ~APIC_LDR_MASK;
 	val |= SET_APIC_LOGICAL_ID(id);
@@ -173,7 +172,7 @@ static unsigned int physflat_cpu_mask_to_apicid(cpumask_t cpumask)
 	 */
 	cpu = first_cpu(cpumask);
 	if ((unsigned)cpu < NR_CPUS)
-		return x86_cpu_to_apicid[cpu];
+		return per_cpu(x86_cpu_to_apicid, cpu);
 	else
 		return BAD_APICID;
 }

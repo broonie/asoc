@@ -77,6 +77,7 @@ int ehca_query_device(struct ib_device *ibdev, struct ib_device_attr *props)
 	}
 
 	memset(props, 0, sizeof(struct ib_device_attr));
+	props->page_size_cap   = shca->hca_cap_mr_pgsize;
 	props->fw_ver          = rblock->hw_ver;
 	props->max_mr_size     = rblock->max_mr_size;
 	props->vendor_id       = rblock->vendor_id >> 8;
@@ -150,7 +151,6 @@ int ehca_query_port(struct ib_device *ibdev,
 	}
 
 	memset(props, 0, sizeof(struct ib_port_attr));
-	props->state = rblock->state;
 
 	switch (rblock->max_mtu) {
 	case 0x1:
@@ -187,11 +187,20 @@ int ehca_query_port(struct ib_device *ibdev,
 	props->subnet_timeout  = rblock->subnet_timeout;
 	props->init_type_reply = rblock->init_type_reply;
 
-	props->active_width    = IB_WIDTH_12X;
-	props->active_speed    = 0x1;
-
-	/* at the moment (logical) link state is always LINK_UP */
-	props->phys_state      = 0x5;
+	if (rblock->state && rblock->phys_width) {
+		props->phys_state      = rblock->phys_pstate;
+		props->state           = rblock->phys_state;
+		props->active_width    = rblock->phys_width;
+		props->active_speed    = rblock->phys_speed;
+	} else {
+		/* old firmware releases don't report physical
+		 * port info, so use default values
+		 */
+		props->phys_state      = 5;
+		props->state           = rblock->state;
+		props->active_width    = IB_WIDTH_12X;
+		props->active_speed    = 0x1;
+	}
 
 query_port1:
 	ehca_free_fw_ctrlblock(rblock);

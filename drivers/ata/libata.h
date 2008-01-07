@@ -101,20 +101,26 @@ extern int sata_link_init_spd(struct ata_link *link);
 extern int ata_task_ioctl(struct scsi_device *scsidev, void __user *arg);
 extern int ata_cmd_ioctl(struct scsi_device *scsidev, void __user *arg);
 extern struct ata_port *ata_port_alloc(struct ata_host *host);
+extern void ata_dev_enable_pm(struct ata_device *dev, enum link_pm policy);
+extern void ata_lpm_schedule(struct ata_port *ap, enum link_pm);
 
 /* libata-acpi.c */
 #ifdef CONFIG_ATA_ACPI
 extern void ata_acpi_associate_sata_port(struct ata_port *ap);
 extern void ata_acpi_associate(struct ata_host *host);
+extern void ata_acpi_dissociate(struct ata_host *host);
 extern int ata_acpi_on_suspend(struct ata_port *ap);
 extern void ata_acpi_on_resume(struct ata_port *ap);
-extern int ata_acpi_on_devcfg(struct ata_device *adev);
+extern int ata_acpi_on_devcfg(struct ata_device *dev);
+extern void ata_acpi_on_disable(struct ata_device *dev);
 #else
 static inline void ata_acpi_associate_sata_port(struct ata_port *ap) { }
 static inline void ata_acpi_associate(struct ata_host *host) { }
+static inline void ata_acpi_dissociate(struct ata_host *host) { }
 static inline int ata_acpi_on_suspend(struct ata_port *ap) { return 0; }
 static inline void ata_acpi_on_resume(struct ata_port *ap) { }
-static inline int ata_acpi_on_devcfg(struct ata_device *adev) { return 0; }
+static inline int ata_acpi_on_devcfg(struct ata_device *dev) { return 0; }
+static inline void ata_acpi_on_disable(struct ata_device *dev) { }
 #endif
 
 /* libata-scsi.c */

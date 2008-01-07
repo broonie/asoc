@@ -789,7 +789,7 @@ void __init sync_Arb_IDs(void)
 	 * Unsupported on P4 - see Intel Dev. Manual Vol. 3, Ch. 8.6.1 And not
 	 * needed on AMD.
 	 */
-	if (modern_apic())
+	if (modern_apic() || boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
 		return;
 	/*
 	 * Wait for idle.
@@ -849,7 +849,7 @@ void __init init_bsp_APIC(void)
 /**
  * setup_local_APIC - setup the local APIC
  */
-void __devinit setup_local_APIC(void)
+void __cpuinit setup_local_APIC(void)
 {
 	unsigned long oldvalue, value, maxlvt, integrated;
 	int i, j;
@@ -947,7 +947,7 @@ void __devinit setup_local_APIC(void)
 	 * Set up LVT0, LVT1:
 	 *
 	 * set up through-local-APIC on the BP's LINT0. This is not
-	 * strictly necessery in pure symmetric-IO mode, but sometimes
+	 * strictly necessary in pure symmetric-IO mode, but sometimes
 	 * we delegate interrupts to the 8259A.
 	 */
 	/*
@@ -998,7 +998,7 @@ void __devinit setup_local_APIC(void)
 	} else {
 		if (esr_disable)
 			/*
-			 * Something untraceble is creating bad interrupts on
+			 * Something untraceable is creating bad interrupts on
 			 * secondary quads ... for the moment, just leave the
 			 * ESR disabled - we can't do anything useful with the
 			 * errors anyway - mbligh
@@ -1277,6 +1277,7 @@ void smp_spurious_interrupt(struct pt_regs *regs)
 	/* see sw-dev-man vol 3, chapter 7.4.13.5 */
 	printk(KERN_INFO "spurious APIC interrupt on CPU#%d, "
 	       "should never happen.\n", smp_processor_id());
+	__get_cpu_var(irq_stat).irq_spurious_count++;
 	irq_exit();
 }
 

@@ -18,15 +18,15 @@ cflags-y :=
 # Select the object file format to substitute into the linker script.
 #
 ifdef CONFIG_CPU_LITTLE_ENDIAN
-32bit-tool-prefix	= mipsel-linux-
-64bit-tool-prefix	= mips64el-linux-
+32bit-tool-archpref	= mipsel
+64bit-tool-archpref	= mips64el
 32bit-bfd		= elf32-tradlittlemips
 64bit-bfd		= elf64-tradlittlemips
 32bit-emul		= elf32ltsmip
 64bit-emul		= elf64ltsmip
 else
-32bit-tool-prefix	= mips-linux-
-64bit-tool-prefix	= mips64-linux-
+32bit-tool-archpref	= mips
+64bit-tool-archpref	= mips64
 32bit-bfd		= elf32-tradbigmips
 64bit-bfd		= elf64-tradbigmips
 32bit-emul		= elf32btsmip
@@ -34,16 +34,18 @@ else
 endif
 
 ifdef CONFIG_32BIT
-tool-prefix		= $(32bit-tool-prefix)
+tool-archpref		= $(32bit-tool-archpref)
 UTS_MACHINE		:= mips
 endif
 ifdef CONFIG_64BIT
-tool-prefix		= $(64bit-tool-prefix)
+tool-archpref		= $(64bit-tool-archpref)
 UTS_MACHINE		:= mips64
 endif
 
-ifdef CONFIG_CROSSCOMPILE
-CROSS_COMPILE		:= $(tool-prefix)
+ifneq ($(SUBARCH),$(ARCH))
+  ifeq ($(CROSS_COMPILE),)
+    CROSS_COMPILE := $(call cc-cross-prefix, $(tool-archpref)-linux-  $(tool-archpref)-linux-gnu-  $(tool-archpref)-unknown-linux-gnu-)
+  endif
 endif
 
 ifdef CONFIG_32BIT
@@ -279,7 +281,6 @@ core-$(CONFIG_MACH_DECSTATION)	+= arch/mips/dec/
 cflags-$(CONFIG_MACH_DECSTATION)+= -Iinclude/asm-mips/mach-dec
 libs-$(CONFIG_MACH_DECSTATION)	+= arch/mips/dec/prom/
 load-$(CONFIG_MACH_DECSTATION)	+= 0xffffffff80040000
-CLEAN_FILES			+= drivers/tc/lk201-map.c
 
 #
 # Wind River PPMC Board (4KC + GT64120)
@@ -608,14 +609,14 @@ ifdef CONFIG_64BIT
   endif
 endif
 
-AFLAGS		+= $(cflags-y)
-CFLAGS		+= $(cflags-y) \
+KBUILD_AFLAGS	+= $(cflags-y)
+KBUILD_CFLAGS	+= $(cflags-y) \
 			-D"VMLINUX_LOAD_ADDRESS=$(load-y)"
 
 LDFLAGS			+= -m $(ld-emul)
 
 ifdef CONFIG_MIPS
-CHECKFLAGS += $(shell $(CC) $(CFLAGS) -dM -E -xc /dev/null | \
+CHECKFLAGS += $(shell $(CC) $(KBUILD_CFLAGS) -dM -E -xc /dev/null | \
 	egrep -vw '__GNUC_(|MINOR_|PATCHLEVEL_)_' | \
 	sed -e 's/^\#define /-D/' -e "s/ /='/" -e "s/$$/'/")
 ifdef CONFIG_64BIT
@@ -632,7 +633,7 @@ OBJCOPYFLAGS		+= --remove-section=.reginfo
 #
 
 CPPFLAGS_vmlinux.lds := \
-	$(CFLAGS) \
+	$(KBUILD_CFLAGS) \
 	-D"LOADADDR=$(load-y)" \
 	-D"JIFFIES=$(JIFFIES)" \
 	-D"DATAOFFSET=$(if $(dataoffset-y),$(dataoffset-y),0)"

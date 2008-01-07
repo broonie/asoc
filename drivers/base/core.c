@@ -770,9 +770,10 @@ int device_add(struct device *dev)
 	error = device_add_attrs(dev);
 	if (error)
 		goto AttrsError;
-	error = device_pm_add(dev);
+	error = dpm_sysfs_add(dev);
 	if (error)
 		goto PMError;
+	device_pm_add(dev);
 	error = bus_add_device(dev);
 	if (error)
 		goto BusError;
@@ -797,6 +798,7 @@ int device_add(struct device *dev)
 	return error;
  BusError:
 	device_pm_remove(dev);
+	dpm_sysfs_remove(dev);
  PMError:
 	if (dev->bus)
 		blocking_notifier_call_chain(&dev->bus->bus_notifier,
@@ -1228,18 +1230,18 @@ int device_rename(struct device *dev, char *new_name)
 			sysfs_remove_link(&dev->parent->kobj, old_class_name);
 		}
 	}
-#endif
-
+#else
 	if (dev->class) {
 		sysfs_remove_link(&dev->class->subsys.kobj, old_device_name);
 		error = sysfs_create_link(&dev->class->subsys.kobj, &dev->kobj,
 					  dev->bus_id);
 		if (error) {
-			/* Uh... how to unravel this if restoring can fail? */
 			dev_err(dev, "%s: sysfs_create_symlink failed (%d)\n",
 				__FUNCTION__, error);
 		}
 	}
+#endif
+
 out:
 	put_device(dev);
 

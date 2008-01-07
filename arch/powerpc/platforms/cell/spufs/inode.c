@@ -68,7 +68,7 @@ spufs_destroy_inode(struct inode *inode)
 }
 
 static void
-spufs_init_once(void *p, struct kmem_cache * cachep, unsigned long flags)
+spufs_init_once(struct kmem_cache *cachep, void *p)
 {
 	struct spufs_inode_info *ei = p;
 
@@ -171,6 +171,7 @@ static int spufs_rmdir(struct inode *parent, struct dentry *dir)
 {
 	/* remove all entries */
 	spufs_prune_dir(dir);
+	d_drop(dir);
 
 	return simple_rmdir(parent, dir);
 }

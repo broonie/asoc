@@ -12,6 +12,7 @@
 
 #include <linux/module.h>
 #include <linux/sched.h>
+#include <linux/preempt.h>
 #include <linux/delay.h>
 
 #include <asm/processor.h>
@@ -42,11 +43,13 @@ static void delay_tsc(unsigned long loops)
 {
 	unsigned long bclock, now;
 
+	preempt_disable();		/* TSC's are per-cpu */
 	rdtscl(bclock);
 	do {
 		rep_nop();
 		rdtscl(now);
 	} while ((now-bclock) < loops);
+	preempt_enable();
 }
 
 /*
@@ -82,7 +85,7 @@ inline void __const_udelay(unsigned long xloops)
 	__asm__("mull %0"
 		:"=d" (xloops), "=&a" (d0)
 		:"1" (xloops), "0"
-		(cpu_data[raw_smp_processor_id()].loops_per_jiffy * (HZ/4)));
+		(cpu_data(raw_smp_processor_id()).loops_per_jiffy * (HZ/4)));
 
 	__delay(++xloops);
 }

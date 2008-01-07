@@ -216,6 +216,7 @@ static int ieee80211_open(struct net_device *dev)
 			res = local->ops->start(local_to_hw(local));
 		if (res)
 			return res;
+		ieee80211_hw_config(local);
 	}
 
 	switch (sdata->type) {
@@ -232,7 +233,6 @@ static int ieee80211_open(struct net_device *dev)
 			netif_tx_unlock_bh(local->mdev);
 
 			local->hw.conf.flags |= IEEE80211_CONF_RADIOTAP;
-			ieee80211_hw_config(local);
 		}
 		break;
 	case IEEE80211_IF_TYPE_STA:
@@ -267,6 +267,17 @@ static int ieee80211_open(struct net_device *dev)
 		tasklet_enable(&local->tasklet);
 	}
 
+	/*
+	 * set_multicast_list will be invoked by the networking core
+	 * which will check whether any increments here were done in
+	 * error and sync them down to the hardware as filter flags.
+	 */
+	if (sdata->flags & IEEE80211_SDATA_ALLMULTI)
+		atomic_inc(&local->iff_allmultis);
+
+	if (sdata->flags & IEEE80211_SDATA_PROMISC)
+		atomic_inc(&local->iff_promiscs);
+
 	local->open_count++;
 
 	netif_start_queue(dev);
@@ -283,6 +294,18 @@ static int ieee80211_stop(struct net_device *dev)
 	sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 
 	netif_stop_queue(dev);
+
+	/*
+	 * Don't count this interface for promisc/allmulti while it
+	 * is down. dev_mc_unsync() will invoke set_multicast_list
+	 * on the master interface which will sync these down to the
+	 * hardware as filter flags.
+	 */
+	if (sdata->flags & IEEE80211_SDATA_ALLMULTI)
+		atomic_dec(&local->iff_allmultis);
+
+	if (sdata->flags & IEEE80211_SDATA_PROMISC)
+		atomic_dec(&local->iff_promiscs);
 
 	dev_mc_unsync(local->mdev, dev);
 
@@ -311,8 +334,7 @@ static int ieee80211_stop(struct net_device *dev)
 			ieee80211_configure_filter(local);
 			netif_tx_unlock_bh(local->mdev);
 
-			local->hw.conf.flags |= IEEE80211_CONF_RADIOTAP;
-			ieee80211_hw_config(local);
+			local->hw.conf.flags &= ~IEEE80211_CONF_RADIOTAP;
 		}
 		break;
 	case IEEE80211_IF_TYPE_STA:
@@ -334,6 +356,11 @@ static int ieee80211_stop(struct net_device *dev)
 			cancel_delayed_work(&local->scan_work);
 		}
 		flush_workqueue(local->hw.workqueue);
+
+		sdata->u.sta.flags &= ~IEEE80211_STA_PRIVACY_INVOKED;
+		kfree(sdata->u.sta.extra_ie);
+		sdata->u.sta.extra_ie = NULL;
+		sdata->u.sta.extra_ie_len = 0;
 		/* fall through */
 	default:
 		conf.if_id = dev->ifindex;
@@ -366,8 +393,8 @@ static void ieee80211_set_multicast_list(struct net_device *dev)
 
 	allmulti = !!(dev->flags & IFF_ALLMULTI);
 	promisc = !!(dev->flags & IFF_PROMISC);
-	sdata_allmulti = sdata->flags & IEEE80211_SDATA_ALLMULTI;
-	sdata_promisc = sdata->flags & IEEE80211_SDATA_PROMISC;
+	sdata_allmulti = !!(sdata->flags & IEEE80211_SDATA_ALLMULTI);
+	sdata_promisc = !!(sdata->flags & IEEE80211_SDATA_PROMISC);
 
 	if (allmulti != sdata_allmulti) {
 		if (dev->flags & IFF_ALLMULTI)
@@ -400,7 +427,6 @@ static const struct header_ops ieee80211_header_ops = {
 void ieee80211_if_setup(struct net_device *dev)
 {
 	ether_setup(dev);
-	dev->header_ops = &ieee80211_header_ops;
 	dev->hard_start_xmit = ieee80211_subif_start_xmit;
 	dev->wireless_handlers = &ieee80211_iw_handler_def;
 	dev->set_multicast_list = ieee80211_set_multicast_list;
@@ -1072,7 +1098,8 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	ieee80211_debugfs_add_netdev(IEEE80211_DEV_TO_SUB_IF(local->mdev));
 	ieee80211_if_set_type(local->mdev, IEEE80211_IF_TYPE_AP);
 
-	result = ieee80211_init_rate_ctrl_alg(local, NULL);
+	result = ieee80211_init_rate_ctrl_alg(local,
+					      hw->rate_control_algorithm);
 	if (result < 0) {
 		printk(KERN_DEBUG "%s: Failed to initialize rate control "
 		       "algorithm\n", wiphy_name(local->hw.wiphy));
@@ -1233,8 +1260,17 @@ static int __init ieee80211_init(void)
 
 	BUILD_BUG_ON(sizeof(struct ieee80211_tx_packet_data) > sizeof(skb->cb));
 
+#ifdef CONFIG_MAC80211_RCSIMPLE
+	ret = ieee80211_rate_control_register(&mac80211_rcsimple);
+	if (ret)
+		return ret;
+#endif
+
 	ret = ieee80211_wme_register();
 	if (ret) {
+#ifdef CONFIG_MAC80211_RCSIMPLE
+		ieee80211_rate_control_unregister(&mac80211_rcsimple);
+#endif
 		printk(KERN_DEBUG "ieee80211_init: failed to "
 		       "initialize WME (err=%d)\n", ret);
 		return ret;
@@ -1248,6 +1284,10 @@ static int __init ieee80211_init(void)
 
 static void __exit ieee80211_exit(void)
 {
+#ifdef CONFIG_MAC80211_RCSIMPLE
+	ieee80211_rate_control_unregister(&mac80211_rcsimple);
+#endif
+
 	ieee80211_wme_unregister();
 	ieee80211_debugfs_netdev_exit();
 }

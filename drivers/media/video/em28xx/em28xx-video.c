@@ -32,6 +32,7 @@
 #include <linux/usb.h>
 #include <linux/i2c.h>
 #include <linux/version.h>
+#include <linux/mm.h>
 #include <linux/video_decoder.h>
 #include <linux/mutex.h>
 
@@ -143,7 +144,8 @@ static int em28xx_config(struct em28xx *dev)
 {
 
 	/* Sets I2C speed to 100 KHz */
-	em28xx_write_regs_req(dev, 0x00, 0x06, "\x40", 1);
+	if (!dev->is_em2800)
+		em28xx_write_regs_req(dev, 0x00, 0x06, "\x40", 1);
 
 	/* enable vbi capturing */
 
@@ -569,7 +571,9 @@ static void em28xx_vm_close(struct vm_area_struct *vma)
 {
 	/* NOTE: buffers are not freed here */
 	struct em28xx_frame_t *f = vma->vm_private_data;
-	f->vma_use_count--;
+
+	if (f->vma_use_count)
+		f->vma_use_count--;
 }
 
 static struct vm_operations_struct em28xx_vm_ops = {
@@ -907,7 +911,7 @@ static int em28xx_set_fmt(struct em28xx *dev, unsigned int cmd, struct v4l2_form
 
 	/* stop io in case it is already in progress */
 	if (dev->stream == STREAM_ON) {
-		em28xx_videodbg("VIDIOC_SET_FMT: interupting stream\n");
+		em28xx_videodbg("VIDIOC_SET_FMT: interrupting stream\n");
 		if ((ret = em28xx_stream_interrupt(dev)))
 			return ret;
 	}
@@ -1617,7 +1621,6 @@ static int em28xx_init_dev(struct em28xx **devhandle, struct usb_device *udev,
 
 	/* Fills VBI device info */
 	dev->vbi_dev->type = VFL_TYPE_VBI;
-	dev->vbi_dev->hardware = 0;
 	dev->vbi_dev->fops = &em28xx_v4l_fops;
 	dev->vbi_dev->minor = -1;
 	dev->vbi_dev->dev = &dev->udev->dev;
@@ -1629,7 +1632,6 @@ static int em28xx_init_dev(struct em28xx **devhandle, struct usb_device *udev,
 	dev->vdev->type = VID_TYPE_CAPTURE;
 	if (dev->has_tuner)
 		dev->vdev->type |= VID_TYPE_TUNER;
-	dev->vdev->hardware = 0;
 	dev->vdev->fops = &em28xx_v4l_fops;
 	dev->vdev->minor = -1;
 	dev->vdev->dev = &dev->udev->dev;

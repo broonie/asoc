@@ -276,8 +276,7 @@ static int auide_build_dmatable(ide_drive_t *drive)
 
 			if (iswrite) {
 				if(!put_source_flags(ahwif->tx_chan, 
-						     (void*)(page_address(sg->page) 
-							     + sg->offset), 
+						     (void*) sg_virt(sg),
 						     tc, flags)) { 
 					printk(KERN_ERR "%s failed %d\n", 
 					       __FUNCTION__, __LINE__);
@@ -285,8 +284,7 @@ static int auide_build_dmatable(ide_drive_t *drive)
 			} else 
 			{
 				if(!put_dest_flags(ahwif->rx_chan, 
-						   (void*)(page_address(sg->page) 
-							   + sg->offset), 
+						   (void*) sg_virt(sg),
 						   tc, flags)) { 
 					printk(KERN_ERR "%s failed %d\n", 
 					       __FUNCTION__, __LINE__);
@@ -296,7 +294,7 @@ static int auide_build_dmatable(ide_drive_t *drive)
 			cur_addr += tc;
 			cur_len -= tc;
 		}
-		sg++;
+		sg = sg_next(sg);
 		i--;
 	}
 
@@ -351,11 +349,18 @@ static int auide_dma_setup(ide_drive_t *drive)
 	return 0;
 }
 
-static int auide_dma_check(ide_drive_t *drive)
+static u8 auide_mdma_filter(ide_drive_t *drive)
 {
-	u8 speed = ide_max_dma_mode(drive);
+	/*
+	 * FIXME: ->white_list and ->black_list are based on completely bogus
+	 * ->ide_dma_check implementation which didn't set neither the host
+	 * controller timings nor the device for the desired transfer mode.
+	 *
+	 * They should be either removed or 0x00 MWDMA mask should be
+	 * returned for devices on the ->black_list.
+	 */
 
-	if( dbdma_init_done == 0 ){
+	if (dbdma_init_done == 0) {
 		auide_hwif.white_list = ide_in_drive_list(drive->id,
 							  dma_white_list);
 		auide_hwif.black_list = ide_in_drive_list(drive->id,
@@ -366,22 +371,11 @@ static int auide_dma_check(ide_drive_t *drive)
 	}
 
 	/* Is the drive in our DMA black list? */
-
-	if ( auide_hwif.black_list ) {
-		drive->using_dma = 0;
-
-		/* Borrowed the warning message from ide-dma.c */
-
+	if (auide_hwif.black_list)
 		printk(KERN_WARNING "%s: Disabling DMA for %s (blacklisted)\n",
-		       drive->name, drive->id->model);	       
-	}
-	else
-		drive->using_dma = 1;
+				    drive->name, drive->id->model);
 
-	if (drive->autodma && (speed & XFER_MODE) != XFER_PIO)
-		return 0;
-
-	return -1;
+	return drive->hwif->mwdma_mask;
 }
 
 static int auide_dma_test_irq(ide_drive_t *drive)
@@ -605,8 +599,9 @@ static int au_ide_probe(struct device *dev)
 	_auide_hwif *ahwif = &auide_hwif;
 	ide_hwif_t *hwif;
 	struct resource *res;
-	hw_regs_t *hw;
 	int ret = 0;
+	u8 idx[4] = { 0xff, 0xff, 0xff, 0xff };
+	hw_regs_t hw;
 
 #if defined(CONFIG_BLK_DEV_IDE_AU1XXX_MDMA2_DBDMA)
 	char *mode = "MWDMA2";
@@ -648,12 +643,12 @@ static int au_ide_probe(struct device *dev)
 	/* FIXME:  This might possibly break PCMCIA IDE devices */
 
 	hwif                            = &ide_hwifs[pdev->id];
-	hw 				= &hwif->hw;
-	hwif->irq = hw->irq             = ahwif->irq;
+	hwif->irq			= ahwif->irq;
 	hwif->chipset                   = ide_au1xxx;
 
-	auide_setup_ports(hw, ahwif);
-	memcpy(hwif->io_ports, hw->io_ports, sizeof(hwif->io_ports));
+	memset(&hw, 0, sizeof(hw));
+	auide_setup_ports(&hw, ahwif);
+	memcpy(hwif->io_ports, hw.io_ports, sizeof(hwif->io_ports));
 
 	hwif->ultra_mask                = 0x0;  /* Disable Ultra DMA */
 #ifdef CONFIG_BLK_DEV_IDE_AU1XXX_MDMA2_DBDMA
@@ -692,7 +687,8 @@ static int au_ide_probe(struct device *dev)
 	hwif->dma_off_quietly		= &auide_dma_off_quietly;
 	hwif->dma_timeout		= &auide_dma_timeout;
 
-	hwif->ide_dma_check             = &auide_dma_check;
+	hwif->mdma_filter		= &auide_mdma_filter;
+
 	hwif->dma_exec_cmd              = &auide_dma_exec_cmd;
 	hwif->dma_start                 = &auide_dma_start;
 	hwif->ide_dma_end               = &auide_dma_end;
@@ -702,23 +698,17 @@ static int au_ide_probe(struct device *dev)
 	hwif->dma_host_on		= &auide_dma_host_on;
 	hwif->dma_lost_irq		= &auide_dma_lost_irq;
 	hwif->ide_dma_on                = &auide_dma_on;
-
-	hwif->autodma                   = 1;
-	hwif->drives[0].autodma         = hwif->autodma;
-	hwif->drives[1].autodma         = hwif->autodma;
-	hwif->atapi_dma                 = 1;
-
 #else /* !CONFIG_BLK_DEV_IDE_AU1XXX_MDMA2_DBDMA */
-	hwif->autodma                   = 0;
 	hwif->channel                   = 0;
 	hwif->hold                      = 1;
 	hwif->select_data               = 0;    /* no chipset-specific code */
 	hwif->config_data               = 0;    /* no chipset-specific code */
 
-	hwif->drives[0].autodma         = 0;
 	hwif->drives[0].autotune        = 1;    /* 1=autotune, 2=noautotune, 0=default */
+	hwif->drives[1].autotune	= 1;
 #endif
-	hwif->drives[0].no_io_32bit     = 1;   
+	hwif->drives[0].no_io_32bit	= 1;
+	hwif->drives[1].no_io_32bit	= 1;
 
 	auide_hwif.hwif                 = hwif;
 	hwif->hwif_data                 = &auide_hwif;
@@ -728,9 +718,9 @@ static int au_ide_probe(struct device *dev)
 	dbdma_init_done = 1;
 #endif
 
-	probe_hwif_init(hwif);
+	idx[0] = hwif->index;
 
-	ide_proc_register_port(hwif);
+	ide_device_add(idx);
 
 	dev_set_drvdata(dev, hwif);
 

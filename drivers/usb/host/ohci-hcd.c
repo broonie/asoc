@@ -80,7 +80,10 @@ static const char	hcd_name [] = "ohci_hcd";
 static void ohci_dump (struct ohci_hcd *ohci, int verbose);
 static int ohci_init (struct ohci_hcd *ohci);
 static void ohci_stop (struct usb_hcd *hcd);
+
+#if defined(CONFIG_PM) || defined(CONFIG_PCI)
 static int ohci_restart (struct ohci_hcd *ohci);
+#endif
 
 #include "ohci-hub.c"
 #include "ohci-dbg.c"
@@ -396,7 +399,7 @@ static int check_ed(struct ohci_hcd *ohci, struct ed *ed)
  */
 static void unlink_watchdog_func(unsigned long _ohci)
 {
-	long		flags;
+	unsigned long	flags;
 	unsigned	max;
 	unsigned	seen_count = 0;
 	unsigned	i;
@@ -729,24 +732,27 @@ static irqreturn_t ohci_irq (struct usb_hcd *hcd)
 	struct ohci_regs __iomem *regs = ohci->regs;
 	int			ints;
 
-	/* we can eliminate a (slow) ohci_readl()
-	 * if _only_ WDH caused this irq
+	/* Read interrupt status (and flush pending writes).  We ignore the
+	 * optimization of checking the LSB of hcca->done_head; it doesn't
+	 * work on all systems (edge triggering for OHCI can be a factor).
 	 */
-	if ((ohci->hcca->done_head != 0)
-			&& ! (hc32_to_cpup (ohci, &ohci->hcca->done_head)
-				& 0x01)) {
-		ints =  OHCI_INTR_WDH;
+	ints = ohci_readl(ohci, &regs->intrstatus);
 
-	/* cardbus/... hardware gone before remove() */
-	} else if ((ints = ohci_readl (ohci, &regs->intrstatus)) == ~(u32)0) {
+	/* Check for an all 1's result which is a typical consequence
+	 * of dead, unclocked, or unplugged (CardBus...) devices
+	 */
+	if (ints == ~(u32)0) {
 		disable (ohci);
 		ohci_dbg (ohci, "device removed!\n");
 		return IRQ_HANDLED;
+	}
+
+	/* We only care about interrupts that are enabled */
+	ints &= ohci_readl(ohci, &regs->intrenable);
 
 	/* interrupt for some other device? */
-	} else if ((ints &= ohci_readl (ohci, &regs->intrenable)) == 0) {
+	if (ints == 0)
 		return IRQ_NOTMINE;
-	}
 
 	if (ints & OHCI_INTR_UE) {
 		// e.g. due to PCI Master/Target Abort
@@ -893,6 +899,8 @@ static void ohci_stop (struct usb_hcd *hcd)
 
 /*-------------------------------------------------------------------------*/
 
+#if defined(CONFIG_PM) || defined(CONFIG_PCI)
+
 /* must not be called from interrupt context */
 static int ohci_restart (struct ohci_hcd *ohci)
 {
@@ -953,6 +961,8 @@ static int ohci_restart (struct ohci_hcd *ohci)
 	ohci_dbg(ohci, "restart complete\n");
 	return 0;
 }
+
+#endif
 
 /*-------------------------------------------------------------------------*/
 

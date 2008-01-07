@@ -52,7 +52,13 @@
  * -
  */
 
-unsigned long irq_flags = 0;
+/* Initialize this to an actual value to force it into the .data
+ * section so that we know it is properly initialized at entry into
+ * the kernel but before bss is initialized to zero (which is where
+ * it would live otherwise).  The 0x1f magic represents the IRQs we
+ * cannot actually mask out in hardware.
+ */
+unsigned long irq_flags = 0x1f;
 
 /* The number of spurious interrupts */
 atomic_t num_spurious;
@@ -175,7 +181,6 @@ static struct irq_chip bf561_internal_irqchip = {
 	.unmask = bf561_internal_unmask_irq,
 };
 
-#ifdef CONFIG_IRQCHIP_DEMUX_GPIO
 static unsigned short gpio_enabled[gpio_bank(MAX_BLACKFIN_GPIOS)];
 static unsigned short gpio_edge_triggered[gpio_bank(MAX_BLACKFIN_GPIOS)];
 
@@ -356,8 +361,6 @@ static void bf561_demux_gpio_irq(unsigned int inta_irq,
 
 }
 
-#endif				/* CONFIG_IRQCHIP_DEMUX_GPIO */
-
 void __init init_exception_vectors(void)
 {
 	SSYNC();
@@ -407,26 +410,21 @@ int __init init_arch_irq(void)
 			set_irq_chip(irq, &bf561_core_irqchip);
 		else
 			set_irq_chip(irq, &bf561_internal_irqchip);
-#ifdef CONFIG_IRQCHIP_DEMUX_GPIO
-		if ((irq != IRQ_PROG0_INTA) &&
-		    (irq != IRQ_PROG1_INTA) && (irq != IRQ_PROG2_INTA)) {
-#endif
-			set_irq_handler(irq, handle_simple_irq);
-#ifdef CONFIG_IRQCHIP_DEMUX_GPIO
-		} else {
-			set_irq_chained_handler(irq, bf561_demux_gpio_irq);
-		}
-#endif
 
+		if ((irq != IRQ_PROG0_INTA) &&
+		    (irq != IRQ_PROG1_INTA) &&
+		    (irq != IRQ_PROG2_INTA))
+			set_irq_handler(irq, handle_simple_irq);
+		else
+			set_irq_chained_handler(irq, bf561_demux_gpio_irq);
 	}
 
-#ifdef CONFIG_IRQCHIP_DEMUX_GPIO
 	for (irq = IRQ_PF0; irq <= IRQ_PF47; irq++) {
 		set_irq_chip(irq, &bf561_gpio_irqchip);
 		/* if configured as edge, then will be changed to do_edge_IRQ */
 		set_irq_handler(irq, handle_level_irq);
 	}
-#endif
+
 	bfin_write_IMASK(0);
 	CSYNC();
 	ilat = bfin_read_ILAT();
@@ -451,9 +449,8 @@ int __init init_arch_irq(void)
 }
 
 #ifdef CONFIG_DO_IRQ_L1
-void do_irq(int vec, struct pt_regs *fp)__attribute__((l1_text));
+__attribute__((l1_text))
 #endif
-
 void do_irq(int vec, struct pt_regs *fp)
 {
 	if (vec == EVT_IVTMR_P) {

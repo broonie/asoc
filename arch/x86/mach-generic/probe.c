@@ -22,7 +22,7 @@ extern struct genapic apic_default;
 
 struct genapic *genapic = &apic_default;
 
-struct genapic *apic_probe[] __initdata = { 
+static struct genapic *apic_probe[] __initdata = {
 	&apic_summit,
 	&apic_bigsmp, 
 	&apic_es7000,
@@ -56,7 +56,7 @@ void __init generic_bigsmp_probe(void)
 	/*
 	 * This routine is used to switch to bigsmp mode when
 	 * - There is no apic= option specified by the user
-	 * - generic_apic_probe() has choosen apic_default as the sub_arch
+	 * - generic_apic_probe() has chosen apic_default as the sub_arch
 	 * - we find more than 8 CPUs in acpi LAPIC listing with xAPIC support
 	 */
 

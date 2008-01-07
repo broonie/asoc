@@ -375,8 +375,9 @@ static void hptiop_host_request_callback(struct hptiop_hba *hba, u32 _tag)
 		scp->result = SAM_STAT_CHECK_CONDITION;
 		memset(&scp->sense_buffer,
 				0, sizeof(scp->sense_buffer));
-		memcpy(&scp->sense_buffer,
-			&req->sg_list, le32_to_cpu(req->dataxfer_length));
+		memcpy(&scp->sense_buffer, &req->sg_list,
+				min(sizeof(scp->sense_buffer),
+					le32_to_cpu(req->dataxfer_length)));
 		break;
 
 	default:
@@ -655,6 +656,7 @@ static struct scsi_host_template driver_template = {
 	.unchecked_isa_dma          = 0,
 	.emulated                   = 0,
 	.use_clustering             = ENABLE_CLUSTERING,
+	.use_sg_chaining            = ENABLE_SG_CHAINING,
 	.proc_name                  = driver_name,
 	.shost_attrs                = hptiop_attrs,
 	.this_id                    = -1,

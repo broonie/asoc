@@ -31,6 +31,7 @@
 #include <linux/sysdev.h>
 #include <linux/msi.h>
 #include <linux/htirq.h>
+#include <linux/dmar.h>
 #ifdef CONFIG_ACPI
 #include <acpi/acpi_bus.h>
 #endif
@@ -545,7 +546,7 @@ int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pin)
 #define default_PCI_trigger(idx)	(1)
 #define default_PCI_polarity(idx)	(1)
 
-static int __init MPBIOS_polarity(int idx)
+static int MPBIOS_polarity(int idx)
 {
 	int bus = mp_irqs[idx].mpc_srcbus;
 	int polarity;
@@ -875,6 +876,10 @@ static void __init setup_IO_APIC_irqs(void)
 				apic_printk(APIC_VERBOSE, ", %d-%d", mp_ioapics[apic].mpc_apicid, pin);
 			continue;
 		}
+		if (!first_notcon) {
+			apic_printk(APIC_VERBOSE, " not connected.\n");
+			first_notcon = 1;
+		}
 
 		irq = pin_2_irq(idx, apic, pin);
 		add_pin_to_irq(irq, apic, pin);
@@ -885,7 +890,7 @@ static void __init setup_IO_APIC_irqs(void)
 	}
 
 	if (!first_notcon)
-		apic_printk(APIC_VERBOSE," not connected.\n");
+		apic_printk(APIC_VERBOSE, " not connected.\n");
 }
 
 /*
@@ -1276,10 +1281,13 @@ void disable_IO_APIC(void)
 static int __init timer_irq_works(void)
 {
 	unsigned long t1 = jiffies;
+	unsigned long flags;
 
+	local_save_flags(flags);
 	local_irq_enable();
 	/* Let ten ticks pass... */
 	mdelay((10 * 1000) / HZ);
+	local_irq_restore(flags);
 
 	/*
 	 * Expect a few ticks at least, to be sure some possible
@@ -1650,6 +1658,9 @@ static inline void check_timer(void)
 {
 	struct irq_cfg *cfg = irq_cfg + 0;
 	int apic1, pin1, apic2, pin2;
+	unsigned long flags;
+
+	local_irq_save(flags);
 
 	/*
 	 * get/set the timer IRQ vector:
@@ -1691,7 +1702,7 @@ static inline void check_timer(void)
 			}
 			if (disable_timer_pin_1 > 0)
 				clear_IO_APIC_pin(0, pin1);
-			return;
+			goto out;
 		}
 		clear_IO_APIC_pin(apic1, pin1);
 		apic_printk(APIC_QUIET,KERN_ERR "..MP-BIOS bug: 8254 timer not "
@@ -1713,7 +1724,7 @@ static inline void check_timer(void)
 			if (nmi_watchdog == NMI_IO_APIC) {
 				setup_nmi();
 			}
-			return;
+			goto out;
 		}
 		/*
 		 * Cleanup, just in case ...
@@ -1736,7 +1747,7 @@ static inline void check_timer(void)
 
 	if (timer_irq_works()) {
 		apic_printk(APIC_VERBOSE," works.\n");
-		return;
+		goto out;
 	}
 	apic_write(APIC_LVT0, APIC_LVT_MASKED | APIC_DM_FIXED | cfg->vector);
 	apic_printk(APIC_VERBOSE," failed.\n");
@@ -1751,10 +1762,12 @@ static inline void check_timer(void)
 
 	if (timer_irq_works()) {
 		apic_printk(APIC_VERBOSE," works.\n");
-		return;
+		goto out;
 	}
 	apic_printk(APIC_VERBOSE," failed :(.\n");
 	panic("IO-APIC + timer doesn't work! Try using the 'noapic' kernel parameter\n");
+out:
+	local_irq_restore(flags);
 }
 
 static int __init notimercheck(char *s)
@@ -1766,7 +1779,7 @@ __setup("no_timer_check", notimercheck);
 
 /*
  *
- * IRQ's that are handled by the PIC in the MPS IOAPIC case.
+ * IRQs that are handled by the PIC in the MPS IOAPIC case.
  * - IRQ2 is the cascade IRQ, and cannot be a io-apic IRQ.
  *   Linux doesn't really care, as it's not actually used
  *   for any interrupt handling anyway.
@@ -1845,7 +1858,7 @@ static struct sysdev_class ioapic_sysdev_class = {
 static int __init ioapic_init_sysfs(void)
 {
 	struct sys_device * dev;
-	int i, size, error = 0;
+	int i, size, error;
 
 	error = sysdev_class_register(&ioapic_sysdev_class);
 	if (error)
@@ -1854,12 +1867,11 @@ static int __init ioapic_init_sysfs(void)
 	for (i = 0; i < nr_ioapics; i++ ) {
 		size = sizeof(struct sys_device) + nr_ioapic_registers[i]
 			* sizeof(struct IO_APIC_route_entry);
-		mp_ioapic_data[i] = kmalloc(size, GFP_KERNEL);
+		mp_ioapic_data[i] = kzalloc(size, GFP_KERNEL);
 		if (!mp_ioapic_data[i]) {
 			printk(KERN_ERR "Can't suspend/resume IOAPIC %d\n", i);
 			continue;
 		}
-		memset(mp_ioapic_data[i], 0, size);
 		dev = &mp_ioapic_data[i]->dev;
 		dev->id = i;
 		dev->cls = &ioapic_sysdev_class;
@@ -1918,7 +1930,7 @@ void destroy_irq(unsigned int irq)
 }
 
 /*
- * MSI mesage composition
+ * MSI message composition
  */
 #ifdef CONFIG_PCI_MSI
 static int msi_compose_msg(struct pci_dev *pdev, unsigned int irq, struct msi_msg *msg)
@@ -2028,8 +2040,64 @@ void arch_teardown_msi_irq(unsigned int irq)
 	destroy_irq(irq);
 }
 
-#endif /* CONFIG_PCI_MSI */
+#ifdef CONFIG_DMAR
+#ifdef CONFIG_SMP
+static void dmar_msi_set_affinity(unsigned int irq, cpumask_t mask)
+{
+	struct irq_cfg *cfg = irq_cfg + irq;
+	struct msi_msg msg;
+	unsigned int dest;
+	cpumask_t tmp;
 
+	cpus_and(tmp, mask, cpu_online_map);
+	if (cpus_empty(tmp))
+		return;
+
+	if (assign_irq_vector(irq, mask))
+		return;
+
+	cpus_and(tmp, cfg->domain, mask);
+	dest = cpu_mask_to_apicid(tmp);
+
+	dmar_msi_read(irq, &msg);
+
+	msg.data &= ~MSI_DATA_VECTOR_MASK;
+	msg.data |= MSI_DATA_VECTOR(cfg->vector);
+	msg.address_lo &= ~MSI_ADDR_DEST_ID_MASK;
+	msg.address_lo |= MSI_ADDR_DEST_ID(dest);
+
+	dmar_msi_write(irq, &msg);
+	irq_desc[irq].affinity = mask;
+}
+#endif /* CONFIG_SMP */
+
+struct irq_chip dmar_msi_type = {
+	.name = "DMAR_MSI",
+	.unmask = dmar_msi_unmask,
+	.mask = dmar_msi_mask,
+	.ack = ack_apic_edge,
+#ifdef CONFIG_SMP
+	.set_affinity = dmar_msi_set_affinity,
+#endif
+	.retrigger = ioapic_retrigger_irq,
+};
+
+int arch_setup_dmar_msi(unsigned int irq)
+{
+	int ret;
+	struct msi_msg msg;
+
+	ret = msi_compose_msg(NULL, irq, &msg);
+	if (ret < 0)
+		return ret;
+	dmar_msi_write(irq, &msg);
+	set_irq_chip_and_handler_name(irq, &dmar_msi_type, handle_edge_irq,
+		"edge");
+	return 0;
+}
+#endif
+
+#endif /* CONFIG_PCI_MSI */
 /*
  * Hypertransport interrupt support
  */
@@ -2162,8 +2230,27 @@ int io_apic_set_pci_routing (int ioapic, int pin, int irq, int triggering, int p
 	return 0;
 }
 
-#endif /* CONFIG_ACPI */
 
+int acpi_get_override_irq(int bus_irq, int *trigger, int *polarity)
+{
+	int i;
+
+	if (skip_ioapic_setup)
+		return -1;
+
+	for (i = 0; i < mp_irq_entries; i++)
+		if (mp_irqs[i].mpc_irqtype == mp_INT &&
+		    mp_irqs[i].mpc_srcbusirq == bus_irq)
+			break;
+	if (i >= mp_irq_entries)
+		return -1;
+
+	*trigger = irq_trigger(i);
+	*polarity = irq_polarity(i);
+	return 0;
+}
+
+#endif /* CONFIG_ACPI */
 
 /*
  * This function currently is only a helper for the i386 smp boot process where
@@ -2200,3 +2287,4 @@ void __init setup_ioapic_dest(void)
 	}
 }
 #endif
+

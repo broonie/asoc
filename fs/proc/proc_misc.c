@@ -91,7 +91,8 @@ static int loadavg_read_proc(char *page, char **start, off_t off,
 		LOAD_INT(a), LOAD_FRAC(a),
 		LOAD_INT(b), LOAD_FRAC(b),
 		LOAD_INT(c), LOAD_FRAC(c),
-		nr_running(), nr_threads, current->nsproxy->pid_ns->last_pid);
+		nr_running(), nr_threads,
+		task_active_pid_ns(current)->last_pid);
 	return proc_calc_metrics(page, start, off, count, eof, len);
 }
 
@@ -224,6 +225,19 @@ static int fragmentation_open(struct inode *inode, struct file *file)
 
 static const struct file_operations fragmentation_file_operations = {
 	.open		= fragmentation_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= seq_release,
+};
+
+extern struct seq_operations pagetypeinfo_op;
+static int pagetypeinfo_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &pagetypeinfo_op);
+}
+
+static const struct file_operations pagetypeinfo_file_ops = {
+	.open		= pagetypeinfo_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= seq_release,
@@ -396,7 +410,7 @@ static const struct file_operations proc_modules_operations = {
 };
 #endif
 
-#ifdef CONFIG_SLAB
+#ifdef CONFIG_SLABINFO
 static int slabinfo_open(struct inode *inode, struct file *file)
 {
 	return seq_open(file, &slabinfo_op);
@@ -513,11 +527,8 @@ static int show_stat(struct seq_file *p, void *v)
 	}
 	seq_printf(p, "intr %llu", (unsigned long long)sum);
 
-#ifndef CONFIG_SMP
-	/* Touches too many cache lines on SMP setups */
 	for (i = 0; i < NR_IRQS; i++)
 		seq_printf(p, " %u", per_irq_sum[i]);
-#endif
 
 	seq_printf(p,
 		"\nctxt %llu\n"
@@ -717,13 +728,14 @@ void __init proc_misc_init(void)
 #endif
 	create_seq_entry("stat", 0, &proc_stat_operations);
 	create_seq_entry("interrupts", 0, &proc_interrupts_operations);
-#ifdef CONFIG_SLAB
+#ifdef CONFIG_SLABINFO
 	create_seq_entry("slabinfo",S_IWUSR|S_IRUGO,&proc_slabinfo_operations);
 #ifdef CONFIG_DEBUG_SLAB_LEAK
 	create_seq_entry("slab_allocators", 0 ,&proc_slabstats_operations);
 #endif
 #endif
 	create_seq_entry("buddyinfo",S_IRUGO, &fragmentation_file_operations);
+	create_seq_entry("pagetypeinfo", S_IRUGO, &pagetypeinfo_file_ops);
 	create_seq_entry("vmstat",S_IRUGO, &proc_vmstat_file_operations);
 	create_seq_entry("zoneinfo",S_IRUGO, &proc_zoneinfo_file_operations);
 #ifdef CONFIG_BLOCK

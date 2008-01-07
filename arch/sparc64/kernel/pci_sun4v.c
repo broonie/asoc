@@ -365,15 +365,13 @@ static void dma_4v_unmap_single(struct device *dev, dma_addr_t bus_addr,
 	spin_unlock_irqrestore(&iommu->lock, flags);
 }
 
-#define SG_ENT_PHYS_ADDRESS(SG)	\
-	(__pa(page_address((SG)->page)) + (SG)->offset)
+#define SG_ENT_PHYS_ADDRESS(SG)	(__pa(sg_virt((SG))))
 
-static inline long fill_sg(long entry, struct device *dev,
-			   struct scatterlist *sg,
-			   int nused, int nelems, unsigned long prot)
+static long fill_sg(long entry, struct device *dev,
+		    struct scatterlist *sg,
+		    int nused, int nelems, unsigned long prot)
 {
 	struct scatterlist *dma_sg = sg;
-	struct scatterlist *sg_end = sg + nelems;
 	unsigned long flags;
 	int i;
 
@@ -413,7 +411,8 @@ static inline long fill_sg(long entry, struct device *dev,
 					len -= (IO_PAGE_SIZE - (tmp & (IO_PAGE_SIZE - 1UL)));
 					break;
 				}
-				sg++;
+				sg = sg_next(sg);
+				nelems--;
 			}
 
 			pteval = (pteval & IOPTE_PAGE);
@@ -431,24 +430,26 @@ static inline long fill_sg(long entry, struct device *dev,
 			}
 
 			pteval = (pteval & IOPTE_PAGE) + len;
-			sg++;
+			sg = sg_next(sg);
+			nelems--;
 
 			/* Skip over any tail mappings we've fully mapped,
 			 * adjusting pteval along the way.  Stop when we
 			 * detect a page crossing event.
 			 */
-			while (sg < sg_end &&
+			while (nelems &&
 			       (pteval << (64 - IO_PAGE_SHIFT)) != 0UL &&
 			       (pteval == SG_ENT_PHYS_ADDRESS(sg)) &&
 			       ((pteval ^
 				 (SG_ENT_PHYS_ADDRESS(sg) + sg->length - 1UL)) >> IO_PAGE_SHIFT) == 0UL) {
 				pteval += sg->length;
-				sg++;
+				sg = sg_next(sg);
+				nelems--;
 			}
 			if ((pteval << (64 - IO_PAGE_SHIFT)) == 0UL)
 				pteval = ~0UL;
 		} while (dma_npages != 0);
-		dma_sg++;
+		dma_sg = sg_next(dma_sg);
 	}
 
 	if (unlikely(iommu_batch_end() < 0L))
@@ -475,9 +476,7 @@ static int dma_4v_map_sg(struct device *dev, struct scatterlist *sglist,
 	/* Fast path single entry scatterlists. */
 	if (nelems == 1) {
 		sglist->dma_address =
-			dma_4v_map_single(dev,
-					  (page_address(sglist->page) +
-					   sglist->offset),
+			dma_4v_map_single(dev, sg_virt(sglist),
 					  sglist->length, direction);
 		if (unlikely(sglist->dma_address == DMA_ERROR_CODE))
 			return 0;
@@ -510,7 +509,7 @@ static int dma_4v_map_sg(struct device *dev, struct scatterlist *sglist,
 	sgtmp = sglist;
 	while (used && sgtmp->dma_length) {
 		sgtmp->dma_address += dma_base;
-		sgtmp++;
+		sgtmp = sg_next(sgtmp);
 		used--;
 	}
 	used = nelems - used;
@@ -545,6 +544,7 @@ static void dma_4v_unmap_sg(struct device *dev, struct scatterlist *sglist,
 	struct pci_pbm_info *pbm;
 	struct iommu *iommu;
 	unsigned long flags, i, npages;
+	struct scatterlist *sg, *sgprv;
 	long entry;
 	u32 devhandle, bus_addr;
 
@@ -558,12 +558,15 @@ static void dma_4v_unmap_sg(struct device *dev, struct scatterlist *sglist,
 	devhandle = pbm->devhandle;
 	
 	bus_addr = sglist->dma_address & IO_PAGE_MASK;
-
-	for (i = 1; i < nelems; i++)
-		if (sglist[i].dma_length == 0)
+	sgprv = NULL;
+	for_each_sg(sglist, sg, nelems, i) {
+		if (sg->dma_length == 0)
 			break;
-	i--;
-	npages = (IO_PAGE_ALIGN(sglist[i].dma_address + sglist[i].dma_length) -
+
+		sgprv = sg;
+	}
+
+	npages = (IO_PAGE_ALIGN(sgprv->dma_address + sgprv->dma_length) -
 		  bus_addr) >> IO_PAGE_SHIFT;
 
 	entry = ((bus_addr - iommu->page_table_map_base) >> IO_PAGE_SHIFT);
@@ -1019,6 +1022,10 @@ void __init sun4v_pci_init(struct device_node *dp, char *model_name)
 	}
 
 	prop = of_find_property(dp, "reg", NULL);
+	if (!prop) {
+		prom_printf("SUN4V_PCI: Could not find config registers\n");
+		prom_halt();
+	}
 	regs = prop->value;
 
 	devhandle = (regs->phys_addr >> 32UL) & 0x0fffffff;

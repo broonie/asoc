@@ -1501,6 +1501,7 @@ static struct scsi_host_template ibmmca_driver_template = {
           .sg_tablesize   = 16,
           .cmd_per_lun    = 1,
           .use_clustering = ENABLE_CLUSTERING,
+          .use_sg_chaining = ENABLE_SG_CHAINING,
 };
 
 static int ibmmca_probe(struct device *dev)
@@ -1827,7 +1828,7 @@ static int ibmmca_queuecommand(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 		BUG_ON(scsi_sg_count(cmd) > 16);
 
 		scsi_for_each_sg(cmd, sg, scsi_sg_count(cmd), i) {
-			ld(shpnt)[ldn].sge[i].address = (void *) (isa_page_to_bus(sg->page) + sg->offset);
+			ld(shpnt)[ldn].sge[i].address = (void *) (isa_page_to_bus(sg_page(sg)) + sg->offset);
 			ld(shpnt)[ldn].sge[i].byte_length = sg->length;
 		}
 		scb->enable |= IM_POINTER_TO_LIST;

@@ -753,7 +753,7 @@ static int rt2500usb_init_registers(struct rt2x00_dev *rt2x00dev)
 	rt2x00_set_field16(&reg, MAC_CSR1_HOST_READY, 1);
 	rt2500usb_register_write(rt2x00dev, MAC_CSR1, reg);
 
-	if (rt2x00_get_rev(&rt2x00dev->chip) >= RT2570_VERSION_C) {
+	if (rt2x00_rev(&rt2x00dev->chip) >= RT2570_VERSION_C) {
 		rt2500usb_register_read(rt2x00dev, PHY_CSR2, &reg);
 		reg &= ~0x0002;
 	} else {
@@ -1032,7 +1032,7 @@ static void rt2500usb_write_tx_desc(struct rt2x00_dev *rt2x00dev,
 }
 
 static int rt2500usb_get_tx_data_len(struct rt2x00_dev *rt2x00dev,
-				     int maxpacket, struct sk_buff *skb)
+				     struct sk_buff *skb)
 {
 	int length;
 
@@ -1041,7 +1041,7 @@ static int rt2500usb_get_tx_data_len(struct rt2x00_dev *rt2x00dev,
 	 * but it must _not_ be a multiple of the USB packet size.
 	 */
 	length = roundup(skb->len, 2);
-	length += (2 * !(length % maxpacket));
+	length += (2 * !(length % rt2x00dev->usb_maxpacket));
 
 	return length;
 }
@@ -1257,7 +1257,7 @@ static int rt2500usb_init_eeprom(struct rt2x00_dev *rt2x00dev)
 	rt2500usb_register_read(rt2x00dev, MAC_CSR0, &reg);
 	rt2x00_set_chip(rt2x00dev, RT2570, value, reg);
 
-	if (rt2x00_rev(&rt2x00dev->chip, 0xffff0)) {
+	if (!rt2x00_check_rev(&rt2x00dev->chip, 0)) {
 		ERROR(rt2x00dev, "Invalid RT chipset detected.\n");
 		return -ENODEV;
 	}
@@ -1643,7 +1643,6 @@ static int rt2500usb_beacon_update(struct ieee80211_hw *hw,
 	struct data_entry *beacon;
 	struct data_entry *guardian;
 	int pipe = usb_sndbulkpipe(usb_dev, 1);
-	int max_packet = usb_maxpacket(usb_dev, pipe, 1);
 	int length;
 
 	/*
@@ -1672,7 +1671,7 @@ static int rt2500usb_beacon_update(struct ieee80211_hw *hw,
 							 ring->desc_size),
 				skb->len - ring->desc_size, control);
 
-	length = rt2500usb_get_tx_data_len(rt2x00dev, max_packet, skb);
+	length = rt2500usb_get_tx_data_len(rt2x00dev, skb);
 
 	usb_fill_bulk_urb(beacon->priv, usb_dev, pipe,
 			  skb->data, length, rt2500usb_beacondone, beacon);

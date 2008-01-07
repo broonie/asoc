@@ -29,6 +29,7 @@
 #include <linux/mm.h>
 #include <linux/ioport.h>
 #include <linux/blkdev.h>
+#include <linux/scatterlist.h>
 #include <linux/ioc4.h>
 #include <asm/io.h>
 
@@ -295,20 +296,6 @@ static void sgiioc4_set_dma_mode(ide_drive_t *drive, const u8 speed)
 {
 }
 
-static int sgiioc4_ide_dma_check(ide_drive_t *drive)
-{
-	if (ide_tune_dma(drive))
-		return 0;
-
-	/*
-	 * ->set_pio_mode is not implemented currently
-	 * so this is just for the completness
-	 */
-	ide_set_max_pio(drive);
-
-	return -1;
-}
-
 /* returns 1 if dma irq issued, 0 otherwise */
 static int
 sgiioc4_ide_dma_test_irq(ide_drive_t * drive)
@@ -537,7 +524,7 @@ sgiioc4_build_dma_table(ide_drive_t * drive, struct request *rq, int ddir)
 			}
 		}
 
-		sg++;
+		sg = sg_next(sg);
 		i--;
 	}
 
@@ -605,13 +592,11 @@ ide_init_sgiioc4(ide_hwif_t * hwif)
 	if (hwif->dma_base == 0)
 		return;
 
-	hwif->atapi_dma = 1;
-	hwif->mwdma_mask = 0x04;
+	hwif->mwdma_mask = ATA_MWDMA2_ONLY;
 
 	hwif->dma_setup = &sgiioc4_ide_dma_setup;
 	hwif->dma_start = &sgiioc4_ide_dma_start;
 	hwif->ide_dma_end = &sgiioc4_ide_dma_end;
-	hwif->ide_dma_check = &sgiioc4_ide_dma_check;
 	hwif->ide_dma_on = &sgiioc4_ide_dma_on;
 	hwif->dma_off_quietly = &sgiioc4_dma_off_quietly;
 	hwif->ide_dma_test_irq = &sgiioc4_ide_dma_test_irq;
@@ -629,6 +614,7 @@ sgiioc4_ide_setup_pci_device(struct pci_dev *dev)
 	void __iomem *virt_base;
 	ide_hwif_t *hwif;
 	int h;
+	u8 idx[4] = { 0xff, 0xff, 0xff, 0xff };
 
 	/*
 	 * Find an empty HWIF; if none available, return -ENOMEM.
@@ -669,10 +655,12 @@ sgiioc4_ide_setup_pci_device(struct pci_dev *dev)
 	}
 
 	if (hwif->io_ports[IDE_DATA_OFFSET] != cmd_base) {
+		hw_regs_t hw;
+
 		/* Initialize the IO registers */
-		sgiioc4_init_hwif_ports(&hwif->hw, cmd_base, ctl, irqport);
-		memcpy(hwif->io_ports, hwif->hw.io_ports,
-		       sizeof (hwif->io_ports));
+		memset(&hw, 0, sizeof(hw));
+		sgiioc4_init_hwif_ports(&hw, cmd_base, ctl, irqport);
+		memcpy(hwif->io_ports, hw.io_ports, sizeof(hwif->io_ports));
 		hwif->noprobe = !hwif->io_ports[IDE_DATA_OFFSET];
 	}
 
@@ -688,22 +676,16 @@ sgiioc4_ide_setup_pci_device(struct pci_dev *dev)
 	/* Initializing chipset IRQ Registers */
 	writel(0x03, (void __iomem *)(irqport + IOC4_INTR_SET * 4));
 
-	hwif->autodma = 0;
-
-	if (dma_base && ide_dma_sgiioc4(hwif, dma_base) == 0) {
-		hwif->autodma = 1;
-		hwif->drives[1].autodma = hwif->drives[0].autodma = 1;
-	} else
+	if (dma_base == 0 || ide_dma_sgiioc4(hwif, dma_base))
 		printk(KERN_INFO "%s: %s Bus-Master DMA disabled\n",
 				 hwif->name, DRV_NAME);
 
 	ide_init_sgiioc4(hwif);
 
-	if (probe_hwif_init(hwif))
-		return -EIO;
+	idx[0] = hwif->index;
 
-	/* Create /proc/ide entries */
-	ide_proc_register_port(hwif);
+	if (ide_device_add(idx))
+		return -EIO;
 
 	return 0;
 }
@@ -711,14 +693,12 @@ sgiioc4_ide_setup_pci_device(struct pci_dev *dev)
 static unsigned int __devinit
 pci_init_sgiioc4(struct pci_dev *dev)
 {
-	unsigned int class_rev;
 	int ret;
 
-	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
-	class_rev &= 0xff;
 	printk(KERN_INFO "%s: IDE controller at PCI slot %s, revision %d\n",
-			 DRV_NAME, pci_name(dev), class_rev);
-	if (class_rev < IOC4_SUPPORTED_FIRMWARE_REV) {
+			 DRV_NAME, pci_name(dev), dev->revision);
+
+	if (dev->revision < IOC4_SUPPORTED_FIRMWARE_REV) {
 		printk(KERN_ERR "Skipping %s IDE controller in slot %s: "
 				"firmware is obsolete - please upgrade to "
 				"revision46 or higher\n",

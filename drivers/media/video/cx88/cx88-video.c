@@ -851,10 +851,7 @@ static int video_release(struct inode *inode, struct file *file)
 
 	/* stop vbi capture */
 	if (res_check(fh, RESOURCE_VBI)) {
-		if (fh->vbiq.streaming)
-			videobuf_streamoff(&fh->vbiq);
-		if (fh->vbiq.reading)
-			videobuf_read_stop(&fh->vbiq);
+		videobuf_stop(&fh->vbiq);
 		res_free(dev,fh,RESOURCE_VBI);
 	}
 
@@ -1675,7 +1672,6 @@ static struct video_device cx8800_radio_template =
 {
 	.name                 = "cx8800-radio",
 	.type                 = VID_TYPE_TUNER,
-	.hardware             = 0,
 	.fops                 = &radio_fops,
 	.minor                = -1,
 	.vidioc_querycap      = radio_querycap,

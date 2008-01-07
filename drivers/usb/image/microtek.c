@@ -519,8 +519,7 @@ static void mts_do_sg (struct urb* transfer)
 	context->fragment++;
 	mts_int_submit_urb(transfer,
 			   context->data_pipe,
-			   page_address(sg[context->fragment].page) +
-			   sg[context->fragment].offset,
+			   sg_virt(&sg[context->fragment]),
 			   sg[context->fragment].length,
 			   context->fragment + 1 == scsi_sg_count(context->srb) ?
 			   mts_data_done : mts_do_sg);
@@ -557,7 +556,7 @@ mts_build_transfer_context(struct scsi_cmnd *srb, struct mts_desc* desc)
 		return;
 	} else {
 		sg = scsi_sglist(srb);
-		desc->context.data = page_address(sg[0].page) + sg[0].offset;
+		desc->context.data = sg_virt(&sg[0]);
 		desc->context.data_length = sg[0].length;
 	}
 
@@ -820,7 +819,7 @@ static int mts_usb_probe(struct usb_interface *intf,
 		goto out_kfree2;
 
 	new_desc->host->hostdata[0] = (unsigned long)new_desc;
-	if (scsi_add_host(new_desc->host, NULL)) {
+	if (scsi_add_host(new_desc->host, &dev->dev)) {
 		err_retval = -EIO;
 		goto out_host_put;
 	}

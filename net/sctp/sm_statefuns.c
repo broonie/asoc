@@ -959,7 +959,7 @@ sctp_disposition_t sctp_sf_sendbeat_8_3(const struct sctp_endpoint *ep,
 {
 	struct sctp_transport *transport = (struct sctp_transport *) arg;
 
-	if (asoc->overall_error_count >= asoc->max_retrans) {
+	if (asoc->overall_error_count > asoc->max_retrans) {
 		sctp_add_cmd_sf(commands, SCTP_CMD_SET_SK_ERR,
 				SCTP_ERROR(ETIMEDOUT));
 		/* CMD_ASSOC_FAILED calls CMD_DELETE_TCB. */
@@ -1146,7 +1146,7 @@ sctp_disposition_t sctp_sf_backbeat_8_3(const struct sctp_endpoint *ep,
 	/* Check if the timestamp looks valid.  */
 	if (time_after(hbinfo->sent_at, jiffies) ||
 	    time_after(jiffies, hbinfo->sent_at + max_interval)) {
-		SCTP_DEBUG_PRINTK("%s: HEARTBEAT ACK with invalid timestamp"
+		SCTP_DEBUG_PRINTK("%s: HEARTBEAT ACK with invalid timestamp "
 				  "received for transport: %p\n",
 				   __FUNCTION__, link);
 		return SCTP_DISPOSITION_DISCARD;
@@ -2305,7 +2305,7 @@ static sctp_disposition_t sctp_sf_do_5_2_6_stale(const struct sctp_endpoint *ep,
 	/* If we've sent any data bundled with COOKIE-ECHO we will need to
 	 * resend
 	 */
-	sctp_add_cmd_sf(commands, SCTP_CMD_RETRAN,
+	sctp_add_cmd_sf(commands, SCTP_CMD_T1_RETRAN,
 			SCTP_TRANSPORT(asoc->peer.primary_path));
 
 	/* Cast away the const modifier, as we want to just
@@ -4064,11 +4064,6 @@ static sctp_disposition_t sctp_sf_abort_violation(
 	struct sctp_chunk *chunk =  arg;
 	struct sctp_chunk *abort = NULL;
 
-	/* Make the abort chunk. */
-	abort = sctp_make_abort_violation(asoc, chunk, payload, paylen);
-	if (!abort)
-		goto nomem;
-
 	/* SCTP-AUTH, Section 6.3:
 	 *    It should be noted that if the receiver wants to tear
 	 *    down an association in an authenticated way only, the
@@ -4082,6 +4077,11 @@ static sctp_disposition_t sctp_sf_abort_violation(
 	 */
 	if (sctp_auth_recv_cid(SCTP_CID_ABORT, asoc))
 		goto discard;
+
+	/* Make the abort chunk. */
+	abort = sctp_make_abort_violation(asoc, chunk, payload, paylen);
+	if (!abort)
+		goto nomem;
 
 	if (asoc) {
 		sctp_add_cmd_sf(commands, SCTP_CMD_REPLY, SCTP_CHUNK(abort));

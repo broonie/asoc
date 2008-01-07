@@ -48,10 +48,17 @@ static void __kprobes arch_copy_kprobe(struct kprobe *p);
 DEFINE_PER_CPU(struct kprobe *, current_kprobe) = NULL;
 DEFINE_PER_CPU(struct kprobe_ctlblk, kprobe_ctlblk);
 
+struct kretprobe_blackpoint kretprobe_blacklist[] = {
+	{"__switch_to", }, /* This function switches only current task, but
+			      doesn't switch kernel stack.*/
+	{NULL, NULL}	/* Terminator */
+};
+const int kretprobe_blacklist_size = ARRAY_SIZE(kretprobe_blacklist);
+
 /*
  * returns non-zero if opcode modifies the interrupt flag.
  */
-static __always_inline int is_IF_modifier(kprobe_opcode_t *insn)
+static int __kprobes is_IF_modifier(kprobe_opcode_t *insn)
 {
 	switch (*insn) {
 	case 0xfa:		/* cli */
@@ -478,7 +485,6 @@ static void __kprobes resume_execution(struct kprobe *p,
 		struct pt_regs *regs, struct kprobe_ctlblk *kcb)
 {
 	unsigned long *tos = (unsigned long *)regs->rsp;
-	unsigned long next_rip = 0;
 	unsigned long copy_rip = (unsigned long)p->ainsn.insn;
 	unsigned long orig_rip = (unsigned long)p->addr;
 	kprobe_opcode_t *insn = p->ainsn.insn;
@@ -487,46 +493,42 @@ static void __kprobes resume_execution(struct kprobe *p,
 	if (*insn >= 0x40 && *insn <= 0x4f)
 		insn++;
 
+	regs->eflags &= ~TF_MASK;
 	switch (*insn) {
-	case 0x9c:		/* pushfl */
+	case 0x9c:	/* pushfl */
 		*tos &= ~(TF_MASK | IF_MASK);
 		*tos |= kcb->kprobe_old_rflags;
 		break;
-	case 0xc3:		/* ret/lret */
-	case 0xcb:
-	case 0xc2:
+	case 0xc2:	/* iret/ret/lret */
+	case 0xc3:
 	case 0xca:
-		regs->eflags &= ~TF_MASK;
-		/* rip is already adjusted, no more changes required*/
-		return;
-	case 0xe8:		/* call relative - Fix return addr */
+	case 0xcb:
+	case 0xcf:
+	case 0xea:	/* jmp absolute -- ip is correct */
+		/* ip is already adjusted, no more changes required */
+		goto no_change;
+	case 0xe8:	/* call relative - Fix return addr */
 		*tos = orig_rip + (*tos - copy_rip);
 		break;
 	case 0xff:
 		if ((insn[1] & 0x30) == 0x10) {
 			/* call absolute, indirect */
-			/* Fix return addr; rip is correct. */
-			next_rip = regs->rip;
+			/* Fix return addr; ip is correct. */
 			*tos = orig_rip + (*tos - copy_rip);
+			goto no_change;
 		} else if (((insn[1] & 0x31) == 0x20) ||	/* jmp near, absolute indirect */
 			   ((insn[1] & 0x31) == 0x21)) {	/* jmp far, absolute indirect */
-			/* rip is correct. */
-			next_rip = regs->rip;
+			/* ip is correct. */
+			goto no_change;
 		}
-		break;
-	case 0xea:		/* jmp absolute -- rip is correct */
-		next_rip = regs->rip;
-		break;
 	default:
 		break;
 	}
 
-	regs->eflags &= ~TF_MASK;
-	if (next_rip) {
-		regs->rip = next_rip;
-	} else {
-		regs->rip = orig_rip + (regs->rip - copy_rip);
-	}
+	regs->rip = orig_rip + (regs->rip - copy_rip);
+no_change:
+
+	return;
 }
 
 int __kprobes post_kprobe_handler(struct pt_regs *regs)
@@ -544,12 +546,7 @@ int __kprobes post_kprobe_handler(struct pt_regs *regs)
 
 	resume_execution(cur, regs, kcb);
 	regs->eflags |= kcb->kprobe_saved_rflags;
-#ifdef CONFIG_TRACE_IRQFLAGS_SUPPORT
-	if (raw_irqs_disabled_flags(regs->eflags))
-		trace_hardirqs_off();
-	else
-		trace_hardirqs_on();
-#endif
+	trace_hardirqs_fixup_flags(regs->eflags);
 
 	/* Restore the original saved kprobes variables and continue. */
 	if (kcb->kprobe_status == KPROBE_REENTER) {
@@ -657,7 +654,6 @@ int __kprobes kprobe_exceptions_notify(struct notifier_block *self,
 			ret = NOTIFY_STOP;
 		break;
 	case DIE_GPF:
-	case DIE_PAGE_FAULT:
 		/* kprobe_running() needs smp_processor_id() */
 		preempt_disable();
 		if (kprobe_running() &&
@@ -715,10 +711,8 @@ int __kprobes longjmp_break_handler(struct kprobe *p, struct pt_regs *regs)
 	struct jprobe *jp = container_of(p, struct jprobe, kp);
 
 	if ((addr > (u8 *) jprobe_return) && (addr < (u8 *) jprobe_return_end)) {
-		if ((long *)regs->rsp != kcb->jprobe_saved_rsp) {
-			struct pt_regs *saved_regs =
-			    container_of(kcb->jprobe_saved_rsp,
-					    struct pt_regs, rsp);
+		if ((unsigned long *)regs->rsp != kcb->jprobe_saved_rsp) {
+			struct pt_regs *saved_regs = &kcb->jprobe_saved_regs;
 			printk("current rsp %p does not match saved rsp %p\n",
 			       (long *)regs->rsp, kcb->jprobe_saved_rsp);
 			printk("Saved registers for jprobe %p\n", jp);

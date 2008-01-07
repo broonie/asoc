@@ -103,8 +103,6 @@ extern const struct file_operations sysfs_dir_operations;
 extern const struct inode_operations sysfs_dir_inode_operations;
 
 struct dentry *sysfs_get_dentry(struct sysfs_dirent *sd);
-struct sysfs_dirent *sysfs_get_active(struct sysfs_dirent *sd);
-void sysfs_put_active(struct sysfs_dirent *sd);
 struct sysfs_dirent *sysfs_get_active_two(struct sysfs_dirent *sd);
 void sysfs_put_active_two(struct sysfs_dirent *sd);
 void sysfs_addrm_start(struct sysfs_addrm_cxt *acxt,
@@ -146,6 +144,7 @@ static inline void sysfs_put(struct sysfs_dirent *sd)
 struct inode *sysfs_get_inode(struct sysfs_dirent *sd);
 int sysfs_setattr(struct dentry *dentry, struct iattr *iattr);
 int sysfs_hash_and_remove(struct sysfs_dirent *dir_sd, const char *name);
+int sysfs_inode_init(void);
 
 /*
  * file.c

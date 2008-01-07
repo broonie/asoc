@@ -25,6 +25,7 @@
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
 #include <linux/kdebug.h>
+#include <linux/kprobes.h>
 
 #include <asm/system.h>
 #include <asm/pgalloc.h>
@@ -40,34 +41,27 @@
 #define PF_RSVD	(1<<3)
 #define PF_INSTR	(1<<4)
 
-static ATOMIC_NOTIFIER_HEAD(notify_page_fault_chain);
-
-/* Hook to register for page fault notifications */
-int register_page_fault_notifier(struct notifier_block *nb)
+#ifdef CONFIG_KPROBES
+static inline int notify_page_fault(struct pt_regs *regs)
 {
-	vmalloc_sync_all();
-	return atomic_notifier_chain_register(&notify_page_fault_chain, nb);
-}
-EXPORT_SYMBOL_GPL(register_page_fault_notifier);
+	int ret = 0;
 
-int unregister_page_fault_notifier(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_unregister(&notify_page_fault_chain, nb);
-}
-EXPORT_SYMBOL_GPL(unregister_page_fault_notifier);
+	/* kprobe_running() needs smp_processor_id() */
+	if (!user_mode(regs)) {
+		preempt_disable();
+		if (kprobe_running() && kprobe_fault_handler(regs, 14))
+			ret = 1;
+		preempt_enable();
+	}
 
-static inline int notify_page_fault(struct pt_regs *regs, long err)
-{
-	struct die_args args = {
-		.regs = regs,
-		.str = "page fault",
-		.err = err,
-		.trapnr = 14,
-		.signr = SIGSEGV
-	};
-	return atomic_notifier_call_chain(&notify_page_fault_chain,
-	                                  DIE_PAGE_FAULT, &args);
+	return ret;
 }
+#else
+static inline int notify_page_fault(struct pt_regs *regs)
+{
+	return 0;
+}
+#endif
 
 /* Sometimes the CPU reports invalid exceptions on prefetch.
    Check that here and ignore.
@@ -175,7 +169,7 @@ void dump_pagetable(unsigned long address)
 	pmd = pmd_offset(pud, address);
 	if (bad_address(pmd)) goto bad;
 	printk("PMD %lx ", pmd_val(*pmd));
-	if (!pmd_present(*pmd))	goto ret;	 
+	if (!pmd_present(*pmd) || pmd_large(*pmd)) goto ret;
 
 	pte = pte_offset_kernel(pmd, address);
 	if (bad_address(pte)) goto bad;
@@ -291,7 +285,6 @@ static int vmalloc_fault(unsigned long address)
 	return 0;
 }
 
-static int page_fault_trace;
 int show_unhandled_signals = 1;
 
 /*
@@ -310,6 +303,11 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs,
 	int write, fault;
 	unsigned long flags;
 	siginfo_t info;
+
+	/*
+	 * We can fault from pretty much anywhere, with unknown IRQ state.
+	 */
+	trace_hardirqs_fixup();
 
 	tsk = current;
 	mm = tsk->mm;
@@ -345,7 +343,7 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs,
 			if (vmalloc_fault(address) >= 0)
 				return;
 		}
-		if (notify_page_fault(regs, error_code) == NOTIFY_STOP)
+		if (notify_page_fault(regs))
 			return;
 		/*
 		 * Don't take the mm semaphore here. If we fixup a prefetch
@@ -354,15 +352,11 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs,
 		goto bad_area_nosemaphore;
 	}
 
-	if (notify_page_fault(regs, error_code) == NOTIFY_STOP)
+	if (notify_page_fault(regs))
 		return;
 
 	if (likely(regs->eflags & X86_EFLAGS_IF))
 		local_irq_enable();
-
-	if (unlikely(page_fault_trace))
-		printk("pagefault rip:%lx rsp:%lx cs:%lu ss:%lu address %lx error %lx\n",
-		       regs->rip,regs->rsp,regs->cs,regs->ss,address,error_code); 
 
 	if (unlikely(error_code & PF_RSVD))
 		pgtable_bad(address, regs, error_code);
@@ -384,7 +378,7 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs,
  again:
 	/* When running in the kernel we expect faults to occur only to
 	 * addresses in user space.  All other faults represent errors in the
-	 * kernel and should generate an OOPS.  Unfortunatly, in the case of an
+	 * kernel and should generate an OOPS.  Unfortunately, in the case of an
 	 * erroneous fault occurring in a code path which already holds mmap_sem
 	 * we will deadlock attempting to validate the fault against the
 	 * address space.  Luckily the kernel only validly references user
@@ -392,7 +386,7 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs,
 	 * exceptions table.
 	 *
 	 * As the vast majority of faults will be valid we will only perform
-	 * the source reference check when there is a possibilty of a deadlock.
+	 * the source reference check when there is a possibility of a deadlock.
 	 * Attempt to lock the address space, if we cannot we then validate the
 	 * source.  If this is invalid we can skip the address space check,
 	 * thus avoiding the deadlock.
@@ -494,7 +488,7 @@ bad_area_nosemaphore:
 		if (show_unhandled_signals && unhandled_signal(tsk, SIGSEGV) &&
 		    printk_ratelimit()) {
 			printk(
-		       "%s%s[%d]: segfault at %016lx rip %016lx rsp %016lx error %lx\n",
+		       "%s%s[%d]: segfault at %lx rip %lx rsp %lx error %lx\n",
 					tsk->pid > 1 ? KERN_INFO : KERN_EMERG,
 					tsk->comm, tsk->pid, address, regs->rip,
 					regs->rsp, error_code);
@@ -560,7 +554,7 @@ no_context:
  */
 out_of_memory:
 	up_read(&mm->mmap_sem);
-	if (is_init(current)) {
+	if (is_global_init(current)) {
 		yield();
 		goto again;
 	}
@@ -627,10 +621,3 @@ void vmalloc_sync_all(void)
 	BUILD_BUG_ON(!(((MODULES_END - 1) & PGDIR_MASK) == 
 				(__START_KERNEL & PGDIR_MASK)));
 }
-
-static int __init enable_pagefaulttrace(char *str)
-{
-	page_fault_trace = 1;
-	return 1;
-}
-__setup("pagefaulttrace", enable_pagefaulttrace);

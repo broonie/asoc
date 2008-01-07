@@ -2881,10 +2881,6 @@ static int bttv_do_ioctl(struct inode *inode, struct file *file,
 		if (NULL == fmt)
 			return -EINVAL;
 		mutex_lock(&fh->cap.lock);
-		if (fmt->depth != pic->depth) {
-			retval = -EINVAL;
-			goto fh_unlock_and_return;
-		}
 		if (fmt->flags & FORMAT_FLAGS_RAW) {
 			/* VIDIOCMCAPTURE uses gbufsize, not RAW_BPL *
 			   RAW_LINES * 2. F1 is stored at offset 0, F2
@@ -3117,6 +3113,8 @@ static int bttv_do_ioctl(struct inode *inode, struct file *file,
 					     vm->width,vm->height,field);
 		if (0 != retval)
 			goto fh_unlock_and_return;
+		btv->init.width = vm->width;
+		btv->init.height = vm->height;
 		spin_lock_irqsave(&btv->s_lock,flags);
 		buffer_queue(&fh->cap,&buf->vb);
 		spin_unlock_irqrestore(&btv->s_lock,flags);
@@ -3829,10 +3827,7 @@ static int bttv_release(struct inode *inode, struct file *file)
 
 	/* stop vbi capture */
 	if (check_btres(fh, RESOURCE_VBI)) {
-		if (fh->vbi.streaming)
-			videobuf_streamoff(&fh->vbi);
-		if (fh->vbi.reading)
-			videobuf_read_stop(&fh->vbi);
+		videobuf_stop(&fh->vbi);
 		free_btres(btv,fh,RESOURCE_VBI);
 	}
 
@@ -3877,7 +3872,6 @@ static struct video_device bttv_video_template =
 	.name     = "UNSET",
 	.type     = VID_TYPE_CAPTURE|VID_TYPE_TUNER|
 		    VID_TYPE_CLIPPING|VID_TYPE_SCALES,
-	.hardware = VID_HARDWARE_BT848,
 	.fops     = &bttv_fops,
 	.minor    = -1,
 };
@@ -3886,7 +3880,6 @@ static struct video_device bttv_vbi_template =
 {
 	.name     = "bt848/878 vbi",
 	.type     = VID_TYPE_TUNER|VID_TYPE_TELETEXT,
-	.hardware = VID_HARDWARE_BT848,
 	.fops     = &bttv_fops,
 	.minor    = -1,
 };
@@ -4034,7 +4027,6 @@ static struct video_device radio_template =
 {
 	.name     = "bt848/878 radio",
 	.type     = VID_TYPE_TUNER,
-	.hardware = VID_HARDWARE_BT848,
 	.fops     = &radio_fops,
 	.minor    = -1,
 };
@@ -4993,7 +4985,7 @@ static struct pci_driver bttv_pci_driver = {
 #endif
 };
 
-static int bttv_init_module(void)
+static int __init bttv_init_module(void)
 {
 	int ret;
 
@@ -5026,7 +5018,7 @@ static int bttv_init_module(void)
 	return pci_register_driver(&bttv_pci_driver);
 }
 
-static void bttv_cleanup_module(void)
+static void __exit bttv_cleanup_module(void)
 {
 	pci_unregister_driver(&bttv_pci_driver);
 	bus_unregister(&bttv_sub_bus_type);

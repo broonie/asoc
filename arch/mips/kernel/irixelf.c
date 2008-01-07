@@ -44,11 +44,14 @@
 static int load_irix_binary(struct linux_binprm * bprm, struct pt_regs * regs);
 static int load_irix_library(struct file *);
 static int irix_core_dump(long signr, struct pt_regs * regs,
-                          struct file *file);
+                          struct file *file, unsigned long limit);
 
 static struct linux_binfmt irix_format = {
-	NULL, THIS_MODULE, load_irix_binary, load_irix_library,
-	irix_core_dump, PAGE_SIZE
+	.module		= THIS_MODULE,
+	.load_binary	= load_irix_binary,
+	.load_shlib	= load_irix_library,
+	.core_dump	= irix_core_dump,
+	.min_coredump	= PAGE_SIZE,
 };
 
 /* Debugging routines. */
@@ -1088,7 +1091,7 @@ end_coredump:
  * and then they are actually written out.  If we run out of core limit
  * we just truncate.
  */
-static int irix_core_dump(long signr, struct pt_regs * regs, struct file *file)
+static int irix_core_dump(long signr, struct pt_regs *regs, struct file *file, unsigned long limit)
 {
 	int has_dumped = 0;
 	mm_segment_t fs;
@@ -1098,7 +1101,6 @@ static int irix_core_dump(long signr, struct pt_regs * regs, struct file *file)
 	struct vm_area_struct *vma;
 	struct elfhdr elf;
 	off_t offset = 0, dataoff;
-	int limit = current->signal->rlim[RLIMIT_CORE].rlim_cur;
 	int numnote = 3;
 	struct memelfnote notes[3];
 	struct elf_prstatus prstatus;	/* NT_PRSTATUS */
@@ -1170,8 +1172,8 @@ static int irix_core_dump(long signr, struct pt_regs * regs, struct file *file)
 	prstatus.pr_sighold = current->blocked.sig[0];
 	psinfo.pr_pid = prstatus.pr_pid = current->pid;
 	psinfo.pr_ppid = prstatus.pr_ppid = current->parent->pid;
-	psinfo.pr_pgrp = prstatus.pr_pgrp = process_group(current);
-	psinfo.pr_sid = prstatus.pr_sid = process_session(current);
+	psinfo.pr_pgrp = prstatus.pr_pgrp = task_pgrp_nr(current);
+	psinfo.pr_sid = prstatus.pr_sid = task_session_nr(current);
 	if (current->pid == current->tgid) {
 		/*
 		 * This is the record for the group leader.  Add in the

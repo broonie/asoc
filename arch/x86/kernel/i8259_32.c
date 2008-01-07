@@ -349,7 +349,11 @@ static irqreturn_t math_error_irq(int cpl, void *dev_id)
  * New motherboards sometimes make IRQ 13 be a PCI interrupt,
  * so allow interrupt sharing.
  */
-static struct irqaction fpu_irq = { math_error_irq, 0, CPU_MASK_NONE, "fpu", NULL, NULL };
+static struct irqaction fpu_irq = {
+	.handler = math_error_irq,
+	.mask = CPU_MASK_NONE,
+	.name = "fpu",
+};
 
 void __init init_ISA_irqs (void)
 {
@@ -399,7 +403,8 @@ void __init native_init_IRQ(void)
 		int vector = FIRST_EXTERNAL_VECTOR + i;
 		if (i >= NR_IRQS)
 			break;
-		if (vector != SYSCALL_VECTOR) 
+		/* SYSCALL_VECTOR was reserved in trap_init. */
+		if (!test_bit(vector, used_vectors))
 			set_intr_gate(vector, interrupt[i]);
 	}
 

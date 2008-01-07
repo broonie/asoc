@@ -5,6 +5,10 @@
 #define mips mips
 OUTPUT_ARCH(mips)
 ENTRY(kernel_entry)
+PHDRS {
+	text PT_LOAD FLAGS(7);	/* RWX */
+	note PT_NOTE FLAGS(4);	/* R__ */
+}
 jiffies = JIFFIES;
 
 SECTIONS
@@ -22,7 +26,6 @@ SECTIONS
 	 */
 
 	/* . = 0xa800000000300000; */
-	/* . = 0xa800000000300000; */
 	. = 0xffffffff80300000;
 #endif
 	. = LOADADDR;
@@ -32,9 +35,10 @@ SECTIONS
 		TEXT_TEXT
 		SCHED_TEXT
 		LOCK_TEXT
+		KPROBES_TEXT
 		*(.fixup)
 		*(.gnu.warning)
-	} =0
+	} :text = 0
 	_etext = .;	/* End of text section */
 
 	/* Exception table */
@@ -51,25 +55,31 @@ SECTIONS
 		*(__dbe_table)
 		__stop___dbe_table = .;
 	}
+
+	NOTES :text :note
+	.dummy : { *(.dummy) } :text
+
 	RODATA
 
 	/* writeable */
 	.data : {	/* Data */
-	  . = . + DATAOFFSET;		/* for CONFIG_MAPPED_KERNEL */
-	  /*
-	   * This ALIGN is needed as a workaround for a bug a gcc bug upto 4.1 which
-	   * limits the maximum alignment to at most 32kB and results in the following
-	   * warning:
-	   *
-	   *  CC      arch/mips/kernel/init_task.o
-	   * arch/mips/kernel/init_task.c:30: warning: alignment of ‘init_thread_union’
-	   * is greater than maximum object file alignment.  Using 32768
-	   */
-	  . = ALIGN(_PAGE_SIZE);
-	  *(.data.init_task)
+		. = . + DATAOFFSET;		/* for CONFIG_MAPPED_KERNEL */
+		/*
+		 * This ALIGN is needed as a workaround for a bug a
+		 * gcc bug upto 4.1 which limits the maximum alignment
+		 * to at most 32kB and results in the following
+		 * warning:
+		 *
+		 *  CC      arch/mips/kernel/init_task.o
+		 * arch/mips/kernel/init_task.c:30: warning: alignment
+		 * of ‘init_thread_union’ is greater than maximum
+		 * object file alignment.  Using 32768
+		 */
+		. = ALIGN(_PAGE_SIZE);
+		*(.data.init_task)
 
-	  DATA_DATA
-	  CONSTRUCTORS
+		DATA_DATA
+		CONSTRUCTORS
 	}
 	_gp = . + 0x8000;
 	.lit8 : {
@@ -200,8 +210,5 @@ SECTIONS
 	.gptab.sbss : {
 		*(.gptab.bss)
 		*(.gptab.sbss)
-	}
-	.note : {
-		*(.note)
 	}
 }

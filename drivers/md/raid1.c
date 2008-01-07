@@ -9,7 +9,7 @@
  *
  * Better read-balancing code written by Mika Kuoppala <miku@iki.fi>, 2000
  *
- * Fixes to reconstruction by Jakob Østergaard" <jakob@ostenfeld.dk>
+ * Fixes to reconstruction by Jakob Ã˜stergaard" <jakob@ostenfeld.dk>
  * Various fixes by Neil Brown <neilb@cse.unsw.edu.au>
  *
  * Changes by Peter T. Breuer <ptb@it.uc3m.es> 31/1/2003 to support
@@ -549,8 +549,7 @@ static void unplug_slaves(mddev_t *mddev)
 			atomic_inc(&rdev->nr_pending);
 			rcu_read_unlock();
 
-			if (r_queue->unplug_fn)
-				r_queue->unplug_fn(r_queue);
+			blk_unplug(r_queue);
 
 			rdev_dec_pending(rdev, mddev);
 			rcu_read_lock();
@@ -565,36 +564,6 @@ static void raid1_unplug(struct request_queue *q)
 
 	unplug_slaves(mddev);
 	md_wakeup_thread(mddev->thread);
-}
-
-static int raid1_issue_flush(struct request_queue *q, struct gendisk *disk,
-			     sector_t *error_sector)
-{
-	mddev_t *mddev = q->queuedata;
-	conf_t *conf = mddev_to_conf(mddev);
-	int i, ret = 0;
-
-	rcu_read_lock();
-	for (i=0; i<mddev->raid_disks && ret == 0; i++) {
-		mdk_rdev_t *rdev = rcu_dereference(conf->mirrors[i].rdev);
-		if (rdev && !test_bit(Faulty, &rdev->flags)) {
-			struct block_device *bdev = rdev->bdev;
-			struct request_queue *r_queue = bdev_get_queue(bdev);
-
-			if (!r_queue->issue_flush_fn)
-				ret = -EOPNOTSUPP;
-			else {
-				atomic_inc(&rdev->nr_pending);
-				rcu_read_unlock();
-				ret = r_queue->issue_flush_fn(r_queue, bdev->bd_disk,
-							      error_sector);
-				rdev_dec_pending(rdev, mddev);
-				rcu_read_lock();
-			}
-		}
-	}
-	rcu_read_unlock();
-	return ret;
 }
 
 static int raid1_congested(void *data, int bits)
@@ -1244,7 +1213,8 @@ static void sync_request_write(mddev_t *mddev, r1bio_t *r1_bio)
 					j = 0;
 				if (j >= 0)
 					mddev->resync_mismatches += r1_bio->sectors;
-				if (j < 0 || test_bit(MD_RECOVERY_CHECK, &mddev->recovery)) {
+				if (j < 0 || (test_bit(MD_RECOVERY_CHECK, &mddev->recovery)
+					      && test_bit(BIO_UPTODATE, &sbio->bi_flags))) {
 					sbio->bi_end_io = NULL;
 					rdev_dec_pending(conf->mirrors[i].rdev, mddev);
 				} else {
@@ -1997,7 +1967,6 @@ static int run(mddev_t *mddev)
 	mddev->array_size = mddev->size;
 
 	mddev->queue->unplug_fn = raid1_unplug;
-	mddev->queue->issue_flush_fn = raid1_issue_flush;
 	mddev->queue->backing_dev_info.congested_fn = raid1_congested;
 	mddev->queue->backing_dev_info.congested_data = mddev;
 

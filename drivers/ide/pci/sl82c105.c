@@ -145,19 +145,6 @@ static void sl82c105_set_dma_mode(ide_drive_t *drive, const u8 speed)
 }
 
 /*
- * Check to see if the drive and chipset are capable of DMA mode.
- */
-static int sl82c105_ide_dma_check(ide_drive_t *drive)
-{
-	DBG(("sl82c105_ide_dma_check(drive:%s)\n", drive->name));
-
-	if (ide_tune_dma(drive))
-		return 0;
-
-	return -1;
-}
-
-/*
  * The SL82C105 holds off all IDE interrupts while in DMA mode until
  * all DMA activity is completed.  Sometimes this causes problems (eg,
  * when the drive wants to report an error condition).
@@ -374,19 +361,6 @@ static void __devinit init_hwif_sl82c105(ide_hwif_t *hwif)
 	hwif->selectproc	= &sl82c105_selectproc;
 	hwif->resetproc 	= &sl82c105_resetproc;
 
-	/*
-	 * We support 32-bit I/O on this interface, and
-	 * it doesn't have problems with interrupts.
-	 */
-	hwif->drives[0].io_32bit = hwif->drives[1].io_32bit = 1;
-	hwif->drives[0].unmask   = hwif->drives[1].unmask   = 1;
-
-	/*
-	 * We always autotune PIO,  this is done before DMA is checked,
-	 * so there's no risk of accidentally disabling DMA
-	 */
-	hwif->drives[0].autotune = hwif->drives[1].autotune = 1;
-
 	if (!hwif->dma_base)
 		return;
 
@@ -401,31 +375,27 @@ static void __devinit init_hwif_sl82c105(ide_hwif_t *hwif)
 		return;
 	}
 
-	hwif->atapi_dma  = 1;
-	hwif->mwdma_mask = 0x07;
+	hwif->mwdma_mask = ATA_MWDMA2;
 
-	hwif->ide_dma_check		= &sl82c105_ide_dma_check;
 	hwif->ide_dma_on		= &sl82c105_ide_dma_on;
 	hwif->dma_off_quietly		= &sl82c105_dma_off_quietly;
 	hwif->dma_lost_irq		= &sl82c105_dma_lost_irq;
 	hwif->dma_start			= &sl82c105_dma_start;
 	hwif->dma_timeout		= &sl82c105_dma_timeout;
 
-	if (!noautodma)
-		hwif->autodma = 1;
-	hwif->drives[0].autodma = hwif->drives[1].autodma = hwif->autodma;
-
 	if (hwif->mate)
 		hwif->serialized = hwif->mate->serialized = 1;
 }
 
-static ide_pci_device_t sl82c105_chipset __devinitdata = {
+static const struct ide_port_info sl82c105_chipset __devinitdata = {
 	.name		= "W82C105",
 	.init_chipset	= init_chipset_sl82c105,
 	.init_hwif	= init_hwif_sl82c105,
-	.autodma	= NOAUTODMA,
 	.enablebits	= {{0x40,0x01,0x01}, {0x40,0x10,0x10}},
-	.bootable	= ON_BOARD,
+	.host_flags	= IDE_HFLAG_IO_32BIT |
+			  IDE_HFLAG_UNMASK_IRQS |
+			  IDE_HFLAG_NO_AUTODMA |
+			  IDE_HFLAG_BOOTABLE,
 	.pio_mask	= ATA_PIO5,
 };
 
@@ -434,8 +404,8 @@ static int __devinit sl82c105_init_one(struct pci_dev *dev, const struct pci_dev
 	return ide_setup_pci_device(dev, &sl82c105_chipset);
 }
 
-static struct pci_device_id sl82c105_pci_tbl[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105), 0},
+static const struct pci_device_id sl82c105_pci_tbl[] = {
+	{ PCI_VDEVICE(WINBOND, PCI_DEVICE_ID_WINBOND_82C105), 0 },
 	{ 0, },
 };
 MODULE_DEVICE_TABLE(pci, sl82c105_pci_tbl);

@@ -52,13 +52,13 @@
 #include <asm/dma.h>
 #include <asm/mpspec.h>
 #include <asm/mmu_context.h>
-#include <asm/bootsetup.h>
 #include <asm/proto.h>
 #include <asm/setup.h>
 #include <asm/mach_apic.h>
 #include <asm/numa.h>
 #include <asm/sections.h>
 #include <asm/dmi.h>
+#include <asm/cacheflush.h>
 
 /*
  * Machine setup..
@@ -134,6 +134,12 @@ struct resource code_resource = {
 	.end = 0,
 	.flags = IORESOURCE_RAM,
 };
+struct resource bss_resource = {
+	.name = "Kernel bss",
+	.start = 0,
+	.end = 0,
+	.flags = IORESOURCE_RAM,
+};
 
 #ifdef CONFIG_PROC_VMCORE
 /* elfcorehdr= specifies the location of elf core header
@@ -180,15 +186,47 @@ EXPORT_SYMBOL(edd);
  */
 static inline void copy_edd(void)
 {
-     memcpy(edd.mbr_signature, EDD_MBR_SIGNATURE, sizeof(edd.mbr_signature));
-     memcpy(edd.edd_info, EDD_BUF, sizeof(edd.edd_info));
-     edd.mbr_signature_nr = EDD_MBR_SIG_NR;
-     edd.edd_info_nr = EDD_NR;
+     memcpy(edd.mbr_signature, boot_params.edd_mbr_sig_buffer,
+	    sizeof(edd.mbr_signature));
+     memcpy(edd.edd_info, boot_params.eddbuf, sizeof(edd.edd_info));
+     edd.mbr_signature_nr = boot_params.edd_mbr_sig_buf_entries;
+     edd.edd_info_nr = boot_params.eddbuf_entries;
 }
 #else
 static inline void copy_edd(void)
 {
 }
+#endif
+
+#ifdef CONFIG_KEXEC
+static void __init reserve_crashkernel(void)
+{
+	unsigned long long free_mem;
+	unsigned long long crash_size, crash_base;
+	int ret;
+
+	free_mem = ((unsigned long long)max_low_pfn - min_low_pfn) << PAGE_SHIFT;
+
+	ret = parse_crashkernel(boot_command_line, free_mem,
+			&crash_size, &crash_base);
+	if (ret == 0 && crash_size) {
+		if (crash_base > 0) {
+			printk(KERN_INFO "Reserving %ldMB of memory at %ldMB "
+					"for crashkernel (System RAM: %ldMB)\n",
+					(unsigned long)(crash_size >> 20),
+					(unsigned long)(crash_base >> 20),
+					(unsigned long)(free_mem >> 20));
+			crashk_res.start = crash_base;
+			crashk_res.end   = crash_base + crash_size - 1;
+			reserve_bootmem(crash_base, crash_size);
+		} else
+			printk(KERN_INFO "crashkernel reservation failed - "
+					"you have to specify a base address\n");
+	}
+}
+#else
+static inline void __init reserve_crashkernel(void)
+{}
 #endif
 
 #define EBDA_ADDR_POINTER 0x40E
@@ -220,21 +258,21 @@ void __init setup_arch(char **cmdline_p)
 {
 	printk(KERN_INFO "Command line: %s\n", boot_command_line);
 
- 	ROOT_DEV = old_decode_dev(ORIG_ROOT_DEV);
- 	screen_info = SCREEN_INFO;
-	edid_info = EDID_INFO;
-	saved_video_mode = SAVED_VIDEO_MODE;
-	bootloader_type = LOADER_TYPE;
+	ROOT_DEV = old_decode_dev(boot_params.hdr.root_dev);
+	screen_info = boot_params.screen_info;
+	edid_info = boot_params.edid_info;
+	saved_video_mode = boot_params.hdr.vid_mode;
+	bootloader_type = boot_params.hdr.type_of_loader;
 
 #ifdef CONFIG_BLK_DEV_RAM
-	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
-	rd_prompt = ((RAMDISK_FLAGS & RAMDISK_PROMPT_FLAG) != 0);
-	rd_doload = ((RAMDISK_FLAGS & RAMDISK_LOAD_FLAG) != 0);
+	rd_image_start = boot_params.hdr.ram_size & RAMDISK_IMAGE_START_MASK;
+	rd_prompt = ((boot_params.hdr.ram_size & RAMDISK_PROMPT_FLAG) != 0);
+	rd_doload = ((boot_params.hdr.ram_size & RAMDISK_LOAD_FLAG) != 0);
 #endif
 	setup_memory_region();
 	copy_edd();
 
-	if (!MOUNT_ROOT_RDONLY)
+	if (!boot_params.hdr.root_flags)
 		root_mountflags &= ~MS_RDONLY;
 	init_mm.start_code = (unsigned long) &_text;
 	init_mm.end_code = (unsigned long) &_etext;
@@ -245,6 +283,8 @@ void __init setup_arch(char **cmdline_p)
 	code_resource.end = virt_to_phys(&_etext)-1;
 	data_resource.start = virt_to_phys(&_etext);
 	data_resource.end = virt_to_phys(&_edata)-1;
+	bss_resource.start = virt_to_phys(&__bss_start);
+	bss_resource.end = virt_to_phys(&__bss_stop)-1;
 
 	early_identify_cpu(&boot_cpu_data);
 
@@ -270,6 +310,11 @@ void __init setup_arch(char **cmdline_p)
 	init_memory_mapping(0, (end_pfn_map << PAGE_SHIFT));
 
 	dmi_scan_machine();
+
+#ifdef CONFIG_SMP
+	/* setup to use the static apicid table during kernel startup */
+	x86_cpu_to_apicid_ptr = (void *)&x86_cpu_to_apicid_init;
+#endif
 
 #ifdef CONFIG_ACPI
 	/*
@@ -339,28 +384,25 @@ void __init setup_arch(char **cmdline_p)
 	 */
 	find_smp_config();
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (LOADER_TYPE && INITRD_START) {
-		if (INITRD_START + INITRD_SIZE <= (end_pfn << PAGE_SHIFT)) {
-			reserve_bootmem_generic(INITRD_START, INITRD_SIZE);
-			initrd_start = INITRD_START + PAGE_OFFSET;
-			initrd_end = initrd_start+INITRD_SIZE;
-		}
-		else {
+	if (boot_params.hdr.type_of_loader && boot_params.hdr.ramdisk_image) {
+		unsigned long ramdisk_image = boot_params.hdr.ramdisk_image;
+		unsigned long ramdisk_size  = boot_params.hdr.ramdisk_size;
+		unsigned long ramdisk_end   = ramdisk_image + ramdisk_size;
+		unsigned long end_of_mem    = end_pfn << PAGE_SHIFT;
+
+		if (ramdisk_end <= end_of_mem) {
+			reserve_bootmem_generic(ramdisk_image, ramdisk_size);
+			initrd_start = ramdisk_image + PAGE_OFFSET;
+			initrd_end = initrd_start+ramdisk_size;
+		} else {
 			printk(KERN_ERR "initrd extends beyond end of memory "
-			    "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-			    (unsigned long)(INITRD_START + INITRD_SIZE),
-			    (unsigned long)(end_pfn << PAGE_SHIFT));
+			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
+			       ramdisk_end, end_of_mem);
 			initrd_start = 0;
 		}
 	}
 #endif
-#ifdef CONFIG_KEXEC
-	if (crashk_res.start != crashk_res.end) {
-		reserve_bootmem_generic(crashk_res.start,
-			crashk_res.end - crashk_res.start + 1);
-	}
-#endif
-
+	reserve_crashkernel();
 	paging_init();
 
 #ifdef CONFIG_PCI
@@ -526,7 +568,7 @@ static void __init amd_detect_cmp(struct cpuinfo_x86 *c)
  		   but in the same order as the HT nodeids.
  		   If that doesn't result in a usable node fall back to the
  		   path for the previous case.  */
- 		int ht_nodeid = apicid - (cpu_data[0].phys_proc_id << bits);
+		int ht_nodeid = apicid - (cpu_data(0).phys_proc_id << bits);
  		if (ht_nodeid >= 0 &&
  		    apicid_to_node[ht_nodeid] != NUMA_NO_NODE)
  			node = apicid_to_node[ht_nodeid];
@@ -601,7 +643,7 @@ static void __cpuinit init_amd(struct cpuinfo_x86 *c)
 	level = cpuid_eax(1);
 	if (c->x86 == 15 && ((level >= 0x0f48 && level < 0x0f50) || level >= 0x0f58))
 		set_bit(X86_FEATURE_REP_GOOD, &c->x86_capability);
-	if (c->x86 == 0x10)
+	if (c->x86 == 0x10 || c->x86 == 0x11)
 		set_bit(X86_FEATURE_REP_GOOD, &c->x86_capability);
 
 	/* Enable workaround for FXSAVE leak */
@@ -956,6 +998,7 @@ void __cpuinit print_cpu_info(struct cpuinfo_x86 *c)
 static int show_cpuinfo(struct seq_file *m, void *v)
 {
 	struct cpuinfo_x86 *c = v;
+	int cpu = 0;
 
 	/* 
 	 * These flag bits must match the definitions in <asm/cpufeature.h>.
@@ -965,7 +1008,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 	 * applications want to get the raw CPUID data, they should access
 	 * /dev/cpu/<cpu_nr>/cpuid instead.
 	 */
-	static char *x86_cap_flags[] = {
+	static const char *const x86_cap_flags[] = {
 		/* Intel-defined */
 	        "fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
 	        "cx8", "apic", NULL, "sep", "mtrr", "pge", "mca", "cmov",
@@ -996,7 +1039,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		/* Intel-defined (#2) */
 		"pni", NULL, NULL, "monitor", "ds_cpl", "vmx", "smx", "est",
 		"tm2", "ssse3", "cid", NULL, NULL, "cx16", "xtpr", NULL,
-		NULL, NULL, "dca", NULL, NULL, NULL, NULL, "popcnt",
+		NULL, NULL, "dca", "sse4_1", "sse4_2", NULL, NULL, "popcnt",
 		NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 
 		/* VIA/Cyrix/Centaur-defined */
@@ -1006,10 +1049,10 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 
 		/* AMD-defined (#2) */
-		"lahf_lm", "cmp_legacy", "svm", "extapic", "cr8_legacy",
-		"altmovcr8", "abm", "sse4a",
-		"misalignsse", "3dnowprefetch",
-		"osvw", "ibs", NULL, NULL, NULL, NULL,
+		"lahf_lm", "cmp_legacy", "svm", "extapic",
+		"cr8_legacy", "abm", "sse4a", "misalignsse",
+		"3dnowprefetch", "osvw", "ibs", "sse5",
+		"skinit", "wdt", NULL, NULL,
 		NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 		NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 
@@ -1019,7 +1062,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 		NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	};
-	static char *x86_power_flags[] = { 
+	static const char *const x86_power_flags[] = {
 		"ts",	/* temperature sensor */
 		"fid",  /* frequency id control */
 		"vid",  /* voltage id control */
@@ -1034,8 +1077,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 
 
 #ifdef CONFIG_SMP
-	if (!cpu_online(c-cpu_data))
-		return 0;
+	cpu = c->cpu_index;
 #endif
 
 	seq_printf(m,"processor\t: %u\n"
@@ -1043,7 +1085,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		     "cpu family\t: %d\n"
 		     "model\t\t: %d\n"
 		     "model name\t: %s\n",
-		     (unsigned)(c-cpu_data),
+		     (unsigned)cpu,
 		     c->x86_vendor_id[0] ? c->x86_vendor_id : "unknown",
 		     c->x86,
 		     (int)c->x86_model,
@@ -1055,7 +1097,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		seq_printf(m, "stepping\t: unknown\n");
 	
 	if (cpu_has(c,X86_FEATURE_TSC)) {
-		unsigned int freq = cpufreq_quick_get((unsigned)(c-cpu_data));
+		unsigned int freq = cpufreq_quick_get((unsigned)cpu);
 		if (!freq)
 			freq = cpu_khz;
 		seq_printf(m, "cpu MHz\t\t: %u.%03u\n",
@@ -1068,9 +1110,9 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 	
 #ifdef CONFIG_SMP
 	if (smp_num_siblings * c->x86_max_cores > 1) {
-		int cpu = c - cpu_data;
 		seq_printf(m, "physical id\t: %d\n", c->phys_proc_id);
-		seq_printf(m, "siblings\t: %d\n", cpus_weight(cpu_core_map[cpu]));
+		seq_printf(m, "siblings\t: %d\n",
+			       cpus_weight(per_cpu(cpu_core_map, cpu)));
 		seq_printf(m, "core id\t\t: %d\n", c->cpu_core_id);
 		seq_printf(m, "cpu cores\t: %d\n", c->booted_cores);
 	}
@@ -1125,12 +1167,16 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 
 static void *c_start(struct seq_file *m, loff_t *pos)
 {
-	return *pos < NR_CPUS ? cpu_data + *pos : NULL;
+	if (*pos == 0)	/* just in case, cpu 0 is not the first */
+		*pos = first_cpu(cpu_online_map);
+	if ((*pos) < NR_CPUS && cpu_online(*pos))
+		return &cpu_data(*pos);
+	return NULL;
 }
 
 static void *c_next(struct seq_file *m, void *v, loff_t *pos)
 {
-	++*pos;
+	*pos = next_cpu(*pos, cpu_online_map);
 	return c_start(m, pos);
 }
 

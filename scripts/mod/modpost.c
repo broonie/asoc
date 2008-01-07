@@ -268,6 +268,9 @@ static struct symbol *sym_add_exported(const char *name, struct module *mod,
 			     "was in %s%s\n", mod->name, name,
 			     s->module->name,
 			     is_vmlinux(s->module->name) ?"":".ko");
+		} else {
+			/* In case Modules.symvers was out of date */
+			s->module = mod;
 		}
 	}
 	s->preloaded = 0;
@@ -380,6 +383,12 @@ static int parse_elf(struct elf_info *info, const char *filename)
 	hdr->e_type     = TO_NATIVE(hdr->e_type);
 	sechdrs = (void *)hdr + hdr->e_shoff;
 	info->sechdrs = sechdrs;
+
+	/* Check if file offset is correct */
+	if (hdr->e_shoff > info->size) {
+		fatal("section header offset=%u in file '%s' is bigger then filesize=%lu\n", hdr->e_shoff, filename, info->size);
+		return 0;
+	}
 
 	/* Fix endianness in section headers */
 	for (i = 0; i < hdr->e_shnum; i++) {

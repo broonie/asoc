@@ -1515,7 +1515,7 @@ static int ips_is_passthru(struct scsi_cmnd *SC)
                 /* kmap_atomic() ensures addressability of the user buffer.*/
                 /* local_irq_save() protects the KM_IRQ0 address slot.     */
                 local_irq_save(flags);
-                buffer = kmap_atomic(sg->page, KM_IRQ0) + sg->offset;
+                buffer = kmap_atomic(sg_page(sg), KM_IRQ0) + sg->offset;
                 if (buffer && buffer[0] == 'C' && buffer[1] == 'O' &&
                     buffer[2] == 'P' && buffer[3] == 'P') {
                         kunmap_atomic(buffer - sg->offset, KM_IRQ0);
@@ -3252,7 +3252,7 @@ ips_done(ips_ha_t * ha, ips_scb_t * scb)
 		 */
 		if ((scb->breakup) || (scb->sg_break)) {
                         struct scatterlist *sg;
-                        int sg_dma_index, ips_sg_index = 0;
+                        int i, sg_dma_index, ips_sg_index = 0;
 
 			/* we had a data breakup */
 			scb->data_len = 0;
@@ -3261,20 +3261,22 @@ ips_done(ips_ha_t * ha, ips_scb_t * scb)
 
                         /* Spin forward to last dma chunk */
                         sg_dma_index = scb->breakup;
+                        for (i = 0; i < scb->breakup; i++)
+                                sg = sg_next(sg);
 
 			/* Take care of possible partial on last chunk */
                         ips_fill_scb_sg_single(ha,
-                                               sg_dma_address(&sg[sg_dma_index]),
+                                               sg_dma_address(sg),
                                                scb, ips_sg_index++,
-                                               sg_dma_len(&sg[sg_dma_index]));
+                                               sg_dma_len(sg));
 
                         for (; sg_dma_index < scsi_sg_count(scb->scsi_cmd);
-                             sg_dma_index++) {
+                             sg_dma_index++, sg = sg_next(sg)) {
                                 if (ips_fill_scb_sg_single
                                     (ha,
-                                     sg_dma_address(&sg[sg_dma_index]),
+                                     sg_dma_address(sg),
                                      scb, ips_sg_index++,
-                                     sg_dma_len(&sg[sg_dma_index])) < 0)
+                                     sg_dma_len(sg)) < 0)
                                         break;
                         }
 
@@ -3521,7 +3523,7 @@ ips_scmd_buf_write(struct scsi_cmnd *scmd, void *data, unsigned int count)
                 /* kmap_atomic() ensures addressability of the data buffer.*/
                 /* local_irq_save() protects the KM_IRQ0 address slot.     */
                 local_irq_save(flags);
-                buffer = kmap_atomic(sg[i].page, KM_IRQ0) + sg[i].offset;
+                buffer = kmap_atomic(sg_page(&sg[i]), KM_IRQ0) + sg[i].offset;
                 memcpy(buffer, &cdata[xfer_cnt], min_cnt);
                 kunmap_atomic(buffer - sg[i].offset, KM_IRQ0);
                 local_irq_restore(flags);
@@ -3554,7 +3556,7 @@ ips_scmd_buf_read(struct scsi_cmnd *scmd, void *data, unsigned int count)
                 /* kmap_atomic() ensures addressability of the data buffer.*/
                 /* local_irq_save() protects the KM_IRQ0 address slot.     */
                 local_irq_save(flags);
-                buffer = kmap_atomic(sg[i].page, KM_IRQ0) + sg[i].offset;
+                buffer = kmap_atomic(sg_page(&sg[i]), KM_IRQ0) + sg[i].offset;
                 memcpy(&cdata[xfer_cnt], buffer, min_cnt);
                 kunmap_atomic(buffer - sg[i].offset, KM_IRQ0);
                 local_irq_restore(flags);

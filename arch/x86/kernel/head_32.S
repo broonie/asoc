@@ -51,6 +51,15 @@
  */
 LOW_PAGES = 1<<(32-PAGE_SHIFT_asm)
 
+/*
+ * To preserve the DMA pool in PAGEALLOC kernels, we'll allocate
+ * pagetables from above the 16MB DMA limit, so we'll have to set
+ * up pagetables 16MB more (worst-case):
+ */
+#ifdef CONFIG_DEBUG_PAGEALLOC
+LOW_PAGES = LOW_PAGES + 0x1000000
+#endif
+
 #if PTRS_PER_PMD > 1
 PAGE_TABLE_SIZE = (LOW_PAGES / PTRS_PER_PMD) + PTRS_PER_PGD
 #else
@@ -70,22 +79,30 @@ INIT_MAP_BEYOND_END = BOOTBITMAP_SIZE + (PAGE_TABLE_SIZE + ALLOCATOR_SLOP)*PAGE_
  */
 .section .text.head,"ax",@progbits
 ENTRY(startup_32)
+	/* check to see if KEEP_SEGMENTS flag is meaningful */
+	cmpw $0x207, BP_version(%esi)
+	jb 1f
+
+	/* test KEEP_SEGMENTS flag to see if the bootloader is asking
+		us to not reload segments */
+	testb $(1<<6), BP_loadflags(%esi)
+	jnz 2f
 
 /*
  * Set segments to known values.
  */
-	cld
-	lgdt boot_gdt_descr - __PAGE_OFFSET
+1:	lgdt boot_gdt_descr - __PAGE_OFFSET
 	movl $(__BOOT_DS),%eax
 	movl %eax,%ds
 	movl %eax,%es
 	movl %eax,%fs
 	movl %eax,%gs
+2:
 
 /*
  * Clear BSS first so that there are no surprises...
- * No need to cld as DF is already clear from cld above...
  */
+	cld
 	xorl %eax,%eax
 	movl $__bss_start - __PAGE_OFFSET,%edi
 	movl $__bss_stop - __PAGE_OFFSET,%ecx
@@ -107,17 +124,41 @@ ENTRY(startup_32)
 	movsl
 	movl boot_params - __PAGE_OFFSET + NEW_CL_POINTER,%esi
 	andl %esi,%esi
-	jnz 2f			# New command line protocol
-	cmpw $(OLD_CL_MAGIC),OLD_CL_MAGIC_ADDR
-	jne 1f
-	movzwl OLD_CL_OFFSET,%esi
-	addl $(OLD_CL_BASE_ADDR),%esi
-2:
+	jz 1f			# No comand line
 	movl $(boot_command_line - __PAGE_OFFSET),%edi
 	movl $(COMMAND_LINE_SIZE/4),%ecx
 	rep
 	movsl
 1:
+
+#ifdef CONFIG_PARAVIRT
+	cmpw $0x207, (boot_params + BP_version - __PAGE_OFFSET)
+	jb default_entry
+
+	/* Paravirt-compatible boot parameters.  Look to see what architecture
+		we're booting under. */
+	movl (boot_params + BP_hardware_subarch - __PAGE_OFFSET), %eax
+	cmpl $num_subarch_entries, %eax
+	jae bad_subarch
+
+	movl subarch_entries - __PAGE_OFFSET(,%eax,4), %eax
+	subl $__PAGE_OFFSET, %eax
+	jmp *%eax
+
+bad_subarch:
+WEAK(lguest_entry)
+WEAK(xen_entry)
+	/* Unknown implementation; there's really
+	   nothing we can do at this point. */
+	ud2a
+.data
+subarch_entries:
+	.long default_entry		/* normal x86/PC */
+	.long lguest_entry		/* lguest hypervisor */
+	.long xen_entry			/* Xen hypervisor */
+num_subarch_entries = (. - subarch_entries) / 4
+.previous
+#endif /* CONFIG_PARAVIRT */
 
 /*
  * Initialize page tables.  This creates a PDE and a set of page
@@ -131,6 +172,7 @@ ENTRY(startup_32)
  */
 page_pde_offset = (__PAGE_OFFSET >> 20);
 
+default_entry:
 	movl $(pg0 - __PAGE_OFFSET), %edi
 	movl $(swapper_pg_dir - __PAGE_OFFSET), %edx
 	movl $0x007, %eax			/* 0x007 = PRESENT+RW+USER */
@@ -151,6 +193,12 @@ page_pde_offset = (__PAGE_OFFSET >> 20);
 	jb 10b
 	movl %edi,(init_pg_tables_end - __PAGE_OFFSET)
 
+	/* Do an early initialization of the fixmap area */
+	movl $(swapper_pg_dir - __PAGE_OFFSET), %edx
+	movl $(swapper_pg_pmd - __PAGE_OFFSET), %eax
+	addl $0x67, %eax			/* 0x67 == _PAGE_TABLE */
+	movl %eax, 4092(%edx)
+
 	xorl %ebx,%ebx				/* This is the boot CPU (BSP) */
 	jmp 3f
 /*
@@ -165,12 +213,6 @@ page_pde_offset = (__PAGE_OFFSET >> 20);
 #ifndef CONFIG_HOTPLUG_CPU
 .section .init.text,"ax",@progbits
 #endif
-
-	/* Do an early initialization of the fixmap area */
-	movl $(swapper_pg_dir - __PAGE_OFFSET), %edx
-	movl $(swapper_pg_pmd - __PAGE_OFFSET), %eax
-	addl $0x007, %eax			/* 0x007 = PRESENT+RW+USER */
-	movl %eax, 4092(%edx)
 
 #ifdef CONFIG_SMP
 ENTRY(startup_32_smp)
@@ -443,6 +485,7 @@ early_page_fault:
 early_fault:
 	cld
 #ifdef CONFIG_PRINTK
+	pusha
 	movl $(__KERNEL_DS),%eax
 	movl %eax,%ds
 	movl %eax,%es
@@ -534,8 +577,15 @@ int_msg:
 	.asciz "Unknown interrupt or fault at EIP %p %p %p\n"
 
 fault_msg:
-	.ascii "Int %d: CR2 %p  err %p  EIP %p  CS %p  flags %p\n"
-	.asciz "Stack: %p %p %p %p %p %p %p %p\n"
+	.ascii								\
+/* fault info: */	"BUG: Int %d: CR2 %p\n"				\
+/* pusha regs: */	"     EDI %p  ESI %p  EBP %p  ESP %p\n"		\
+			"     EBX %p  EDX %p  ECX %p  EAX %p\n"		\
+/* fault frame: */	"     err %p  EIP %p   CS %p  flg %p\n"		\
+									\
+			"Stack: %p %p %p %p %p %p %p %p\n"		\
+			"       %p %p %p %p %p %p %p %p\n"		\
+			"       %p %p %p %p %p %p %p %p\n"
 
 #include "../../x86/xen/xen-head.S"
 

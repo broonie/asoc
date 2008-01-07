@@ -165,7 +165,7 @@ static int mangle_content_len(struct sk_buff *skb,
 
 	dataoff = ip_hdrlen(skb) + sizeof(struct udphdr);
 
-	/* Get actual SDP lenght */
+	/* Get actual SDP length */
 	if (ct_sip_get_info(ct, dptr, skb->len - dataoff, &matchoff,
 			    &matchlen, POS_SDP_HEADER) > 0) {
 
@@ -293,8 +293,8 @@ static void __exit nf_nat_sip_fini(void)
 
 static int __init nf_nat_sip_init(void)
 {
-	BUG_ON(rcu_dereference(nf_nat_sip_hook));
-	BUG_ON(rcu_dereference(nf_nat_sdp_hook));
+	BUG_ON(nf_nat_sip_hook != NULL);
+	BUG_ON(nf_nat_sdp_hook != NULL);
 	rcu_assign_pointer(nf_nat_sip_hook, ip_nat_sip);
 	rcu_assign_pointer(nf_nat_sdp_hook, ip_nat_sdp);
 	return 0;

@@ -803,7 +803,7 @@ static inline int tcp_is_cwnd_limited(const struct sock *sk, u32 in_flight)
 		return left <= tcp_max_burst(tp);
 }
 
-static inline void tcp_minshall_update(struct tcp_sock *tp, int mss,
+static inline void tcp_minshall_update(struct tcp_sock *tp, unsigned int mss,
 				       const struct sk_buff *skb)
 {
 	if (skb->len < mss)
@@ -1288,6 +1288,9 @@ static inline void tcp_insert_write_queue_before(struct sk_buff *new,
 						  struct sock *sk)
 {
 	__skb_insert(new, skb->prev, skb, &sk->sk_write_queue);
+
+	if (sk->sk_send_head == skb)
+		sk->sk_send_head = new;
 }
 
 static inline void tcp_unlink_write_queue(struct sk_buff *skb, struct sock *sk)

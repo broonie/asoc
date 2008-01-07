@@ -60,19 +60,21 @@
 #include <asm/vmi.h>
 #include <setup_arch.h>
 #include <bios_ebda.h>
+#include <asm/cacheflush.h>
 
 /* This value is set up by the early boot code to point to the value
    immediately after the boot time page tables.  It contains a *physical*
    address, and must not be in the .bss segment! */
 unsigned long init_pg_tables_end __initdata = ~0UL;
 
-int disable_pse __devinitdata = 0;
+int disable_pse __cpuinitdata = 0;
 
 /*
  * Machine setup..
  */
 extern struct resource code_resource;
 extern struct resource data_resource;
+extern struct resource bss_resource;
 
 /* cpu data as detected by the assembly code in head.S */
 struct cpuinfo_x86 new_cpu_data __cpuinitdata = { 0, 0, 0, 0, -1, 1, 0, 0, -1 };
@@ -84,9 +86,6 @@ unsigned long mmu_cr4_features;
 
 /* for MCA, but anyone else can use it if they want */
 unsigned int machine_id;
-#ifdef CONFIG_MCA
-EXPORT_SYMBOL(machine_id);
-#endif
 unsigned int machine_submodel_id;
 unsigned int BIOS_revision;
 unsigned int mca_pentium_flag;
@@ -137,10 +136,11 @@ EXPORT_SYMBOL(edd);
  */
 static inline void copy_edd(void)
 {
-     memcpy(edd.mbr_signature, EDD_MBR_SIGNATURE, sizeof(edd.mbr_signature));
-     memcpy(edd.edd_info, EDD_BUF, sizeof(edd.edd_info));
-     edd.mbr_signature_nr = EDD_MBR_SIG_NR;
-     edd.edd_info_nr = EDD_NR;
+     memcpy(edd.mbr_signature, boot_params.edd_mbr_sig_buffer,
+	    sizeof(edd.mbr_signature));
+     memcpy(edd.edd_info, boot_params.eddbuf, sizeof(edd.edd_info));
+     edd.mbr_signature_nr = boot_params.edd_mbr_sig_buf_entries;
+     edd.edd_info_nr = boot_params.eddbuf_entries;
 }
 #else
 static inline void copy_edd(void)
@@ -377,6 +377,49 @@ extern unsigned long __init setup_memory(void);
 extern void zone_sizes_init(void);
 #endif /* !CONFIG_NEED_MULTIPLE_NODES */
 
+static inline unsigned long long get_total_mem(void)
+{
+	unsigned long long total;
+
+	total = max_low_pfn - min_low_pfn;
+#ifdef CONFIG_HIGHMEM
+	total += highend_pfn - highstart_pfn;
+#endif
+
+	return total << PAGE_SHIFT;
+}
+
+#ifdef CONFIG_KEXEC
+static void __init reserve_crashkernel(void)
+{
+	unsigned long long total_mem;
+	unsigned long long crash_size, crash_base;
+	int ret;
+
+	total_mem = get_total_mem();
+
+	ret = parse_crashkernel(boot_command_line, total_mem,
+			&crash_size, &crash_base);
+	if (ret == 0 && crash_size > 0) {
+		if (crash_base > 0) {
+			printk(KERN_INFO "Reserving %ldMB of memory at %ldMB "
+					"for crashkernel (System RAM: %ldMB)\n",
+					(unsigned long)(crash_size >> 20),
+					(unsigned long)(crash_base >> 20),
+					(unsigned long)(total_mem >> 20));
+			crashk_res.start = crash_base;
+			crashk_res.end   = crash_base + crash_size - 1;
+			reserve_bootmem(crash_base, crash_size);
+		} else
+			printk(KERN_INFO "crashkernel reservation failed - "
+					"you have to specify a base address\n");
+	}
+}
+#else
+static inline void __init reserve_crashkernel(void)
+{}
+#endif
+
 void __init setup_bootmem_allocator(void)
 {
 	unsigned long bootmap_size;
@@ -434,26 +477,25 @@ void __init setup_bootmem_allocator(void)
 #endif
 	numa_kva_reserve();
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (LOADER_TYPE && INITRD_START) {
-		if (INITRD_START + INITRD_SIZE <= (max_low_pfn << PAGE_SHIFT)) {
-			reserve_bootmem(INITRD_START, INITRD_SIZE);
-			initrd_start = INITRD_START + PAGE_OFFSET;
-			initrd_end = initrd_start+INITRD_SIZE;
-		}
-		else {
+	if (boot_params.hdr.type_of_loader && boot_params.hdr.ramdisk_image) {
+		unsigned long ramdisk_image = boot_params.hdr.ramdisk_image;
+		unsigned long ramdisk_size  = boot_params.hdr.ramdisk_size;
+		unsigned long ramdisk_end   = ramdisk_image + ramdisk_size;
+		unsigned long end_of_lowmem = max_low_pfn << PAGE_SHIFT;
+
+		if (ramdisk_end <= end_of_lowmem) {
+			reserve_bootmem(ramdisk_image, ramdisk_size);
+			initrd_start = ramdisk_image + PAGE_OFFSET;
+			initrd_end = initrd_start+ramdisk_size;
+		} else {
 			printk(KERN_ERR "initrd extends beyond end of memory "
-			    "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-			    INITRD_START + INITRD_SIZE,
-			    max_low_pfn << PAGE_SHIFT);
+			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
+			       ramdisk_end, end_of_lowmem);
 			initrd_start = 0;
 		}
 	}
 #endif
-#ifdef CONFIG_KEXEC
-	if (crashk_res.start != crashk_res.end)
-		reserve_bootmem(crashk_res.start,
-			crashk_res.end - crashk_res.start + 1);
-#endif
+	reserve_crashkernel();
 }
 
 /*
@@ -512,28 +554,29 @@ void __init setup_arch(char **cmdline_p)
 	 * the system table is valid.  If not, then initialize normally.
 	 */
 #ifdef CONFIG_EFI
-	if ((LOADER_TYPE == 0x50) && EFI_SYSTAB)
+	if ((boot_params.hdr.type_of_loader == 0x50) &&
+	    boot_params.efi_info.efi_systab)
 		efi_enabled = 1;
 #endif
 
- 	ROOT_DEV = old_decode_dev(ORIG_ROOT_DEV);
- 	screen_info = SCREEN_INFO;
-	edid_info = EDID_INFO;
-	apm_info.bios = APM_BIOS_INFO;
-	ist_info = IST_INFO;
-	saved_videomode = VIDEO_MODE;
-	if( SYS_DESC_TABLE.length != 0 ) {
-		set_mca_bus(SYS_DESC_TABLE.table[3] & 0x2);
-		machine_id = SYS_DESC_TABLE.table[0];
-		machine_submodel_id = SYS_DESC_TABLE.table[1];
-		BIOS_revision = SYS_DESC_TABLE.table[2];
+	ROOT_DEV = old_decode_dev(boot_params.hdr.root_dev);
+	screen_info = boot_params.screen_info;
+	edid_info = boot_params.edid_info;
+	apm_info.bios = boot_params.apm_bios_info;
+	ist_info = boot_params.ist_info;
+	saved_videomode = boot_params.hdr.vid_mode;
+	if( boot_params.sys_desc_table.length != 0 ) {
+		set_mca_bus(boot_params.sys_desc_table.table[3] & 0x2);
+		machine_id = boot_params.sys_desc_table.table[0];
+		machine_submodel_id = boot_params.sys_desc_table.table[1];
+		BIOS_revision = boot_params.sys_desc_table.table[2];
 	}
-	bootloader_type = LOADER_TYPE;
+	bootloader_type = boot_params.hdr.type_of_loader;
 
 #ifdef CONFIG_BLK_DEV_RAM
-	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
-	rd_prompt = ((RAMDISK_FLAGS & RAMDISK_PROMPT_FLAG) != 0);
-	rd_doload = ((RAMDISK_FLAGS & RAMDISK_LOAD_FLAG) != 0);
+	rd_image_start = boot_params.hdr.ram_size & RAMDISK_IMAGE_START_MASK;
+	rd_prompt = ((boot_params.hdr.ram_size & RAMDISK_PROMPT_FLAG) != 0);
+	rd_doload = ((boot_params.hdr.ram_size & RAMDISK_LOAD_FLAG) != 0);
 #endif
 	ARCH_SETUP
 	if (efi_enabled)
@@ -545,7 +588,7 @@ void __init setup_arch(char **cmdline_p)
 
 	copy_edd();
 
-	if (!MOUNT_ROOT_RDONLY)
+	if (!boot_params.hdr.root_flags)
 		root_mountflags &= ~MS_RDONLY;
 	init_mm.start_code = (unsigned long) _text;
 	init_mm.end_code = (unsigned long) _etext;
@@ -556,6 +599,8 @@ void __init setup_arch(char **cmdline_p)
 	code_resource.end = virt_to_phys(_etext)-1;
 	data_resource.start = virt_to_phys(_etext);
 	data_resource.end = virt_to_phys(_edata)-1;
+	bss_resource.start = virt_to_phys(&__bss_start);
+	bss_resource.end = virt_to_phys(&__bss_stop)-1;
 
 	parse_early_param();
 
@@ -580,7 +625,7 @@ void __init setup_arch(char **cmdline_p)
 	/*
 	 * NOTE: before this point _nobody_ is allowed to allocate
 	 * any memory using the bootmem allocator.  Although the
-	 * alloctor is now initialised only the first 8Mb of the kernel
+	 * allocator is now initialised only the first 8Mb of the kernel
 	 * virtual address space has been mapped.  All allocations before
 	 * paging_init() has completed must use the alloc_bootmem_low_pages()
 	 * variant (which allocates DMA'able memory) and care must be taken
@@ -617,9 +662,7 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 #ifdef CONFIG_PCI
-#ifdef CONFIG_X86_IO_APIC
-	check_acpi_pci();	/* Checks more than just ACPI actually */
-#endif
+	early_quirks();
 #endif
 
 #ifdef CONFIG_ACPI

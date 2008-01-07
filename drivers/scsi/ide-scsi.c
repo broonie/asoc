@@ -47,9 +47,9 @@
 #include <linux/scatterlist.h>
 #include <linux/delay.h>
 #include <linux/mutex.h>
+#include <linux/bitops.h>
 
 #include <asm/io.h>
-#include <asm/bitops.h>
 #include <asm/uaccess.h>
 
 #include <scsi/scsi.h>
@@ -70,6 +70,7 @@ typedef struct idescsi_pc_s {
 	u8 *buffer;				/* Data buffer */
 	u8 *current_position;			/* Pointer into the above buffer */
 	struct scatterlist *sg;			/* Scatter gather table */
+	unsigned int sg_cnt;			/* Number of entries in sg */
 	int b_count;				/* Bytes transferred from current entry */
 	struct scsi_cmnd *scsi_cmd;		/* SCSI command */
 	void (*done)(struct scsi_cmnd *);	/* Scsi completion routine */
@@ -173,33 +174,34 @@ static void idescsi_input_buffers (ide_drive_t *drive, idescsi_pc_t *pc, unsigne
 	char *buf;
 
 	while (bcount) {
-		if (pc->sg - scsi_sglist(pc->scsi_cmd) >
-		                                 scsi_sg_count(pc->scsi_cmd)) {
-			printk (KERN_ERR "ide-scsi: scatter gather table too small, discarding data\n");
-			idescsi_discard_data (drive, bcount);
-			return;
-		}
 		count = min(pc->sg->length - pc->b_count, bcount);
-		if (PageHighMem(pc->sg->page)) {
+		if (PageHighMem(sg_page(pc->sg))) {
 			unsigned long flags;
 
 			local_irq_save(flags);
-			buf = kmap_atomic(pc->sg->page, KM_IRQ0) +
+			buf = kmap_atomic(sg_page(pc->sg), KM_IRQ0) +
 					pc->sg->offset;
 			drive->hwif->atapi_input_bytes(drive,
 						buf + pc->b_count, count);
 			kunmap_atomic(buf - pc->sg->offset, KM_IRQ0);
 			local_irq_restore(flags);
 		} else {
-			buf = page_address(pc->sg->page) + pc->sg->offset;
+			buf = sg_virt(pc->sg);
 			drive->hwif->atapi_input_bytes(drive,
 						buf + pc->b_count, count);
 		}
 		bcount -= count; pc->b_count += count;
 		if (pc->b_count == pc->sg->length) {
-			pc->sg++;
+			if (!--pc->sg_cnt)
+				break;
+			pc->sg = sg_next(pc->sg);
 			pc->b_count = 0;
 		}
+	}
+
+	if (bcount) {
+		printk (KERN_ERR "ide-scsi: scatter gather table too small, discarding data\n");
+		idescsi_discard_data (drive, bcount);
 	}
 }
 
@@ -209,44 +211,40 @@ static void idescsi_output_buffers (ide_drive_t *drive, idescsi_pc_t *pc, unsign
 	char *buf;
 
 	while (bcount) {
-		if (pc->sg - scsi_sglist(pc->scsi_cmd) >
-		                                 scsi_sg_count(pc->scsi_cmd)) {
-			printk (KERN_ERR "ide-scsi: scatter gather table too small, padding with zeros\n");
-			idescsi_output_zeros (drive, bcount);
-			return;
-		}
 		count = min(pc->sg->length - pc->b_count, bcount);
-		if (PageHighMem(pc->sg->page)) {
+		if (PageHighMem(sg_page(pc->sg))) {
 			unsigned long flags;
 
 			local_irq_save(flags);
-			buf = kmap_atomic(pc->sg->page, KM_IRQ0) +
+			buf = kmap_atomic(sg_page(pc->sg), KM_IRQ0) +
 						pc->sg->offset;
 			drive->hwif->atapi_output_bytes(drive,
 						buf + pc->b_count, count);
 			kunmap_atomic(buf - pc->sg->offset, KM_IRQ0);
 			local_irq_restore(flags);
 		} else {
-			buf = page_address(pc->sg->page) + pc->sg->offset;
+			buf = sg_virt(pc->sg);
 			drive->hwif->atapi_output_bytes(drive,
 						buf + pc->b_count, count);
 		}
 		bcount -= count; pc->b_count += count;
 		if (pc->b_count == pc->sg->length) {
-			pc->sg++;
+			if (!--pc->sg_cnt)
+				break;
+			pc->sg = sg_next(pc->sg);
 			pc->b_count = 0;
 		}
 	}
+
+	if (bcount) {
+		printk (KERN_ERR "ide-scsi: scatter gather table too small, padding with zeros\n");
+		idescsi_output_zeros (drive, bcount);
+	}
 }
 
-static void hexdump(u8 *x, int len)
+static void ide_scsi_hex_dump(u8 *data, int len)
 {
-	int i;
-
-	printk("[ ");
-	for (i = 0; i < len; i++)
-		printk("%x ", x[i]);
-	printk("]\n");
+	print_hex_dump(KERN_CONT, "", DUMP_PREFIX_NONE, 16, 1, data, len, 0);
 }
 
 static int idescsi_check_condition(ide_drive_t *drive, struct request *failed_command)
@@ -279,7 +277,7 @@ static int idescsi_check_condition(ide_drive_t *drive, struct request *failed_co
 	pc->scsi_cmd = ((idescsi_pc_t *) failed_command->special)->scsi_cmd;
 	if (test_bit(IDESCSI_LOG_CMD, &scsi->log)) {
 		printk ("ide-scsi: %s: queue cmd = ", drive->name);
-		hexdump(pc->c, 6);
+		ide_scsi_hex_dump(pc->c, 6);
 	}
 	rq->rq_disk = scsi->disk;
 	return ide_do_drive_cmd(drive, rq, ide_preempt);
@@ -334,7 +332,7 @@ static int idescsi_end_request (ide_drive_t *drive, int uptodate, int nrsecs)
 		idescsi_pc_t *opc = (idescsi_pc_t *) rq->buffer;
 		if (log) {
 			printk ("ide-scsi: %s: wrap up check %lu, rst = ", drive->name, opc->scsi_cmd->serial_number);
-			hexdump(pc->buffer,16);
+			ide_scsi_hex_dump(pc->buffer, 16);
 		}
 		memcpy((void *) opc->scsi_cmd->sense_buffer, pc->buffer, SCSI_SENSE_BUFFERSIZE);
 		kfree(pc->buffer);
@@ -804,6 +802,7 @@ static int idescsi_queue (struct scsi_cmnd *cmd,
 	memcpy (pc->c, cmd->cmnd, cmd->cmd_len);
 	pc->buffer = NULL;
 	pc->sg = scsi_sglist(cmd);
+	pc->sg_cnt = scsi_sg_count(cmd);
 	pc->b_count = 0;
 	pc->request_transfer = pc->buffer_size = scsi_bufflen(cmd);
 	pc->scsi_cmd = cmd;
@@ -812,10 +811,10 @@ static int idescsi_queue (struct scsi_cmnd *cmd,
 
 	if (test_bit(IDESCSI_LOG_CMD, &scsi->log)) {
 		printk ("ide-scsi: %s: que %lu, cmd = ", drive->name, cmd->serial_number);
-		hexdump(cmd->cmnd, cmd->cmd_len);
+		ide_scsi_hex_dump(cmd->cmnd, cmd->cmd_len);
 		if (memcmp(pc->c, cmd->cmnd, cmd->cmd_len)) {
 			printk ("ide-scsi: %s: que %lu, tsl = ", drive->name, cmd->serial_number);
-			hexdump(pc->c, 12);
+			ide_scsi_hex_dump(pc->c, 12);
 		}
 	}
 

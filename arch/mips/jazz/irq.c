@@ -4,7 +4,7 @@
  * for more details.
  *
  * Copyright (C) 1992 Linus Torvalds
- * Copyright (C) 1994 - 2001, 2003 Ralf Baechle
+ * Copyright (C) 1994 - 2001, 2003, 07 Ralf Baechle
  */
 #include <linux/clockchips.h>
 #include <linux/init.h>
@@ -13,6 +13,7 @@
 #include <linux/spinlock.h>
 
 #include <asm/irq_cpu.h>
+#include <asm/i8253.h>
 #include <asm/i8259.h>
 #include <asm/io.h>
 #include <asm/jazz.h>
@@ -96,9 +97,10 @@ asmlinkage void plat_irq_dispatch(void)
 	if (pending & IE_IRQ4) {
 		r4030_read_reg32(JAZZ_TIMER_REGISTER);
 		do_IRQ(JAZZ_TIMER_IRQ);
-	} else if (pending & IE_IRQ2)
-		do_IRQ(r4030_read_reg32(JAZZ_EISA_IRQ_ACK));
-	else if (pending & IE_IRQ1) {
+	} else if (pending & IE_IRQ2) {
+		irq = *(volatile u8 *)JAZZ_EISA_IRQ_ACK;
+		do_IRQ(irq);
+	} else if (pending & IE_IRQ1) {
 		irq = *(volatile u8 *)JAZZ_IO_IRQ_SOURCE >> 2;
 		if (likely(irq > 0))
 			do_IRQ(irq + JAZZ_IRQ_START - 1);
@@ -116,16 +118,16 @@ static void r4030_set_mode(enum clock_event_mode mode,
 struct clock_event_device r4030_clockevent = {
 	.name		= "r4030",
 	.features	= CLOCK_EVT_FEAT_PERIODIC,
-	.rating		= 100,
+	.rating		= 300,
 	.irq		= JAZZ_TIMER_IRQ,
-	.cpumask	= CPU_MASK_CPU0,
 	.set_mode	= r4030_set_mode,
 };
 
 static irqreturn_t r4030_timer_interrupt(int irq, void *dev_id)
 {
-	r4030_clockevent.event_handler(&r4030_clockevent);
+	struct clock_event_device *cd = dev_id;
 
+	cd->event_handler(cd);
 	return IRQ_HANDLED;
 }
 
@@ -133,14 +135,21 @@ static struct irqaction r4030_timer_irqaction = {
 	.handler	= r4030_timer_interrupt,
 	.flags		= IRQF_DISABLED,
 	.mask		= CPU_MASK_CPU0,
-	.name		= "timer",
+	.name		= "R4030 timer",
 };
 
-void __init plat_timer_setup(struct irqaction *ignored)
+void __init plat_time_init(void)
 {
-	struct irqaction *irq = &r4030_timer_irqaction;
+	struct clock_event_device *cd = &r4030_clockevent;
+	struct irqaction *action = &r4030_timer_irqaction;
+	unsigned int cpu = smp_processor_id();
 
 	BUG_ON(HZ != 100);
+
+	cd->cpumask             = cpumask_of_cpu(cpu);
+	clockevents_register_device(cd);
+	action->dev_id = cd;
+	setup_irq(JAZZ_TIMER_IRQ, action);
 
 	/*
 	 * Set clock to 100Hz.
@@ -149,7 +158,5 @@ void __init plat_timer_setup(struct irqaction *ignored)
 	 * a programmable 4-bit divider.  This makes it fairly inflexible.
 	 */
 	r4030_write_reg32(JAZZ_TIMER_INTERVAL, 9);
-	setup_irq(JAZZ_TIMER_IRQ, irq);
-
-	clockevents_register_device(&r4030_clockevent);
+	setup_pit_timer();
 }

@@ -95,7 +95,6 @@ struct ehca_sma_attr {
 struct ehca_sport {
 	struct ib_cq *ibcq_aqp1;
 	struct ib_qp *ibqp_aqp1;
-	enum ib_rate  rate;
 	enum ib_port_state port_state;
 	struct ehca_sma_attr saved_attr;
 };
@@ -107,7 +106,7 @@ struct ehca_sport {
 
 struct ehca_shca {
 	struct ib_device ib_device;
-	struct ibmebus_dev *ibmebus_dev;
+	struct of_device *ofdev;
 	u8 num_ports;
 	int hw_level;
 	struct list_head shca_list;
@@ -323,7 +322,7 @@ extern int ehca_static_rate;
 extern int ehca_port_act_time;
 extern int ehca_use_hp_mr;
 extern int ehca_scaling_code;
-extern int ehca_mr_largepage;
+extern int ehca_lock_hcalls;
 
 struct ipzu_queue_resp {
 	u32 qe_size;      /* queue entry size */

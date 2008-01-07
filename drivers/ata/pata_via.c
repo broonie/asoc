@@ -63,7 +63,7 @@
 #include <linux/dmi.h>
 
 #define DRV_NAME "pata_via"
-#define DRV_VERSION "0.3.2"
+#define DRV_VERSION "0.3.3"
 
 /*
  *	The following comes directly from Vojtech Pavlik's ide/pci/via82cxxx
@@ -176,7 +176,7 @@ static int via_cable_detect(struct ata_port *ap) {
 	if ((config->flags & VIA_UDMA) < VIA_UDMA_66)
 		return ATA_CBL_PATA40;
 	/* UDMA 66 chips have only drive side logic */
-	else if((config->flags & VIA_UDMA) < VIA_UDMA_100)
+	else if ((config->flags & VIA_UDMA) < VIA_UDMA_100)
 		return ATA_CBL_PATA_UNK;
 	/* UDMA 100 or later */
 	pci_read_config_dword(pdev, 0x50, &ata66);
@@ -296,7 +296,7 @@ static void via_do_set_mode(struct ata_port *ap, struct ata_device *adev, int mo
 	}
 
 	/* Set UDMA unless device is not UDMA capable */
-	if (udma_type) {
+	if (udma_type && t.udma) {
 		u8 cable80_status;
 
 		/* Get 80-wire cable detection bit */
@@ -420,7 +420,7 @@ static struct ata_port_operations via_port_ops_noirq = {
  *	@pdev: PCI device
  *	@flags: configuration flags
  *
- *	Set the FIFO properties for this device if neccessary. Used both on
+ *	Set the FIFO properties for this device if necessary. Used both on
  *	set up and on and the resume path
  */
 

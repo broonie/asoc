@@ -55,7 +55,7 @@
 #define SMC_insw(a, r, p, l)	readsw((a) + (r), p, l)
 #define SMC_outsw(a, r, p, l)	writesw((a) + (r), p, l)
 
-#elif defined(CONFIG_BFIN)
+#elif defined(CONFIG_BLACKFIN)
 
 #define SMC_IRQ_FLAGS		IRQF_TRIGGER_HIGH
 #define RPC_LSA_DEFAULT		RPC_LED_100_10
@@ -223,6 +223,21 @@ SMC_outw(u16 val, void __iomem *ioaddr, int reg)
 		writew(val, ioaddr + reg);
 	}
 }
+
+#elif defined(CONFIG_MACH_ZYLONITE)
+
+#define SMC_CAN_USE_8BIT        1
+#define SMC_CAN_USE_16BIT       1
+#define SMC_CAN_USE_32BIT       0
+#define SMC_IO_SHIFT            0
+#define SMC_NOWAIT              1
+#define SMC_USE_PXA_DMA		1
+#define SMC_inb(a, r)           readb((a) + (r))
+#define SMC_inw(a, r)           readw((a) + (r))
+#define SMC_insw(a, r, p, l)    insw((a) + (r), p, l)
+#define SMC_outsw(a, r, p, l)   outsw((a) + (r), p, l)
+#define SMC_outb(v, a, r)       writeb(v, (a) + (r))
+#define SMC_outw(v, a, r)       writew(v, (a) + (r))
 
 #elif	defined(CONFIG_ARCH_OMAP)
 

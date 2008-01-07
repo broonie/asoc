@@ -676,7 +676,7 @@ static int sd_getgeo(struct block_device *bdev, struct hd_geometry *geo)
  *	success as well). Returns a negated errno value in case of error.
  *
  *	Note: most ioctls are forward onto the block subsystem or further
- *	down in the scsi subsytem.
+ *	down in the scsi subsystem.
  **/
 static int sd_ioctl(struct inode * inode, struct file * filp, 
 		    unsigned int cmd, unsigned long arg)
@@ -824,27 +824,6 @@ static int sd_sync_cache(struct scsi_disk *sdkp)
 	if (res)
 		return -EIO;
 	return 0;
-}
-
-static int sd_issue_flush(struct request_queue *q, struct gendisk *disk,
-			  sector_t *error_sector)
-{
-	int ret = 0;
-	struct scsi_device *sdp = q->queuedata;
-	struct scsi_disk *sdkp;
-
-	if (sdp->sdev_state != SDEV_RUNNING)
-		return -ENXIO;
-
-	sdkp = scsi_disk_get_from_dev(&sdp->sdev_gendev);
-
-	if (!sdkp)
-               return -ENODEV;
-
-	if (sdkp->WCE)
-		ret = sd_sync_cache(sdkp);
-	scsi_disk_put(sdkp);
-	return ret;
 }
 
 static void sd_prepare_flush(struct request_queue *q, struct request *rq)
@@ -1697,7 +1676,6 @@ static int sd_probe(struct device *dev)
 	sd_revalidate_disk(gd);
 
 	blk_queue_prep_rq(sdp->request_queue, sd_prep_fn);
-	blk_queue_issue_flush_fn(sdp->request_queue, sd_issue_flush);
 
 	gd->driverfs_dev = &sdp->sdev_gendev;
 	gd->flags = GENHD_FL_DRIVERFS;

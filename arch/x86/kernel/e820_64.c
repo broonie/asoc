@@ -24,7 +24,7 @@
 #include <asm/page.h>
 #include <asm/e820.h>
 #include <asm/proto.h>
-#include <asm/bootsetup.h>
+#include <asm/setup.h>
 #include <asm/sections.h>
 
 struct e820map e820;
@@ -47,7 +47,7 @@ unsigned long end_pfn_map;
  */
 static unsigned long __initdata end_user_pfn = MAXMEM>>PAGE_SHIFT;
 
-extern struct resource code_resource, data_resource;
+extern struct resource code_resource, data_resource, bss_resource;
 
 /* Check for some hardcoded bad areas that early boot is not allowed to touch */ 
 static inline int bad_addr(unsigned long *addrp, unsigned long size)
@@ -68,10 +68,15 @@ static inline int bad_addr(unsigned long *addrp, unsigned long size)
 
 	/* initrd */ 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (LOADER_TYPE && INITRD_START && last >= INITRD_START && 
-	    addr < INITRD_START+INITRD_SIZE) { 
-		*addrp = PAGE_ALIGN(INITRD_START + INITRD_SIZE);
-		return 1;
+	if (boot_params.hdr.type_of_loader && boot_params.hdr.ramdisk_image) {
+		unsigned long ramdisk_image = boot_params.hdr.ramdisk_image;
+		unsigned long ramdisk_size  = boot_params.hdr.ramdisk_size;
+		unsigned long ramdisk_end   = ramdisk_image+ramdisk_size;
+
+		if (last >= ramdisk_image && addr < ramdisk_end) {
+			*addrp = PAGE_ALIGN(ramdisk_end);
+			return 1;
+		}
 	} 
 #endif
 	/* kernel code */
@@ -220,8 +225,10 @@ void __init e820_reserve_resources(void)
 			 */
 			request_resource(res, &code_resource);
 			request_resource(res, &data_resource);
+			request_resource(res, &bss_resource);
 #ifdef CONFIG_KEXEC
-			request_resource(res, &crashk_res);
+			if (crashk_res.start != crashk_res.end)
+				request_resource(res, &crashk_res);
 #endif
 		}
 	}
@@ -594,8 +601,8 @@ void __init setup_memory_region(void)
 	 * Otherwise fake a memory map; one section from 0k->640k,
 	 * the next section from 1mb->appropriate_mem_k
 	 */
-	sanitize_e820_map(E820_MAP, &E820_MAP_NR);
-	if (copy_e820_map(E820_MAP, E820_MAP_NR) < 0)
+	sanitize_e820_map(boot_params.e820_map, &boot_params.e820_entries);
+	if (copy_e820_map(boot_params.e820_map, boot_params.e820_entries) < 0)
 		early_panic("Cannot find a valid memory map");
 	printk(KERN_INFO "BIOS-provided physical RAM map:\n");
 	e820_print_map("BIOS-e820");
@@ -722,4 +729,23 @@ __init void e820_setup_gap(void)
 
 	printk(KERN_INFO "Allocating PCI resources starting at %lx (gap: %lx:%lx)\n",
 		pci_mem_start, gapstart, gapsize);
+}
+
+int __init arch_get_ram_range(int slot, u64 *addr, u64 *size)
+{
+	int i;
+
+	if (slot < 0 || slot >= e820.nr_map)
+		return -1;
+	for (i = slot; i < e820.nr_map; i++) {
+		if (e820.map[i].type != E820_RAM)
+			continue;
+		break;
+	}
+	if (i == e820.nr_map || e820.map[i].addr > (max_pfn << PAGE_SHIFT))
+		return -1;
+	*addr = e820.map[i].addr;
+	*size = min_t(u64, e820.map[i].size + e820.map[i].addr,
+		max_pfn << PAGE_SHIFT) - *addr;
+	return i + 1;
 }

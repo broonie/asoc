@@ -1521,7 +1521,7 @@ pmu_sr_intr(void)
 			req = current_req;
 			/* 
 			 * For PMU sleep and freq change requests, we lock the
-			 * PMU until it's explicitely unlocked. This avoids any
+			 * PMU until it's explicitly unlocked. This avoids any
 			 * spurrious event polling getting in
 			 */
 			current_req = req->next;
@@ -2336,6 +2336,7 @@ powerbook_sleep_3400(void)
 	ret = pmac_suspend_devices();
 	if (ret) {
 		pbook_free_pci_save();
+		iounmap(mem_ctrl);
 		printk(KERN_ERR "Sleep rejected by devices\n");
 		return ret;
 	}

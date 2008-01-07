@@ -4,12 +4,17 @@
 #include <asm/types.h>
 
 struct scatterlist {
-    struct page		*page;
+#ifdef CONFIG_DEBUG_SG
+    unsigned long	sg_magic;
+#endif
+    unsigned long	page_link;
     unsigned int	offset;
     unsigned int	length;
     dma_addr_t		dma_address;
     unsigned int        dma_length;
 };
+
+#define ARCH_HAS_SG_CHAIN
 
 #define ISA_DMA_THRESHOLD (0x00ffffff)
 

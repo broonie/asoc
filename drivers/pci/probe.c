@@ -276,7 +276,8 @@ static void pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 			sz = pci_size(l, sz, (u32)PCI_ROM_ADDRESS_MASK);
 			if (sz) {
 				res->flags = (l & IORESOURCE_ROM_ENABLE) |
-				  IORESOURCE_MEM | IORESOURCE_READONLY;
+				  IORESOURCE_MEM | IORESOURCE_PREFETCH |
+				  IORESOURCE_READONLY | IORESOURCE_CACHEABLE;
 				res->start = l & PCI_ROM_ADDRESS_MASK;
 				res->end = res->start + (unsigned long) sz;
 			}
@@ -454,22 +455,6 @@ struct pci_bus *pci_add_new_bus(struct pci_bus *parent, struct pci_dev *dev, int
 	return child;
 }
 
-static void pci_enable_crs(struct pci_dev *dev)
-{
-	u16 cap, rpctl;
-	int rpcap = pci_find_capability(dev, PCI_CAP_ID_EXP);
-	if (!rpcap)
-		return;
-
-	pci_read_config_word(dev, rpcap + PCI_CAP_FLAGS, &cap);
-	if (((cap & PCI_EXP_FLAGS_TYPE) >> 4) != PCI_EXP_TYPE_ROOT_PORT)
-		return;
-
-	pci_read_config_word(dev, rpcap + PCI_EXP_RTCTL, &rpctl);
-	rpctl |= PCI_EXP_RTCTL_CRSSVE;
-	pci_write_config_word(dev, rpcap + PCI_EXP_RTCTL, rpctl);
-}
-
 static void pci_fixup_parent_subordinate_busnr(struct pci_bus *child, int max)
 {
 	struct pci_bus *parent = child->parent;
@@ -515,8 +500,6 @@ int pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int max, int pass
 	pci_read_config_word(dev, PCI_BRIDGE_CONTROL, &bctl);
 	pci_write_config_word(dev, PCI_BRIDGE_CONTROL,
 			      bctl & ~PCI_BRIDGE_CTL_MASTER_ABORT);
-
-	pci_enable_crs(dev);
 
 	if ((buses & 0xffff00) && !pcibios_assign_all_busses() && !is_cardbus) {
 		unsigned int cmax, busnr;
@@ -743,46 +726,22 @@ static int pci_setup_device(struct pci_dev * dev)
 		 */
 		if (class == PCI_CLASS_STORAGE_IDE) {
 			u8 progif;
-			struct pci_bus_region region;
-
 			pci_read_config_byte(dev, PCI_CLASS_PROG, &progif);
 			if ((progif & 1) == 0) {
-				struct resource resource = {
-					.start = 0x1F0,
-					.end = 0x1F7,
-					.flags = LEGACY_IO_RESOURCE,
-				};
-
-				pcibios_resource_to_bus(dev, &region, &resource);
-				dev->resource[0].start = region.start;
-				dev->resource[0].end = region.end;
-				dev->resource[0].flags = resource.flags;
-				resource.start = 0x3F6;
-				resource.end = 0x3F6;
-				resource.flags = LEGACY_IO_RESOURCE;
-				pcibios_resource_to_bus(dev, &region, &resource);
-				dev->resource[1].start = region.start;
-				dev->resource[1].end = region.end;
-				dev->resource[1].flags = resource.flags;
+				dev->resource[0].start = 0x1F0;
+				dev->resource[0].end = 0x1F7;
+				dev->resource[0].flags = LEGACY_IO_RESOURCE;
+				dev->resource[1].start = 0x3F6;
+				dev->resource[1].end = 0x3F6;
+				dev->resource[1].flags = LEGACY_IO_RESOURCE;
 			}
 			if ((progif & 4) == 0) {
-				struct resource resource = {
-					.start = 0x170,
-					.end = 0x177,
-					.flags = LEGACY_IO_RESOURCE,
-				};
-
-				pcibios_resource_to_bus(dev, &region, &resource);
-				dev->resource[2].start = region.start;
-				dev->resource[2].end = region.end;
-				dev->resource[2].flags = resource.flags;
-				resource.start = 0x376;
-				resource.end = 0x376;
-				resource.flags = LEGACY_IO_RESOURCE;
-				pcibios_resource_to_bus(dev, &region, &resource);
-				dev->resource[3].start = region.start;
-				dev->resource[3].end = region.end;
-				dev->resource[3].flags = resource.flags;
+				dev->resource[2].start = 0x170;
+				dev->resource[2].end = 0x177;
+				dev->resource[2].flags = LEGACY_IO_RESOURCE;
+				dev->resource[3].start = 0x376;
+				dev->resource[3].end = 0x376;
+				dev->resource[3].flags = LEGACY_IO_RESOURCE;
 			}
 		}
 		break;
@@ -835,6 +794,19 @@ static void pci_release_dev(struct device *dev)
 
 	pci_dev = to_pci_dev(dev);
 	kfree(pci_dev);
+}
+
+static void set_pcie_port_type(struct pci_dev *pdev)
+{
+	int pos;
+	u16 reg16;
+
+	pos = pci_find_capability(pdev, PCI_CAP_ID_EXP);
+	if (!pos)
+		return;
+	pdev->is_pcie = 1;
+	pci_read_config_word(pdev, pos + PCI_EXP_FLAGS, &reg16);
+	pdev->pcie_type = (reg16 & PCI_EXP_FLAGS_TYPE) >> 4;
 }
 
 /**
@@ -951,6 +923,7 @@ pci_scan_device(struct pci_bus *bus, int devfn)
 	dev->device = (l >> 16) & 0xffff;
 	dev->cfg_size = pci_cfg_space_size(dev);
 	dev->error_state = pci_channel_io_normal;
+	set_pcie_port_type(dev);
 
 	/* Assume 32-bit PCI; let 64-bit PCI cards (which are far rarer)
 	   set this higher, assuming the system even supports it.  */

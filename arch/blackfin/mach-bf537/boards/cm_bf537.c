@@ -34,16 +34,17 @@
 #include <linux/mtd/partitions.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/flash.h>
-#include <linux/usb_isp1362.h>
+#include <linux/usb/isp1362.h>
 #include <linux/pata_platform.h>
 #include <linux/irq.h>
 #include <asm/dma.h>
 #include <asm/bfin5xx_spi.h>
+#include <asm/portmux.h>
 
 /*
  * Name the Board for the /proc/cpuinfo
  */
-char *bfin_board_name = "Bluetechnix CM BF537";
+const char bfin_board_name[] = "Bluetechnix CM BF537";
 
 #if defined(CONFIG_SPI_BFIN) || defined(CONFIG_SPI_BFIN_MODULE)
 /* all SPI peripherals info goes here */
@@ -194,6 +195,7 @@ static struct resource bfin_spi0_resource[] = {
 static struct bfin5xx_spi_master bfin_spi0_info = {
 	.num_chipselect = 8,
 	.enable_dma = 1,  /* master has the ability to do dma transfer */
+	.pin_req = {P_SPI0_SCK, P_SPI0_MISO, P_SPI0_MOSI, 0},
 };
 
 static struct platform_device bfin_spi0_device = {
@@ -281,8 +283,8 @@ static struct resource net2272_bfin_resources[] = {
 		.end = 0x20200000 + 0x100,
 		.flags = IORESOURCE_MEM,
 	}, {
-		.start = IRQ_PF7,
-		.end = IRQ_PF7,
+		.start = IRQ_PH14,
+		.end = IRQ_PH14,
 		.flags = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHLEVEL,
 	},
 };
@@ -425,3 +427,10 @@ static int __init cm_bf537_init(void)
 }
 
 arch_initcall(cm_bf537_init);
+
+void bfin_get_ether_addr(char *addr)
+{
+	random_ether_addr(addr);
+	printk(KERN_WARNING "%s:%s: Setting Ethernet MAC to a random one\n", __FILE__, __func__);
+}
+EXPORT_SYMBOL(bfin_get_ether_addr);

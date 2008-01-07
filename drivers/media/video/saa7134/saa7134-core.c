@@ -429,7 +429,7 @@ int saa7134_set_dmabits(struct saa7134_dev *dev)
 
 	assert_spin_locked(&dev->slock);
 
-	if (dev->inresume)
+	if (dev->insuspend)
 		return 0;
 
 	/* video capture -- dma 0 + video task A */
@@ -563,24 +563,28 @@ static irqreturn_t saa7134_irq(int irq, void *dev_id)
 	unsigned long report,status;
 	int loop, handled = 0;
 
+	if (dev->insuspend)
+		goto out;
+
 	for (loop = 0; loop < 10; loop++) {
 		report = saa_readl(SAA7134_IRQ_REPORT);
 		status = saa_readl(SAA7134_IRQ_STATUS);
-		if (0 == report) {
-			if (irq_debug > 1)
-				printk(KERN_DEBUG "%s/irq: no (more) work\n",
-				       dev->name);
-			goto out;
-		}
 
-		/* If dmasound support is active and we get a sound report, exit
-		   and let the saa7134-alsa/oss module deal with it */
-
+		/* If dmasound support is active and we get a sound report,
+		 * mask out the report and let the saa7134-alsa module deal
+		 * with it */
 		if ((report & SAA7134_IRQ_REPORT_DONE_RA3) &&
 			(dev->dmasound.priv_data != NULL) )
 		{
 			if (irq_debug > 1)
-				printk(KERN_DEBUG "%s/irq: ignoring interrupt for DMA sound\n",
+				printk(KERN_DEBUG "%s/irq: preserving DMA sound interrupt\n",
+				       dev->name);
+			report &= ~SAA7134_IRQ_REPORT_DONE_RA3;
+		}
+
+		if (0 == report) {
+			if (irq_debug > 1)
+				printk(KERN_DEBUG "%s/irq: no (more) work\n",
 				       dev->name);
 			goto out;
 		}
@@ -1163,6 +1167,7 @@ static void __devexit saa7134_finidev(struct pci_dev *pci_dev)
 	kfree(dev);
 }
 
+#ifdef CONFIG_PM
 static int saa7134_suspend(struct pci_dev *pci_dev , pm_message_t state)
 {
 
@@ -1175,6 +1180,19 @@ static int saa7134_suspend(struct pci_dev *pci_dev , pm_message_t state)
 	saa_writel(SAA7134_IRQ1, 0);
 	saa_writel(SAA7134_IRQ2, 0);
 	saa_writel(SAA7134_MAIN_CTRL, 0);
+
+	synchronize_irq(pci_dev->irq);
+	dev->insuspend = 1;
+
+	/* Disable timeout timers - if we have active buffers, we will
+	   fill them on resume*/
+
+	del_timer(&dev->video_q.timeout);
+	del_timer(&dev->vbi_q.timeout);
+	del_timer(&dev->ts_q.timeout);
+
+	if (dev->remote)
+		saa7134_ir_stop(dev);
 
 	pci_set_power_state(pci_dev, pci_choose_state(pci_dev, state));
 	pci_save_state(pci_dev);
@@ -1194,24 +1212,27 @@ static int saa7134_resume(struct pci_dev *pci_dev)
 	/* Do things that are done in saa7134_initdev ,
 		except of initializing memory structures.*/
 
-	dev->inresume = 1;
 	saa7134_board_init1(dev);
 
+	/* saa7134_hwinit1 */
 	if (saa7134_boards[dev->board].video_out)
 		saa7134_videoport_init(dev);
-
 	if (card_has_mpeg(dev))
 		saa7134_ts_init_hw(dev);
-
+	if (dev->remote)
+		saa7134_ir_start(dev, dev->remote);
 	saa7134_hw_enable1(dev);
-	saa7134_set_decoder(dev);
-	saa7134_i2c_call_clients(dev, VIDIOC_S_STD, &dev->tvnorm->id);
-	saa7134_board_init2(dev);
-	saa7134_hw_enable2(dev);
 
+
+	saa7134_board_init2(dev);
+
+	/*saa7134_hwinit2*/
+	saa7134_set_tvnorm_hw(dev);
 	saa7134_tvaudio_setmute(dev);
 	saa7134_tvaudio_setvolume(dev, dev->ctl_volume);
+	saa7134_tvaudio_do_scan(dev);
 	saa7134_enable_i2s(dev);
+	saa7134_hw_enable2(dev);
 
 	/*resume unfinished buffer(s)*/
 	spin_lock_irqsave(&dev->slock, flags);
@@ -1219,13 +1240,19 @@ static int saa7134_resume(struct pci_dev *pci_dev)
 	saa7134_buffer_requeue(dev, &dev->vbi_q);
 	saa7134_buffer_requeue(dev, &dev->ts_q);
 
+	/* FIXME: Disable DMA audio sound - temporary till proper support
+		  is implemented*/
+
+	dev->dmasound.dma_running = 0;
+
 	/* start DMA now*/
-	dev->inresume = 0;
+	dev->insuspend = 0;
 	saa7134_set_dmabits(dev);
 	spin_unlock_irqrestore(&dev->slock, flags);
 
 	return 0;
 }
+#endif
 
 /* ----------------------------------------------------------- */
 
@@ -1262,8 +1289,10 @@ static struct pci_driver saa7134_pci_driver = {
 	.id_table = saa7134_pci_tbl,
 	.probe    = saa7134_initdev,
 	.remove   = __devexit_p(saa7134_finidev),
+#ifdef CONFIG_PM
 	.suspend  = saa7134_suspend,
 	.resume   = saa7134_resume
+#endif
 };
 
 static int saa7134_init(void)

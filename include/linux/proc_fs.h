@@ -48,6 +48,8 @@ typedef	int (read_proc_t)(char *page, char **start, off_t off,
 typedef	int (write_proc_t)(struct file *file, const char __user *buffer,
 			   unsigned long count, void *data);
 typedef int (get_info_t)(char *, char **, off_t, int);
+typedef struct proc_dir_entry *(shadow_proc_t)(struct task_struct *task,
+						struct proc_dir_entry *pde);
 
 struct proc_dir_entry {
 	unsigned int low_ino;
@@ -75,10 +77,10 @@ struct proc_dir_entry {
 	read_proc_t *read_proc;
 	write_proc_t *write_proc;
 	atomic_t count;		/* use count */
-	int deleted;		/* delete flag */
 	int pde_users;	/* number of callers into module in progress */
 	spinlock_t pde_unload_lock; /* proc_fops checks and pde_users bumps */
 	struct completion *pde_unload_completion;
+	shadow_proc_t *shadow_proc;
 };
 
 struct kcore_list {
@@ -125,7 +127,8 @@ extern struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 extern void remove_proc_entry(const char *name, struct proc_dir_entry *parent);
 
 extern struct vfsmount *proc_mnt;
-extern int proc_fill_super(struct super_block *,void *,int);
+struct pid_namespace;
+extern int proc_fill_super(struct super_block *);
 extern struct inode *proc_get_inode(struct super_block *, unsigned int, struct proc_dir_entry *);
 
 /*
@@ -141,6 +144,9 @@ extern struct dentry *proc_lookup(struct inode *, struct dentry *, struct nameid
 extern const struct file_operations proc_kcore_operations;
 extern const struct file_operations proc_kmsg_operations;
 extern const struct file_operations ppc_htab_operations;
+
+extern int pid_ns_prepare_proc(struct pid_namespace *ns);
+extern void pid_ns_release_proc(struct pid_namespace *ns);
 
 /*
  * proc_tty.c
@@ -192,8 +198,6 @@ static inline struct proc_dir_entry *create_proc_info_entry(const char *name,
 	return res;
 }
 
-extern struct proc_dir_entry *proc_net_create(struct net *net,
-	const char *name, mode_t mode, get_info_t *get_info);
 extern struct proc_dir_entry *proc_net_fops_create(struct net *net,
 	const char *name, mode_t mode, const struct file_operations *fops);
 extern void proc_net_remove(struct net *net, const char *name);
@@ -204,10 +208,11 @@ extern void proc_net_remove(struct net *net, const char *name);
 #define proc_bus NULL
 
 #define proc_net_fops_create(net, name, mode, fops)  ({ (void)(mode), NULL; })
-#define proc_net_create(net, name, mode, info)	({ (void)(mode), NULL; })
 static inline void proc_net_remove(struct net *net, const char *name) {}
 
-static inline void proc_flush_task(struct task_struct *task) { }
+static inline void proc_flush_task(struct task_struct *task)
+{
+}
 
 static inline struct proc_dir_entry *create_proc_entry(const char *name,
 	mode_t mode, struct proc_dir_entry *parent) { return NULL; }
@@ -231,6 +236,15 @@ static inline void proc_tty_register_driver(struct tty_driver *driver) {};
 static inline void proc_tty_unregister_driver(struct tty_driver *driver) {};
 
 extern struct proc_dir_entry proc_root;
+
+static inline int pid_ns_prepare_proc(struct pid_namespace *ns)
+{
+	return 0;
+}
+
+static inline void pid_ns_release_proc(struct pid_namespace *ns)
+{
+}
 
 #endif /* CONFIG_PROC_FS */
 

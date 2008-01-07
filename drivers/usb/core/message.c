@@ -11,9 +11,9 @@
 #include <linux/timer.h>
 #include <linux/ctype.h>
 #include <linux/device.h>
+#include <linux/scatterlist.h>
 #include <linux/usb/quirks.h>
 #include <asm/byteorder.h>
-#include <asm/scatterlist.h>
 
 #include "hcd.h"	/* for usbcore internals */
 #include "usb.h"
@@ -434,16 +434,14 @@ int usb_sg_init (
 		if (dma) {
 			io->urbs [i]->transfer_dma = sg_dma_address (sg + i);
 			len = sg_dma_len (sg + i);
-#if defined(CONFIG_HIGHMEM) || defined(CONFIG_IOMMU)
+#if defined(CONFIG_HIGHMEM) || defined(CONFIG_GART_IOMMU)
 			io->urbs[i]->transfer_buffer = NULL;
 #else
-			io->urbs[i]->transfer_buffer =
-				page_address(sg[i].page) + sg[i].offset;
+			io->urbs[i]->transfer_buffer = sg_virt(&sg[i]);
 #endif
 		} else {
 			/* hc may use _only_ transfer_buffer */
-			io->urbs [i]->transfer_buffer =
-				page_address (sg [i].page) + sg [i].offset;
+			io->urbs [i]->transfer_buffer = sg_virt(&sg[i]);
 			len = sg [i].length;
 		}
 
@@ -1174,7 +1172,6 @@ int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 	struct usb_host_interface *alt;
 	int ret;
 	int manual = 0;
-	int changed;
 
 	if (dev->state == USB_STATE_SUSPENDED)
 		return -EHOSTUNREACH;
@@ -1214,8 +1211,7 @@ int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 	 */
 
 	/* prevent submissions using previous endpoint settings */
-	changed = (iface->cur_altsetting != alt);
-	if (changed && device_is_registered(&iface->dev))
+	if (iface->cur_altsetting != alt && device_is_registered(&iface->dev))
 		usb_remove_sysfs_intf_files(iface);
 	usb_disable_interface(dev, iface);
 
@@ -1252,7 +1248,7 @@ int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 	 * (Likewise, EP0 never "halts" on well designed devices.)
 	 */
 	usb_enable_interface(dev, iface);
-	if (changed && device_is_registered(&iface->dev))
+	if (device_is_registered(&iface->dev))
 		usb_create_sysfs_intf_files(iface);
 
 	return 0;
@@ -1350,33 +1346,9 @@ static int usb_if_uevent(struct device *dev, struct kobj_uevent_env *env)
 	struct usb_interface *intf;
 	struct usb_host_interface *alt;
 
-	if (!dev)
-		return -ENODEV;
-
-	/* driver is often null here; dev_dbg() would oops */
-	pr_debug ("usb %s: uevent\n", dev->bus_id);
-
 	intf = to_usb_interface(dev);
 	usb_dev = interface_to_usbdev(intf);
 	alt = intf->cur_altsetting;
-
-#ifdef CONFIG_USB_DEVICEFS
-	if (add_uevent_var(env, "DEVICE=/proc/bus/usb/%03d/%03d",
-			   usb_dev->bus->busnum, usb_dev->devnum))
-		return -ENOMEM;
-#endif
-
-	if (add_uevent_var(env, "PRODUCT=%x/%x/%x",
-			   le16_to_cpu(usb_dev->descriptor.idVendor),
-			   le16_to_cpu(usb_dev->descriptor.idProduct),
-			   le16_to_cpu(usb_dev->descriptor.bcdDevice)))
-		return -ENOMEM;
-
-	if (add_uevent_var(env, "TYPE=%d/%d/%d",
-			   usb_dev->descriptor.bDeviceClass,
-			   usb_dev->descriptor.bDeviceSubClass,
-			   usb_dev->descriptor.bDeviceProtocol))
-		return -ENOMEM;
 
 	if (add_uevent_var(env, "INTERFACE=%d/%d/%d",
 		   alt->desc.bInterfaceClass,
@@ -1526,7 +1498,7 @@ int usb_set_configuration(struct usb_device *dev, int configuration)
 		new_interfaces = kmalloc(nintf * sizeof(*new_interfaces),
 				GFP_KERNEL);
 		if (!new_interfaces) {
-			dev_err(&dev->dev, "Out of memory");
+			dev_err(&dev->dev, "Out of memory\n");
 			return -ENOMEM;
 		}
 
@@ -1535,7 +1507,7 @@ int usb_set_configuration(struct usb_device *dev, int configuration)
 					sizeof(struct usb_interface),
 					GFP_KERNEL);
 			if (!new_interfaces[n]) {
-				dev_err(&dev->dev, "Out of memory");
+				dev_err(&dev->dev, "Out of memory\n");
 				ret = -ENOMEM;
 free_interfaces:
 				while (--n >= 0)
@@ -1643,7 +1615,7 @@ free_interfaces:
 				intf->dev.bus_id, ret);
 			continue;
 		}
-		usb_create_sysfs_intf_files (intf);
+		usb_create_sysfs_intf_files(intf);
 	}
 
 	usb_autosuspend_device(dev);

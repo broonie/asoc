@@ -999,7 +999,7 @@ struct hlist_head *nf_ct_alloc_hashtable(int *sizep, int *vmalloced)
 	*vmalloced = 0;
 
 	size = *sizep = roundup(*sizep, PAGE_SIZE / sizeof(struct hlist_head));
-	hash = (void*)__get_free_pages(GFP_KERNEL,
+	hash = (void*)__get_free_pages(GFP_KERNEL|__GFP_NOWARN,
 				       get_order(sizeof(struct hlist_head)
 						 * size));
 	if (!hash) {
@@ -1016,7 +1016,7 @@ struct hlist_head *nf_ct_alloc_hashtable(int *sizep, int *vmalloced)
 }
 EXPORT_SYMBOL_GPL(nf_ct_alloc_hashtable);
 
-int set_hashsize(const char *val, struct kernel_param *kp)
+int nf_conntrack_set_hashsize(const char *val, struct kernel_param *kp)
 {
 	int i, bucket, hashsize, vmalloced;
 	int old_vmalloced, old_size;
@@ -1063,8 +1063,9 @@ int set_hashsize(const char *val, struct kernel_param *kp)
 	nf_ct_free_hashtable(old_hash, old_vmalloced, old_size);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(nf_conntrack_set_hashsize);
 
-module_param_call(hashsize, set_hashsize, param_get_uint,
+module_param_call(hashsize, nf_conntrack_set_hashsize, param_get_uint,
 		  &nf_conntrack_htable_size, 0600);
 
 int __init nf_conntrack_init(void)

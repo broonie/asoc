@@ -36,7 +36,7 @@
 #include <linux/workqueue.h>
 
 #include <asm/io.h>
-#include <asm/scatterlist.h>
+#include <linux/scatterlist.h>
 #include <linux/mm.h>
 #include <linux/dma-mapping.h>
 
@@ -192,9 +192,34 @@ static void usb_release_dev(struct device *dev)
 	kfree(udev);
 }
 
+#ifdef	CONFIG_HOTPLUG
+static int usb_dev_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+	struct usb_device *usb_dev;
+
+	usb_dev = to_usb_device(dev);
+
+	if (add_uevent_var(env, "BUSNUM=%03d", usb_dev->bus->busnum))
+		return -ENOMEM;
+
+	if (add_uevent_var(env, "DEVNUM=%03d", usb_dev->devnum))
+		return -ENOMEM;
+
+	return 0;
+}
+
+#else
+
+static int usb_dev_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+	return -ENODEV;
+}
+#endif	/* CONFIG_HOTPLUG */
+
 struct device_type usb_device_type = {
 	.name =		"usb_device",
 	.release =	usb_release_dev,
+	.uevent =	usb_dev_uevent,
 };
 
 #ifdef	CONFIG_PM
@@ -982,7 +1007,6 @@ EXPORT_SYMBOL(usb_altnum_to_altsetting);
 
 EXPORT_SYMBOL(__usb_get_extra_descriptor);
 
-EXPORT_SYMBOL(usb_find_device);
 EXPORT_SYMBOL(usb_get_current_frame_number);
 
 EXPORT_SYMBOL(usb_buffer_alloc);

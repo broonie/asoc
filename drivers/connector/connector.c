@@ -145,6 +145,8 @@ static int cn_call_callback(struct cn_msg *msg, void (*destruct_data)(void *), v
 				if (queue_work(dev->cbdev->cn_queue,
 							&__cbq->work))
 					err = 0;
+				else
+					err = -EINVAL;
 			} else {
 				struct cn_callback_data *d;
 				
@@ -218,7 +220,7 @@ static void cn_rx_skb(struct sk_buff *__skb)
 		    skb->len < nlh->nlmsg_len ||
 		    nlh->nlmsg_len > CONNECTOR_MAX_MSG_SIZE) {
 			kfree_skb(skb);
-			goto out;
+			return;
 		}
 
 		len = NLMSG_ALIGN(nlh->nlmsg_len);
@@ -229,9 +231,6 @@ static void cn_rx_skb(struct sk_buff *__skb)
 		if (err < 0)
 			kfree_skb(skb);
 	}
-
-out:
-	kfree_skb(__skb);
 }
 
 /*

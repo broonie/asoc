@@ -49,7 +49,6 @@
 #include "pio.h"
 #include "sysfs.h"
 #include "xmit.h"
-#include "sysfs.h"
 #include "lo.h"
 #include "pcmcia.h"
 
@@ -1567,7 +1566,7 @@ static void b43_release_firmware(struct b43_wldev *dev)
 static void b43_print_fw_helptext(struct b43_wl *wl)
 {
 	b43err(wl, "You must go to "
-	       "http://linuxwireless.org/en/users/Drivers/bcm43xx#devicefirmware "
+	       "http://linuxwireless.org/en/users/Drivers/b43#devicefirmware "
 	       "and download the correct firmware (version 4).\n");
 }
 
@@ -2164,7 +2163,6 @@ static void b43_mgmtframe_txantenna(struct b43_wldev *dev, int antenna)
 static void b43_chip_exit(struct b43_wldev *dev)
 {
 	b43_radio_turn_off(dev, 1);
-	b43_leds_exit(dev);
 	b43_gpio_cleanup(dev);
 	/* firmware is released later */
 }
@@ -2192,11 +2190,10 @@ static int b43_chip_init(struct b43_wldev *dev)
 	err = b43_gpio_init(dev);
 	if (err)
 		goto out;	/* firmware is released later */
-	b43_leds_init(dev);
 
 	err = b43_upload_initvals(dev);
 	if (err)
-		goto err_leds_exit;
+		goto err_gpio_clean;
 	b43_radio_turn_on(dev);
 
 	b43_write16(dev, 0x03E6, 0x0000);
@@ -2272,8 +2269,7 @@ out:
 
 err_radio_off:
 	b43_radio_turn_off(dev, 1);
-err_leds_exit:
-	b43_leds_exit(dev);
+err_gpio_clean:
 	b43_gpio_cleanup(dev);
 	return err;
 }
@@ -2392,7 +2388,7 @@ out_requeue:
 	if (b43_debug(dev, B43_DBG_PWORK_FAST))
 		delay = msecs_to_jiffies(50);
 	else
-		delay = round_jiffies(HZ * 15);
+		delay = round_jiffies_relative(HZ * 15);
 	queue_delayed_work(wl->hw->workqueue, &dev->periodic_work, delay);
 out:
 	mutex_unlock(&wl->mutex);
@@ -2986,6 +2982,16 @@ static void b43_wireless_core_stop(struct b43_wldev *dev)
 
 	if (b43_status(dev) < B43_STAT_STARTED)
 		return;
+
+	/* Disable and sync interrupts. We must do this before than
+	 * setting the status to INITIALIZED, as the interrupt handler
+	 * won't care about IRQs then. */
+	spin_lock_irqsave(&wl->irq_lock, flags);
+	dev->irq_savedstate = b43_interrupt_disable(dev, B43_IRQ_ALL);
+	b43_read32(dev, B43_MMIO_GEN_IRQ_MASK);	/* flush */
+	spin_unlock_irqrestore(&wl->irq_lock, flags);
+	b43_synchronize_irq(dev);
+
 	b43_set_status(dev, B43_STAT_INITIALIZED);
 
 	mutex_unlock(&wl->mutex);
@@ -2995,13 +3001,6 @@ static void b43_wireless_core_stop(struct b43_wldev *dev)
 	mutex_lock(&wl->mutex);
 
 	ieee80211_stop_queues(wl->hw);	//FIXME this could cause a deadlock, as mac80211 seems buggy.
-
-	/* Disable and sync interrupts. */
-	spin_lock_irqsave(&wl->irq_lock, flags);
-	dev->irq_savedstate = b43_interrupt_disable(dev, B43_IRQ_ALL);
-	b43_read32(dev, B43_MMIO_GEN_IRQ_MASK);	/* flush */
-	spin_unlock_irqrestore(&wl->irq_lock, flags);
-	b43_synchronize_irq(dev);
 
 	b43_mac_suspend(dev);
 	free_irq(dev->dev->irq, dev);
@@ -3271,10 +3270,7 @@ static void b43_wireless_core_exit(struct b43_wldev *dev)
 		return;
 	b43_set_status(dev, B43_STAT_UNINIT);
 
-	mutex_unlock(&dev->wl->mutex);
-	b43_rfkill_exit(dev);
-	mutex_lock(&dev->wl->mutex);
-
+	b43_leds_exit(dev);
 	b43_rng_exit(dev->wl);
 	b43_pio_free(dev);
 	b43_dma_free(dev);
@@ -3403,12 +3399,12 @@ static int b43_wireless_core_init(struct b43_wldev *dev)
 	memset(wl->mac_addr, 0, ETH_ALEN);
 	b43_upload_card_macaddress(dev);
 	b43_security_init(dev);
-	b43_rfkill_init(dev);
 	b43_rng_init(wl);
 
 	b43_set_status(dev, B43_STAT_INITIALIZED);
 
-      out:
+	b43_leds_init(dev);
+out:
 	return err;
 
       err_chip_exit:
@@ -3495,7 +3491,11 @@ static int b43_start(struct ieee80211_hw *hw)
 	struct b43_wl *wl = hw_to_b43_wl(hw);
 	struct b43_wldev *dev = wl->current_dev;
 	int did_init = 0;
-	int err;
+	int err = 0;
+
+	/* First register RFkill.
+	 * LEDs that are registered later depend on it. */
+	b43_rfkill_init(dev);
 
 	mutex_lock(&wl->mutex);
 
@@ -3521,10 +3521,12 @@ static int b43_start(struct ieee80211_hw *hw)
 	return err;
 }
 
-void b43_stop(struct ieee80211_hw *hw)
+static void b43_stop(struct ieee80211_hw *hw)
 {
 	struct b43_wl *wl = hw_to_b43_wl(hw);
 	struct b43_wldev *dev = wl->current_dev;
+
+	b43_rfkill_exit(dev);
 
 	mutex_lock(&wl->mutex);
 	if (b43_status(dev) >= B43_STAT_STARTED)
@@ -3662,7 +3664,6 @@ static int b43_setup_modes(struct b43_wldev *dev,
 
 static void b43_wireless_core_detach(struct b43_wldev *dev)
 {
-	b43_rfkill_free(dev);
 	/* We release firmware that late to not be required to re-request
 	 * is all the time when we reinit the core. */
 	b43_release_firmware(dev);
@@ -3748,7 +3749,6 @@ static int b43_wireless_core_attach(struct b43_wldev *dev)
 	if (!wl->current_dev)
 		wl->current_dev = dev;
 	INIT_WORK(&dev->restart_work, b43_chip_reset);
-	b43_rfkill_alloc(dev);
 
 	b43_radio_turn_off(dev, 1);
 	b43_switch_analog(dev, 0);

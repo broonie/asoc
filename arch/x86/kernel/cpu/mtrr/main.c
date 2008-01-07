@@ -139,13 +139,12 @@ struct set_mtrr_data {
 	mtrr_type	smp_type;
 };
 
-#ifdef CONFIG_SMP
-
 static void ipi_handler(void *info)
 /*  [SUMMARY] Synchronisation handler. Executed by "other" CPUs.
     [RETURNS] Nothing.
 */
 {
+#ifdef CONFIG_SMP
 	struct set_mtrr_data *data = info;
 	unsigned long flags;
 
@@ -168,9 +167,8 @@ static void ipi_handler(void *info)
 
 	atomic_dec(&data->count);
 	local_irq_restore(flags);
-}
-
 #endif
+}
 
 static inline int types_compatible(mtrr_type type1, mtrr_type type2) {
 	return type1 == MTRR_TYPE_UNCACHABLE ||
@@ -738,13 +736,7 @@ void mtrr_ap_init(void)
  */
 void mtrr_save_state(void)
 {
-	int cpu = get_cpu();
-
-	if (cpu == 0)
-		mtrr_save_fixed_ranges(NULL);
-	else
-		smp_call_function_single(0, mtrr_save_fixed_ranges, NULL, 1, 1);
-	put_cpu();
+	smp_call_function_single(0, mtrr_save_fixed_ranges, NULL, 1, 1);
 }
 
 static int __init mtrr_init_finialize(void)
@@ -754,7 +746,7 @@ static int __init mtrr_init_finialize(void)
 	if (use_intel())
 		mtrr_state_warn();
 	else {
-		/* The CPUs haven't MTRR and seemes not support SMP. They have
+		/* The CPUs haven't MTRR and seem to not support SMP. They have
 		 * specific drivers, we use a tricky method to support
 		 * suspend/resume for them.
 		 * TBD: is there any system with such CPU which supports

@@ -280,7 +280,7 @@ rpc_pipe_poll(struct file *filp, struct poll_table_struct *wait)
 	mask = POLLOUT | POLLWRNORM;
 	if (rpci->ops == NULL)
 		mask |= POLLERR | POLLHUP;
-	if (!list_empty(&rpci->pipe))
+	if (filp->private_data || !list_empty(&rpci->pipe))
 		mask |= POLLIN | POLLRDNORM;
 	return mask;
 }
@@ -842,7 +842,7 @@ static struct file_system_type rpc_pipe_fs_type = {
 };
 
 static void
-init_once(void * foo, struct kmem_cache * cachep, unsigned long flags)
+init_once(struct kmem_cache * cachep, void *foo)
 {
 	struct rpc_inode *rpci = (struct rpc_inode *) foo;
 

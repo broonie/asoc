@@ -3,12 +3,13 @@
 #include <net/ip.h>
 #include <net/xfrm.h>
 #include <net/esp.h>
-#include <asm/scatterlist.h>
+#include <linux/scatterlist.h>
 #include <linux/crypto.h>
 #include <linux/kernel.h>
 #include <linux/pfkeyv2.h>
 #include <linux/random.h>
 #include <linux/spinlock.h>
+#include <linux/in6.h>
 #include <net/icmp.h>
 #include <net/protocol.h>
 #include <net/udp.h>
@@ -110,7 +111,11 @@ static int esp_output(struct xfrm_state *x, struct sk_buff *skb)
 			if (!sg)
 				goto unlock;
 		}
-		skb_to_sgvec(skb, sg, esph->enc_data+esp->conf.ivlen-skb->data, clen);
+		sg_init_table(sg, nfrags);
+		skb_to_sgvec(skb, sg,
+			     esph->enc_data +
+			     esp->conf.ivlen -
+			     skb->data, clen);
 		err = crypto_blkcipher_encrypt(&desc, sg, sg, clen);
 		if (unlikely(sg != &esp->sgbuf[0]))
 			kfree(sg);
@@ -201,7 +206,10 @@ static int esp_input(struct xfrm_state *x, struct sk_buff *skb)
 		if (!sg)
 			goto out;
 	}
-	skb_to_sgvec(skb, sg, sizeof(*esph) + esp->conf.ivlen, elen);
+	sg_init_table(sg, nfrags);
+	skb_to_sgvec(skb, sg,
+		     sizeof(*esph) + esp->conf.ivlen,
+		     elen);
 	err = crypto_blkcipher_decrypt(&desc, sg, sg, elen);
 	if (unlikely(sg != &esp->sgbuf[0]))
 		kfree(sg);
@@ -216,6 +224,10 @@ static int esp_input(struct xfrm_state *x, struct sk_buff *skb)
 		goto out;
 
 	/* ... check padding bits here. Silly. :-) */
+
+	/* RFC4303: Drop dummy packets without any error */
+	if (nexthdr[1] == IPPROTO_NONE)
+		goto out;
 
 	iph = ip_hdr(skb);
 	ihl = iph->ihl * 4;

@@ -122,6 +122,7 @@ extern void outsl(unsigned long port, const void *addr, unsigned long count);
 extern void insb(unsigned long port, void *addr, unsigned long count);
 extern void insw(unsigned long port, void *addr, unsigned long count);
 extern void insl(unsigned long port, void *addr, unsigned long count);
+extern void insl_16(unsigned long port, void *addr, unsigned long count);
 
 extern void dma_outsb(unsigned long port, const void *addr, unsigned short count);
 extern void dma_outsw(unsigned long port, const void *addr, unsigned short count);
@@ -182,10 +183,6 @@ extern void blkfin_inv_cache_all(void);
 
 #define	ioport_map(port, nr)		((void __iomem*)(port))
 #define	ioport_unmap(addr)
-
-#define dma_cache_inv(_start,_size) do { blkfin_inv_cache_all();} while (0)
-#define dma_cache_wback(_start,_size) do { } while (0)
-#define dma_cache_wback_inv(_start,_size) do { blkfin_inv_cache_all();} while (0)
 
 /* Pages to physical address... */
 #define page_to_phys(page)      ((page - mem_map) << PAGE_SHIFT)

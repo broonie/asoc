@@ -160,6 +160,12 @@ struct nfs_inode {
 	/* Open contexts for shared mmap writes */
 	struct list_head	open_files;
 
+	/* Number of in-flight sillydelete RPC calls */
+	atomic_t		silly_count;
+	/* List of deferred sillydelete requests */
+	struct hlist_head	silly_list;
+	wait_queue_head_t	waitqueue;
+
 #ifdef CONFIG_NFS_V4
 	struct nfs4_cached_acl	*nfs4_acl;
         /* NFSv4 state */
@@ -394,6 +400,8 @@ extern void nfs_release_automount_timer(void);
  */
 extern int  nfs_async_unlink(struct inode *dir, struct dentry *dentry);
 extern void nfs_complete_unlink(struct dentry *dentry, struct inode *);
+extern void nfs_block_sillyrename(struct dentry *dentry);
+extern void nfs_unblock_sillyrename(struct dentry *dentry);
 
 /*
  * linux/fs/nfs/write.c
@@ -414,7 +422,6 @@ extern long nfs_sync_mapping_wait(struct address_space *, struct writeback_contr
 extern int nfs_wb_all(struct inode *inode);
 extern int nfs_wb_nocommit(struct inode *inode);
 extern int nfs_wb_page(struct inode *inode, struct page* page);
-extern int nfs_wb_page_priority(struct inode *inode, struct page* page, int how);
 extern int nfs_wb_page_cancel(struct inode *inode, struct page* page);
 #if defined(CONFIG_NFS_V3) || defined(CONFIG_NFS_V4)
 extern int  nfs_commit_inode(struct inode *, int);

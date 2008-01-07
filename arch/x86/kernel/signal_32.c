@@ -200,8 +200,8 @@ badframe:
 	if (show_unhandled_signals && printk_ratelimit())
 		printk("%s%s[%d] bad frame in sigreturn frame:%p eip:%lx"
 		       " esp:%lx oeax:%lx\n",
-		    current->pid > 1 ? KERN_INFO : KERN_EMERG,
-		    current->comm, current->pid, frame, regs->eip,
+		    task_pid_nr(current) > 1 ? KERN_INFO : KERN_EMERG,
+		    current->comm, task_pid_nr(current), frame, regs->eip,
 		    regs->esp, regs->orig_eax);
 
 	force_sig(SIGSEGV, current);
@@ -385,7 +385,6 @@ static int setup_frame(int sig, struct k_sigaction *ka,
 	regs->edx = (unsigned long) 0;
 	regs->ecx = (unsigned long) 0;
 
-	set_fs(USER_DS);
 	regs->xds = __USER_DS;
 	regs->xes = __USER_DS;
 	regs->xss = __USER_DS;
@@ -479,7 +478,6 @@ static int setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	regs->edx = (unsigned long) &frame->info;
 	regs->ecx = (unsigned long) &frame->uc;
 
-	set_fs(USER_DS);
 	regs->xds = __USER_DS;
 	regs->xes = __USER_DS;
 	regs->xss = __USER_DS;
@@ -596,7 +594,7 @@ static void fastcall do_signal(struct pt_regs *regs)
 
 	signr = get_signal_to_deliver(&info, &ka, regs, NULL);
 	if (signr > 0) {
-		/* Reenable any watchpoints before delivering the
+		/* Re-enable any watchpoints before delivering the
 		 * signal to user space. The processor register will
 		 * have been cleared if the watchpoint triggered
 		 * inside the kernel.

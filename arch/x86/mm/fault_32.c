@@ -25,6 +25,7 @@
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
 #include <linux/kdebug.h>
+#include <linux/kprobes.h>
 
 #include <asm/system.h>
 #include <asm/desc.h>
@@ -32,33 +33,27 @@
 
 extern void die(const char *,struct pt_regs *,long);
 
-static ATOMIC_NOTIFIER_HEAD(notify_page_fault_chain);
-
-int register_page_fault_notifier(struct notifier_block *nb)
+#ifdef CONFIG_KPROBES
+static inline int notify_page_fault(struct pt_regs *regs)
 {
-	vmalloc_sync_all();
-	return atomic_notifier_chain_register(&notify_page_fault_chain, nb);
-}
-EXPORT_SYMBOL_GPL(register_page_fault_notifier);
+	int ret = 0;
 
-int unregister_page_fault_notifier(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_unregister(&notify_page_fault_chain, nb);
-}
-EXPORT_SYMBOL_GPL(unregister_page_fault_notifier);
+	/* kprobe_running() needs smp_processor_id() */
+	if (!user_mode_vm(regs)) {
+		preempt_disable();
+		if (kprobe_running() && kprobe_fault_handler(regs, 14))
+			ret = 1;
+		preempt_enable();
+	}
 
-static inline int notify_page_fault(struct pt_regs *regs, long err)
-{
-	struct die_args args = {
-		.regs = regs,
-		.str = "page fault",
-		.err = err,
-		.trapnr = 14,
-		.signr = SIGSEGV
-	};
-	return atomic_notifier_call_chain(&notify_page_fault_chain,
-	                                  DIE_PAGE_FAULT, &args);
+	return ret;
 }
+#else
+static inline int notify_page_fault(struct pt_regs *regs)
+{
+	return 0;
+}
+#endif
 
 /*
  * Return EIP plus the CS segment base.  The segment limit is also
@@ -110,7 +105,7 @@ static inline unsigned long get_segment_eip(struct pt_regs *regs,
 	   LDT and other horrors are only used in user space. */
 	if (seg & (1<<2)) {
 		/* Must lock the LDT while reading it. */
-		down(&current->mm->context.sem);
+		mutex_lock(&current->mm->context.lock);
 		desc = current->mm->context.ldt;
 		desc = (void *)desc + (seg & ~7);
 	} else {
@@ -123,7 +118,7 @@ static inline unsigned long get_segment_eip(struct pt_regs *regs,
 	base = get_desc_base((unsigned long *)desc);
 
 	if (seg & (1<<2)) { 
-		up(&current->mm->context.sem);
+		mutex_unlock(&current->mm->context.lock);
 	} else
 		put_cpu();
 
@@ -308,6 +303,11 @@ fastcall void __kprobes do_page_fault(struct pt_regs *regs,
 	int write, si_code;
 	int fault;
 
+	/*
+	 * We can fault from pretty much anywhere, with unknown IRQ state.
+	 */
+	trace_hardirqs_fixup();
+
 	/* get the address */
         address = read_cr2();
 
@@ -331,7 +331,7 @@ fastcall void __kprobes do_page_fault(struct pt_regs *regs,
 	if (unlikely(address >= TASK_SIZE)) {
 		if (!(error_code & 0x0000000d) && vmalloc_fault(address) >= 0)
 			return;
-		if (notify_page_fault(regs, error_code) == NOTIFY_STOP)
+		if (notify_page_fault(regs))
 			return;
 		/*
 		 * Don't take the mm semaphore here. If we fixup a prefetch
@@ -340,7 +340,7 @@ fastcall void __kprobes do_page_fault(struct pt_regs *regs,
 		goto bad_area_nosemaphore;
 	}
 
-	if (notify_page_fault(regs, error_code) == NOTIFY_STOP)
+	if (notify_page_fault(regs))
 		return;
 
 	/* It's safe to allow irq's after cr2 has been saved and the vmalloc
@@ -359,7 +359,7 @@ fastcall void __kprobes do_page_fault(struct pt_regs *regs,
 
 	/* When running in the kernel we expect faults to occur only to
 	 * addresses in user space.  All other faults represent errors in the
-	 * kernel and should generate an OOPS.  Unfortunatly, in the case of an
+	 * kernel and should generate an OOPS.  Unfortunately, in the case of an
 	 * erroneous fault occurring in a code path which already holds mmap_sem
 	 * we will deadlock attempting to validate the fault against the
 	 * address space.  Luckily the kernel only validly references user
@@ -367,7 +367,7 @@ fastcall void __kprobes do_page_fault(struct pt_regs *regs,
 	 * exceptions table.
 	 *
 	 * As the vast majority of faults will be valid we will only perform
-	 * the source reference check when there is a possibilty of a deadlock.
+	 * the source reference check when there is a possibility of a deadlock.
 	 * Attempt to lock the address space, if we cannot we then validate the
 	 * source.  If this is invalid we can skip the address space check,
 	 * thus avoiding the deadlock.
@@ -476,8 +476,8 @@ bad_area_nosemaphore:
 		    printk_ratelimit()) {
 			printk("%s%s[%d]: segfault at %08lx eip %08lx "
 			    "esp %08lx error %lx\n",
-			    tsk->pid > 1 ? KERN_INFO : KERN_EMERG,
-			    tsk->comm, tsk->pid, address, regs->eip,
+			    task_pid_nr(tsk) > 1 ? KERN_INFO : KERN_EMERG,
+			    tsk->comm, task_pid_nr(tsk), address, regs->eip,
 			    regs->esp, error_code);
 		}
 		tsk->thread.cr2 = address;
@@ -544,23 +544,22 @@ no_context:
 			printk(KERN_ALERT "BUG: unable to handle kernel paging"
 					" request");
 		printk(" at virtual address %08lx\n",address);
-		printk(KERN_ALERT " printing eip:\n");
-		printk("%08lx\n", regs->eip);
+		printk(KERN_ALERT "printing eip: %08lx ", regs->eip);
 
 		page = read_cr3();
 		page = ((__typeof__(page) *) __va(page))[address >> PGDIR_SHIFT];
 #ifdef CONFIG_X86_PAE
-		printk(KERN_ALERT "*pdpt = %016Lx\n", page);
+		printk("*pdpt = %016Lx ", page);
 		if ((page >> PAGE_SHIFT) < max_low_pfn
 		    && page & _PAGE_PRESENT) {
 			page &= PAGE_MASK;
 			page = ((__typeof__(page) *) __va(page))[(address >> PMD_SHIFT)
 			                                         & (PTRS_PER_PMD - 1)];
-			printk(KERN_ALERT "*pde = %016Lx\n", page);
+			printk(KERN_CONT "*pde = %016Lx ", page);
 			page &= ~_PAGE_NX;
 		}
 #else
-		printk(KERN_ALERT "*pde = %08lx\n", page);
+		printk("*pde = %08lx ", page);
 #endif
 
 		/*
@@ -570,12 +569,15 @@ no_context:
 		 * it's allocated already.
 		 */
 		if ((page >> PAGE_SHIFT) < max_low_pfn
-		    && (page & _PAGE_PRESENT)) {
+		    && (page & _PAGE_PRESENT)
+		    && !(page & _PAGE_PSE)) {
 			page &= PAGE_MASK;
 			page = ((__typeof__(page) *) __va(page))[(address >> PAGE_SHIFT)
 			                                         & (PTRS_PER_PTE - 1)];
-			printk(KERN_ALERT "*pte = %0*Lx\n", sizeof(page)*2, (u64)page);
+			printk("*pte = %0*Lx ", sizeof(page)*2, (u64)page);
 		}
+
+		printk("\n");
 	}
 
 	tsk->thread.cr2 = address;
@@ -591,14 +593,14 @@ no_context:
  */
 out_of_memory:
 	up_read(&mm->mmap_sem);
-	if (is_init(tsk)) {
+	if (is_global_init(tsk)) {
 		yield();
 		down_read(&mm->mmap_sem);
 		goto survive;
 	}
 	printk("VM: killing process %s\n", tsk->comm);
 	if (error_code & 4)
-		do_exit(SIGKILL);
+		do_group_exit(SIGKILL);
 	goto no_context;
 
 do_sigbus:
