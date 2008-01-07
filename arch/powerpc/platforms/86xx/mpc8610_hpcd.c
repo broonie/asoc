@@ -34,8 +34,26 @@
 
 #include <asm/mpic.h>
 
+#include <linux/of_platform.h>
 #include <sysdev/fsl_pci.h>
 #include <sysdev/fsl_soc.h>
+
+static struct of_device_id mpc8610_ids[] = {
+	{ .compatible = "fsl,mpc8610", },
+	{}
+};
+
+static int __init mpc8610_declare_of_platform_devices(void)
+{
+	if (!machine_is(mpc86xx_hpcd))
+		return 0;
+
+	/* Without this call, the SSI device driver won't get probed. */
+	of_platform_bus_probe(NULL, mpc8610_ids, NULL);
+
+	return 0;
+}
+device_initcall(mpc8610_declare_of_platform_devices);
 
 void __init
 mpc86xx_hpcd_init_irq(void)
