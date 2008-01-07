@@ -27,9 +27,9 @@
 /*
  * Convenience kcontrol builders
  */
-#define SOC_SINGLE_VALUE(reg,shift,max,invert) ((reg) | ((shift) << 8) |\
+#define SOC_SINGLE_VALUE(reg, shift, max, invert) ((reg) | ((shift) << 8) |\
 	((shift) << 12) | ((max) << 16) | ((invert) << 24))
-#define SOC_SINGLE_VALUE_EXT(reg,max,invert) ((reg) | ((max) << 16) |\
+#define SOC_SINGLE_VALUE_EXT(reg, max, invert) ((reg) | ((max) << 16) |\
 	((invert) << 31))
 #define SOC_SINGLE(xname, reg, shift, max, invert) \
 {	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = xname, \
@@ -38,7 +38,8 @@
 	.private_value =  SOC_SINGLE_VALUE(reg, shift, max, invert) }
 #define SOC_SINGLE_TLV(xname, reg, shift, max, invert, tlv_array) \
 {	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = xname, \
-	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ | SNDRV_CTL_ELEM_ACCESS_READWRITE,\
+	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |\
+		 SNDRV_CTL_ELEM_ACCESS_READWRITE,\
 	.tlv.p = (tlv_array), \
 	.info = snd_soc_info_volsw, .get = snd_soc_get_volsw,\
 	.put = snd_soc_put_volsw, \
@@ -57,7 +58,8 @@
 		((max) << 12) | ((invert) << 20) | ((reg_right) << 24) }
 #define SOC_DOUBLE_TLV(xname, reg, shift_left, shift_right, max, invert, tlv_array) \
 {	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname),\
-	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ | SNDRV_CTL_ELEM_ACCESS_READWRITE,\
+	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |\
+		 SNDRV_CTL_ELEM_ACCESS_READWRITE,\
 	.tlv.p = (tlv_array), \
 	.info = snd_soc_info_volsw, .get = snd_soc_get_volsw, \
 	.put = snd_soc_put_volsw, \
@@ -65,7 +67,8 @@
 		((shift_right) << 12) | ((max) << 16) | ((invert) << 24) }
 #define SOC_DOUBLE_R_TLV(xname, reg_left, reg_right, shift, max, invert, tlv_array) \
 {	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname),\
-	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ | SNDRV_CTL_ELEM_ACCESS_READWRITE,\
+	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |\
+		 SNDRV_CTL_ELEM_ACCESS_READWRITE,\
 	.tlv.p = (tlv_array), \
 	.info = snd_soc_info_volsw_2r, \
 	.get = snd_soc_get_volsw_2r, .put = snd_soc_put_volsw_2r, \
@@ -131,8 +134,8 @@
  * DAI Sync
  * Synchronous LR (Left Right) clocks and Frame signals.
  */
-#define SND_SOC_DAIFMT_SYNC		(0 << 5)	/* Tx FRM = Rx FRM */ 
-#define SND_SOC_DAIFMT_ASYNC		(1 << 5)	/* Tx FRM ~ Rx FRM */ 
+#define SND_SOC_DAIFMT_SYNC		(0 << 5)	/* Tx FRM = Rx FRM */
+#define SND_SOC_DAIFMT_ASYNC		(1 << 5)	/* Tx FRM ~ Rx FRM */
 
 /*
  * TDM
@@ -142,7 +145,7 @@
 /*
  * DAI hardware signal inversions
  */
-#define SND_SOC_DAIFMT_NB_NF		(0 << 8)	/* normal bit clock + frame */
+#define SND_SOC_DAIFMT_NB_NF		(0 << 8)	/* normal bclk + frm */
 #define SND_SOC_DAIFMT_NB_IF		(1 << 8)	/* normal bclk + inv frm */
 #define SND_SOC_DAIFMT_IB_NF		(2 << 8)	/* invert bclk + nor frm */
 #define SND_SOC_DAIFMT_IB_IF		(3 << 8)	/* invert bclk + frm */
@@ -445,7 +448,7 @@ struct snd_soc_dai_link  {
 
 	/* codec/machine specific init - e.g. add machine controls */
 	int (*init)(struct snd_soc_codec *codec);
-	
+
 	/* DAI pcm */
 	struct snd_pcm *pcm;
 };

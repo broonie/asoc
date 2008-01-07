@@ -72,7 +72,7 @@ static const u16 wm8711_reg[WM8711_CACHEREGNUM] = {
 /*
  * read wm8711 register cache
  */
-static inline unsigned int wm8711_read_reg_cache(struct snd_soc_codec * codec,
+static inline unsigned int wm8711_read_reg_cache(struct snd_soc_codec *codec,
 	unsigned int reg)
 {
 	u16 *cache = codec->reg_cache;
@@ -98,7 +98,7 @@ static inline void wm8711_write_reg_cache(struct snd_soc_codec *codec,
 /*
  * write to the WM8711 register space
  */
-static int wm8711_write(struct snd_soc_codec * codec, unsigned int reg,
+static int wm8711_write(struct snd_soc_codec *codec, unsigned int reg,
 	unsigned int value)
 {
 	u8 data[2];
@@ -110,7 +110,7 @@ static int wm8711_write(struct snd_soc_codec * codec, unsigned int reg,
 	data[0] = (reg << 1) | ((value >> 8) & 0x0001);
 	data[1] = value & 0x00ff;
 
-	wm8711_write_reg_cache (codec, reg, value);
+	wm8711_write_reg_cache(codec, reg, value);
 	if (codec->hw_write(codec->control_data, data, 2) == 2)
 		return 0;
 	else
@@ -135,7 +135,8 @@ static int wm8711_add_controls(struct snd_soc_codec *codec)
 
 	for (i = 0; i < ARRAY_SIZE(wm8711_snd_controls); i++) {
 		err = snd_ctl_add(codec->card,
-				snd_soc_cnew(&wm8711_snd_controls[i],codec, NULL));
+				snd_soc_cnew(&wm8711_snd_controls[i], codec,
+					NULL));
 		if (err < 0)
 			return err;
 	}
@@ -179,15 +180,13 @@ static int wm8711_add_widgets(struct snd_soc_codec *codec)
 {
 	int i;
 
-	for(i = 0; i < ARRAY_SIZE(wm8711_dapm_widgets); i++) {
+	for (i = 0; i < ARRAY_SIZE(wm8711_dapm_widgets); i++)
 		snd_soc_dapm_new_control(codec, &wm8711_dapm_widgets[i]);
-	}
 
 	/* set up audio path interconnects */
-	for(i = 0; intercon[i][0] != NULL; i++) {
-		snd_soc_dapm_connect_input(codec, intercon[i][0], intercon[i][1],
-			intercon[i][2]);
-	}
+	for (i = 0; intercon[i][0] != NULL; i++)
+		snd_soc_dapm_connect_input(codec, intercon[i][0],
+				intercon[i][1], intercon[i][2]);
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;
@@ -284,33 +283,33 @@ static int wm8711_pcm_prepare(struct snd_pcm_substream *substream)
 	struct snd_soc_device *socdev = rtd->socdev;
 	struct snd_soc_codec *codec = socdev->codec;
 
-    /* set active */
-    wm8711_write(codec, WM8711_ACTIVE, 0x0001);
-    return 0;
+	/* set active */
+	wm8711_write(codec, WM8711_ACTIVE, 0x0001);
+	return 0;
 }
 
 static void wm8711_shutdown(struct snd_pcm_substream *substream)
 {
-    struct snd_soc_pcm_runtime *rtd = substream->private_data;
-    struct snd_soc_device *socdev = rtd->socdev;
-    struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_device *socdev = rtd->socdev;
+	struct snd_soc_codec *codec = socdev->codec;
 
-    /* deactivate */
-    if (!codec->active) {
-        udelay(50);
-        wm8711_write(codec, WM8711_ACTIVE, 0x0);
-    }
+	/* deactivate */
+	if (!codec->active) {
+		udelay(50);
+		wm8711_write(codec, WM8711_ACTIVE, 0x0);
+	}
 }
 
 static int wm8711_mute(struct snd_soc_codec_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
-    u16 mute_reg = wm8711_read_reg_cache(codec, WM8711_APDIGI) & 0xfff7;
+	u16 mute_reg = wm8711_read_reg_cache(codec, WM8711_APDIGI) & 0xfff7;
 
-    if (mute)
-        wm8711_write(codec, WM8711_APDIGI, mute_reg | 0x8);
-    else
-        wm8711_write(codec, WM8711_APDIGI, mute_reg);
+	if (mute)
+		wm8711_write(codec, WM8711_APDIGI, mute_reg | 0x8);
+	else
+		wm8711_write(codec, WM8711_APDIGI, mute_reg);
 
 	return 0;
 }
@@ -482,9 +481,9 @@ static int wm8711_resume(struct platform_device *pdev)
  * initialise the WM8711 driver
  * register the mixer and dsp interfaces with the kernel
  */
-static int wm8711_init(struct snd_soc_device* socdev)
+static int wm8711_init(struct snd_soc_device *socdev)
 {
-	struct snd_soc_codec* codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int reg, ret = 0;
 
 	codec->name = "WM8711";
@@ -521,10 +520,10 @@ static int wm8711_init(struct snd_soc_device* socdev)
 	wm8711_add_controls(codec);
 	wm8711_add_widgets(codec);
 	ret = snd_soc_register_card(socdev);
-    if (ret < 0) {
-      	printk(KERN_ERR "wm8711: failed to register card\n");
+	if (ret < 0) {
+		printk(KERN_ERR "wm8711: failed to register card\n");
 		goto card_err;
-    }
+	}
 	return ret;
 
 card_err:
@@ -537,7 +536,7 @@ pcm_err:
 
 static struct snd_soc_device *wm8711_socdev;
 
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 
 /*
  * WM8711 2 wire address is determined by GPIO5
@@ -573,7 +572,7 @@ static int wm8711_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 	client_template.addr = addr;
 
 	i2c = kmemdup(&client_template, sizeof(client_template), GFP_KERNEL);
-	if (i2c == NULL){
+	if (i2c == NULL) {
 		kfree(codec);
 		return -ENOMEM;
 	}
@@ -585,26 +584,25 @@ static int wm8711_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 	ret = i2c_attach_client(i2c);
 	if (ret < 0) {
 		err("failed to attach codec at addr %x\n", addr);
-        goto err;
-    }
+		goto err;
+	}
 
 	ret = wm8711_init(socdev);
-    if (ret < 0) {
-        err("failed to initialise WM8711\n");
-        goto err;
-    }
-    return ret;
+	if (ret < 0) {
+		err("failed to initialise WM8711\n");
+		goto err;
+	}
+	return ret;
 
 err:
-    kfree(codec);
-    kfree(i2c);
-    return ret;
-
+	kfree(codec);
+	kfree(i2c);
+	return ret;
 }
 
 static int wm8711_i2c_detach(struct i2c_client *client)
 {
-	struct snd_soc_codec* codec = i2c_get_clientdata(client);
+	struct snd_soc_codec *codec = i2c_get_clientdata(client);
 
 	i2c_detach_client(client);
 	kfree(codec->reg_cache);
@@ -639,7 +637,7 @@ static int wm8711_probe(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct wm8711_setup_data *setup;
-	struct snd_soc_codec* codec;
+	struct snd_soc_codec *codec;
 	struct wm8711_priv *wm8711;
 	int ret = 0;
 
@@ -663,7 +661,7 @@ static int wm8711_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&codec->dapm_paths);
 
 	wm8711_socdev = socdev;
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	if (setup->i2c_address) {
 		normal_i2c[0] = setup->i2c_address;
 		codec->hw_write = (hw_write_t)i2c_master_send;
@@ -688,7 +686,7 @@ static int wm8711_remove(struct platform_device *pdev)
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	i2c_del_driver(&wm8711_i2c_driver);
 #endif
 	kfree(codec->private_data);
@@ -703,7 +701,6 @@ struct snd_soc_codec_device soc_codec_dev_wm8711 = {
 	.suspend = 	wm8711_suspend,
 	.resume =	wm8711_resume,
 };
-
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8711);
 
 MODULE_DESCRIPTION("ASoC WM8711 driver");

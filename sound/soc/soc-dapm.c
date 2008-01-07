@@ -708,7 +708,8 @@ static int dapm_mixer_update_power(struct snd_soc_dapm_widget *widget,
 	struct snd_soc_dapm_path *path;
 	int found = 0;
 
-	if (widget->id != snd_soc_dapm_mixer && widget->id != snd_soc_dapm_switch)
+	if (widget->id != snd_soc_dapm_mixer &&
+	    widget->id != snd_soc_dapm_switch)
 		return -ENODEV;
 
 	if (!snd_soc_test_bits(widget->codec, reg, val_mask, val))
@@ -1106,7 +1107,7 @@ int snd_soc_dapm_put_volsw(struct snd_kcontrol *kcontrol,
 			ret = widget->event(widget, kcontrol,
 						SND_SOC_DAPM_PRE_REG);
 			if (ret < 0) {
-				ret=1;
+				ret = 1;
 				goto out;
 			}
 		}

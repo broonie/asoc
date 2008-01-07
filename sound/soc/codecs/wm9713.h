@@ -15,11 +15,13 @@
 #define WM9713_CLKB_MULT		2
 #define WM9713_HIFI_DIV			3
 #define WM9713_PCMBCLK_DIV		4
+#define WM9713_PCMCLK_PLL_DIV           5
+#define WM9713_HIFI_PLL_DIV             6
 
-/* PCM clk div */
+/* Calculate the appropriate bit mask for the external PCM clock divider */
 #define WM9713_PCMDIV(x)	((x - 1) << 8)
 
-/* HiFi Div */
+/* Calculate the appropriate bit mask for the external HiFi clock divider */
 #define WM9713_HIFIDIV(x)	((x - 1) << 12)
 
 /* MCLK clock mulitipliers */

@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/delay.h>
+#include <linux/clk.h>
 #include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
@@ -76,6 +77,8 @@ static struct pxa2xx_gpio gpio_bus[] = {
 		.frm = GPIO31_SYNC_I2S_MD,
 	},
 };
+
+static struct clk *i2s_clk;
 
 static int pxa2xx_i2s_startup(struct snd_pcm_substream *substream)
 {
@@ -149,7 +152,7 @@ static int pxa2xx_i2s_hw_params(struct snd_pcm_substream *substream,
 	pxa_gpio_mode(gpio_bus[pxa_i2s.master].tx);
 	pxa_gpio_mode(gpio_bus[pxa_i2s.master].frm);
 	pxa_gpio_mode(gpio_bus[pxa_i2s.master].clk);
-	pxa_set_cken(CKEN_I2S, 1);
+	clk_enable(i2s_clk);
 	pxa_i2s_wait();
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
@@ -234,7 +237,7 @@ static void pxa2xx_i2s_shutdown(struct snd_pcm_substream *substream)
 	if (SACR1 & (SACR1_DREC | SACR1_DRPL)) {
 		SACR0 &= ~SACR0_ENB;
 		pxa_i2s_wait();
-		pxa_set_cken(CKEN_I2S, 0);
+		clk_disable(i2s_clk);
 	}
 }
 
@@ -311,6 +314,44 @@ struct snd_soc_cpu_dai pxa_i2s_dai = {
 };
 
 EXPORT_SYMBOL_GPL(pxa_i2s_dai);
+
+static int pxa2xx_i2s_probe(struct platform_device *dev)
+{
+	i2s_clk = clk_get(&dev->dev, "I2SCLK");
+	if (IS_ERR(i2s_clk))
+		return PTR_ERR(i2s_clk);
+
+	return 0;
+}
+
+static int pxa2xx_i2s_remove(struct platform_device *dev)
+{
+	clk_put(i2s_clk);
+	i2s_clk = 0;
+
+	return 0;
+}
+
+static struct platform_driver pxa2xx_i2s_driver = {
+	.probe		= pxa2xx_i2s_probe,
+	.remove		= pxa2xx_i2s_remove,
+	.driver		= {
+		.name	= "pxa2xx-i2s",
+	},
+};
+
+static int __init pxa2xx_i2s_init(void)
+{
+	return platform_driver_register(&pxa2xx_i2s_driver);
+}
+
+static void __exit pxa2xx_i2s_exit(void)
+{
+	return platform_driver_unregister(&pxa2xx_i2s_driver);
+}
+
+module_init(pxa2xx_i2s_init);
+module_exit(pxa2xx_i2s_exit);
 
 /* Module information */
 MODULE_AUTHOR("Liam Girdwood, liam.girdwood@wolfsonmicro.com, www.wolfsonmicro.com");

@@ -6,10 +6,6 @@ config SND_PXA2XX_SOC
 	  the PXA2xx AC97, I2S or SSP interface. You will also need
 	  to select the audio interfaces to support below.
 
-config SND_PXA2XX_AC97
-	tristate
-	select SND_AC97_CODEC
-
 config SND_PXA2XX_SOC_AC97
 	tristate
 	select AC97_BUS
@@ -58,6 +54,15 @@ config SND_PXA2XX_SOC_TOSA
 	  Say Y if you want to add support for SoC audio on Sharp
 	  Zaurus SL-C6000x models (Tosa).
 
+config SND_PXA2XX_SOC_E800
+	tristate "SoC AC97 Audio support for e800"
+	depends on SND_PXA2XX_SOC && MACH_E800
+	select SND_SOC_WM9712
+	select SND_PXA2XX_SOC_AC97
+	help
+	  Say Y if you want to add support for SoC audio on the
+	  Toshiba e800 PDA
+
 config SND_PXA2XX_SOC_MAGICIAN
 	tristate "SoC Audio support for HTC Magician"
 	depends on SND_PXA2XX_SOC
@@ -89,7 +94,7 @@ config SND_PXA2XX_SOC_H5000
 config SND_PXA2XX_SOC_MAINSTONE
 	tristate "SoC AC97 Audio support for Intel Mainstone"
 	depends on SND_PXA2XX_SOC && MACH_MAINSTONE
-	select SND_PXA2XX_AC97
+	select SND_PXA2XX_SOC_AC97
 	help
 	  Say Y if you want to add support for generic AC97 SoC audio on Mainstone.
 

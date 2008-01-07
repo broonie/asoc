@@ -292,7 +292,8 @@ static void close_delayed_work(struct work_struct *work)
 			if (codec->active == 0) {
 				dbg("pop wq D1 %s %s\n", codec->name,
 					codec_dai->playback.stream_name);
-				snd_soc_dapm_device_event(socdev, SNDRV_CTL_POWER_D1);
+				snd_soc_dapm_device_event(socdev,
+					SNDRV_CTL_POWER_D1);
 			}
 
 			codec_dai->pop_wait = 0;
@@ -641,10 +642,8 @@ static int soc_suspend(struct platform_device *pdev, pm_message_t state)
 			dai->dai_ops.digital_mute(dai, 1);
 	}
 
-	snd_power_change_state(codec->card, SNDRV_CTL_POWER_D3cold);
-	
-	/* suspend all pcm's */
-	for(i = 0; i < machine->num_links; i++)
+	/* suspend all pcms */
+	for (i = 0; i < machine->num_links; i++)
 		snd_pcm_suspend_all(machine->dai_link[i].pcm);
 
 	if (machine->suspend_pre)
@@ -739,7 +738,6 @@ static int soc_resume(struct platform_device *pdev)
 	if (machine->resume_post)
 		machine->resume_post(pdev);
 
-	snd_power_change_state(codec->card, SNDRV_CTL_POWER_D3hot);
 	return 0;
 }
 
@@ -1361,8 +1359,11 @@ int snd_soc_info_volsw_ext(struct snd_kcontrol *kcontrol,
 {
 	int max = kcontrol->private_value;
 
-	uinfo->type =
-		max == 1 ? SNDRV_CTL_ELEM_TYPE_BOOLEAN : SNDRV_CTL_ELEM_TYPE_INTEGER;
+	if (max == 1)
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
+	else
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+
 	uinfo->count = 1;
 	uinfo->value.integer.min = 0;
 	uinfo->value.integer.max = max;
@@ -1386,8 +1387,11 @@ int snd_soc_info_volsw(struct snd_kcontrol *kcontrol,
 	int shift = (kcontrol->private_value >> 8) & 0x0f;
 	int rshift = (kcontrol->private_value >> 12) & 0x0f;
 
-	uinfo->type =
-		max == 1 ? SNDRV_CTL_ELEM_TYPE_BOOLEAN : SNDRV_CTL_ELEM_TYPE_INTEGER;
+	if (max == 1)
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
+	else
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+
 	uinfo->count = shift == rshift ? 1 : 2;
 	uinfo->value.integer.min = 0;
 	uinfo->value.integer.max = max;
@@ -1484,8 +1488,11 @@ int snd_soc_info_volsw_2r(struct snd_kcontrol *kcontrol,
 {
 	int max = (kcontrol->private_value >> 12) & 0xff;
 
-	uinfo->type =
-		max == 1 ? SNDRV_CTL_ELEM_TYPE_BOOLEAN : SNDRV_CTL_ELEM_TYPE_INTEGER;
+	if (max == 1)
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
+	else
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+
 	uinfo->count = 2;
 	uinfo->value.integer.min = 0;
 	uinfo->value.integer.max = max;
