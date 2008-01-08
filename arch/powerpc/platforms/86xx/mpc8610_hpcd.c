@@ -38,7 +38,7 @@
 #include <sysdev/fsl_pci.h>
 #include <sysdev/fsl_soc.h>
 
-static struct of_device_id mpc8610_ids[] = {
+static struct of_device_id __initdata mpc8610_ids[] = {
 	{ .compatible = "fsl,mpc8610", },
 	{}
 };
@@ -53,7 +53,7 @@ static int __init mpc8610_declare_of_platform_devices(void)
 
 	return 0;
 }
-device_initcall(mpc8610_declare_of_platform_devices);
+machine_device_initcall(mpc8610_declare_of_platform_devices);
 
 void __init
 mpc86xx_hpcd_init_irq(void)
