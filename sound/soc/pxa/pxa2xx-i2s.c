@@ -78,7 +78,22 @@ static struct pxa2xx_gpio gpio_bus[] = {
 	},
 };
 
-static struct clk *i2s_clk;
+static struct clk *pxa2xx_i2s_clk;
+static int pxa2xx_i2s_clk_enabled;
+
+static void pxa2xx_i2s_clk_enable(void)
+{
+	clk_enable(pxa2xx_i2s_clk);
+	pxa2xx_i2s_clk_enabled = 1;
+}
+
+static void pxa2xx_i2s_clk_disable(void)
+{
+	if (pxa2xx_i2s_clk_enabled) {
+		clk_disable(pxa2xx_i2s_clk);
+		pxa2xx_i2s_clk_enabled = 0;
+	}
+}
 
 static int pxa2xx_i2s_startup(struct snd_pcm_substream *substream)
 {
@@ -152,7 +167,7 @@ static int pxa2xx_i2s_hw_params(struct snd_pcm_substream *substream,
 	pxa_gpio_mode(gpio_bus[pxa_i2s.master].tx);
 	pxa_gpio_mode(gpio_bus[pxa_i2s.master].frm);
 	pxa_gpio_mode(gpio_bus[pxa_i2s.master].clk);
-	clk_enable(i2s_clk);
+	pxa2xx_i2s_clk_enable();
 	pxa_i2s_wait();
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
@@ -237,7 +252,7 @@ static void pxa2xx_i2s_shutdown(struct snd_pcm_substream *substream)
 	if (SACR1 & (SACR1_DREC | SACR1_DRPL)) {
 		SACR0 &= ~SACR0_ENB;
 		pxa_i2s_wait();
-		clk_disable(i2s_clk);
+		pxa2xx_i2s_clk_disable();
 	}
 }
 
@@ -317,17 +332,19 @@ EXPORT_SYMBOL_GPL(pxa_i2s_dai);
 
 static int pxa2xx_i2s_probe(struct platform_device *dev)
 {
-	i2s_clk = clk_get(&dev->dev, "I2SCLK");
-	if (IS_ERR(i2s_clk))
-		return PTR_ERR(i2s_clk);
+	pxa2xx_i2s_clk = clk_get(&dev->dev, "I2SCLK");
+	if (IS_ERR(pxa2xx_i2s_clk))
+		return PTR_ERR(pxa2xx_i2s_clk);
+	pxa2xx_i2s_clk_enabled = 0;
 
 	return 0;
 }
 
 static int pxa2xx_i2s_remove(struct platform_device *dev)
 {
-	clk_put(i2s_clk);
-	i2s_clk = 0;
+	pxa2xx_i2s_clk_disable();
+	clk_put(pxa2xx_i2s_clk);
+	pxa2xx_i2s_clk = 0;
 
 	return 0;
 }
