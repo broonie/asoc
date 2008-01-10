@@ -130,6 +130,8 @@ static int pxa2xx_i2s_set_dai_fmt(struct snd_soc_cpu_dai *cpu_dai,
 	case SND_SOC_DAIFMT_LEFT_J:
 		pxa_i2s.fmt = SACR1_AMSL;
 		break;
+	default:
+		return -EINVAL;
 	}
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
@@ -140,7 +142,7 @@ static int pxa2xx_i2s_set_dai_fmt(struct snd_soc_cpu_dai *cpu_dai,
 		pxa_i2s.master = 0;
 		break;
 	default:
-		break;
+		return -EINVAL;
 	}
 	return 0;
 }
