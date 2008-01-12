@@ -231,6 +231,7 @@ static int mpc8610_hpcd_probe(struct of_device *ofdev,
 	struct device_node *guts_np = NULL;
 	struct device_node *dma_np = NULL;
 	struct device_node *dma_channel_np = NULL;
+	const phandle *codec_ph;
 	const char *sprop;
 	const u32 *iprop;
 	struct resource res;
@@ -250,17 +251,14 @@ static int mpc8610_hpcd_probe(struct of_device *ofdev,
 	ssi_info.dev = &ofdev->dev;
 
 	/*
-	 * We are only interested in SSIs with a codec child node in them, so
-	 * let's make sure this SSI has one.
+	 * We are only interested in SSIs with a codec phandle in them, so let's
+	 * make sure this SSI has one.
 	 */
-	while ((codec_np = of_get_next_child(np, codec_np)) != NULL) {
-		if (strcmp(codec_np->name, "codec") == 0) {
-			/* Most drivers forget the final of_node_put() call */
-			of_node_put(codec_np);
-			break;
-		}
-	}
+	codec_ph = of_get_property(np, "codec-handle", NULL);
+	if (!codec_ph)
+		goto error;
 
+	codec_np = of_find_node_by_phandle(*codec_ph);
 	if (!codec_np)
 		goto error;
 
@@ -500,6 +498,11 @@ static int mpc8610_hpcd_probe(struct of_device *ofdev,
 	return 0;
 
 error:
+	of_node_put(codec_np);
+	of_node_put(guts_np);
+	of_node_put(dma_np);
+	of_node_put(dma_channel_np);
+
 	if (sound_device)
 		platform_device_unregister(sound_device);
 

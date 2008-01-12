@@ -39,21 +39,18 @@
 #include <sysdev/fsl_soc.h>
 
 static struct of_device_id __initdata mpc8610_ids[] = {
-	{ .compatible = "fsl,mpc8610", },
+	{ .compatible = "fsl,mpc8610-immr", },
 	{}
 };
 
 static int __init mpc8610_declare_of_platform_devices(void)
 {
-	if (!machine_is(mpc86xx_hpcd))
-		return 0;
-
 	/* Without this call, the SSI device driver won't get probed. */
 	of_platform_bus_probe(NULL, mpc8610_ids, NULL);
 
 	return 0;
 }
-machine_device_initcall(mpc8610_declare_of_platform_devices);
+machine_device_initcall(mpc86xx_hpcd, mpc8610_declare_of_platform_devices);
 
 void __init
 mpc86xx_hpcd_init_irq(void)

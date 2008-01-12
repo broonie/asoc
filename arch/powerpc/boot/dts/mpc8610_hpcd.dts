@@ -42,7 +42,7 @@
 		#size-cells = <1>;
 		#interrupt-cells = <2>;
 		device_type = "soc";
-		compatible = "fsl,mpc8610";
+		compatible = "fsl,mpc8610-immr", "simple-bus";
 		ranges = <0 e0000000 00100000>;
 		reg = <e0000000 1000>;
 		bus-frequency = <0>;
@@ -56,6 +56,13 @@
 			interrupts = <2b 2>;
 			interrupt-parent = <&mpic>;
 			dfsrr;
+
+                        cs4270:codec@4f {
+				compatible = "cirrus,cs4270";
+                                reg = <4f>;
+				/* MCLK source is a stand-alone oscillator */
+				clock-frequency = <bb8000>;
+                        };
 		};
 
 		i2c@3100 {
@@ -105,18 +112,14 @@
 			fsl,has-rstcr;
 		};
 
-		ssi@16000 {
+		i2s@16000 {
 			compatible = "fsl,mpc8610-ssi";
 			cell-index = <0>;
 			reg = <16000 100>;
 			interrupt-parent = <&mpic>;
 			interrupts = <3e 2>;
 			fsl,mode = "i2s-slave";
-			codec {
-				compatible = "cirrus,cs4270";
-				/* MCLK source is a stand-alone oscillator */
-				clock-frequency = <bb8000>;
-			};
+			codec-handle = <&cs4270>;
 		};
 
 		ssi@16100 {

@@ -2543,14 +2543,15 @@ platforms are moved over to use the flattened-device-tree model.
 			    "ac97-master" - AC97 mode, SSI is clock master
 
        Optional properties:
-       - codec		  : child node that defines an audio codec connected
-		 	    to this SSI
+       - codec-handle	  : phandle to a 'codec' node that defines an audio
+			    codec connected to this SSI.  This node is typically
+			    a child of an I2C or other control node.
 
        Child 'codec' node required properties:
        - compatible	  : compatible list, contains the name of the codec
 
        Child 'codec' node optional properties:
-       - bus-frequency	  : The frequency of the input clock, which typically
+       - clock-frequency  : The frequency of the input clock, which typically
                             comes from an on-board dedicated oscillator.
 
 
