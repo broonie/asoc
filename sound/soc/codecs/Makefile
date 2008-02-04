@@ -8,6 +8,7 @@ snd-soc-wm8731-objs := wm8731.o
 snd-soc-wm8750-objs := wm8750.o
 snd-soc-wm8753-objs := wm8753.o
 snd-soc-wm8772-objs := wm8772.o
+snd-soc-wm8900-objs := wm8900.o
 snd-soc-wm8950-objs := wm8950.o
 snd-soc-wm8951-objs := wm8951.o
 snd-soc-wm8956-objs := wm8956.o
