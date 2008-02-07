@@ -141,12 +141,7 @@ static const char *task_state_array[] = {
 
 static inline const char *get_task_state(struct task_struct *tsk)
 {
-	unsigned int state = (tsk->state & (TASK_RUNNING |
-					    TASK_INTERRUPTIBLE |
-					    TASK_UNINTERRUPTIBLE |
-					    TASK_STOPPED |
-					    TASK_TRACED)) |
-					   tsk->exit_state;
+	unsigned int state = (tsk->state & TASK_REPORT) | tsk->exit_state;
 	const char **p = &task_state_array[0];
 
 	while (state) {
@@ -286,14 +281,23 @@ static inline char *task_sig(struct task_struct *p, char *buffer)
 	return buffer;
 }
 
+static char *render_cap_t(const char *header, kernel_cap_t *a, char *buffer)
+{
+	unsigned __capi;
+
+	buffer += sprintf(buffer, "%s", header);
+	CAP_FOR_EACH_U32(__capi) {
+		buffer += sprintf(buffer, "%08x",
+				  a->cap[(_LINUX_CAPABILITY_U32S-1) - __capi]);
+	}
+	return buffer + sprintf(buffer, "\n");
+}
+
 static inline char *task_cap(struct task_struct *p, char *buffer)
 {
-    return buffer + sprintf(buffer, "CapInh:\t%016x\n"
-			    "CapPrm:\t%016x\n"
-			    "CapEff:\t%016x\n",
-			    cap_t(p->cap_inheritable),
-			    cap_t(p->cap_permitted),
-			    cap_t(p->cap_effective));
+	buffer = render_cap_t("CapInh:\t", &p->cap_inheritable, buffer);
+	buffer = render_cap_t("CapPrm:\t", &p->cap_permitted, buffer);
+	return render_cap_t("CapEff:\t", &p->cap_effective, buffer);
 }
 
 static inline char *task_context_switch_counts(struct task_struct *p,

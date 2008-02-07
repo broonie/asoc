@@ -88,10 +88,6 @@
  *	in /proc for a task before it execs a suid executable.
  */
 
-
-/* Worst case buffer size needed for holding an integer. */
-#define PROC_NUMBUF 13
-
 struct pid_entry {
 	char *name;
 	int len;
@@ -199,7 +195,7 @@ static int proc_root_link(struct inode *inode, struct dentry **dentry, struct vf
 	(task == current || \
 	(task->parent == current && \
 	(task->ptrace & PT_PTRACED) && \
-	 (task->state == TASK_STOPPED || task->state == TASK_TRACED) && \
+	 (task_is_stopped_or_traced(task)) && \
 	 security_ptrace(current,task) == 0))
 
 struct mm_struct *mm_for_maps(struct task_struct *task)
@@ -308,6 +304,77 @@ static int proc_pid_schedstat(struct task_struct *task, char *buffer)
 			task->sched_info.run_delay,
 			task->sched_info.pcount);
 }
+#endif
+
+#ifdef CONFIG_LATENCYTOP
+static int lstats_show_proc(struct seq_file *m, void *v)
+{
+	int i;
+	struct task_struct *task = m->private;
+	seq_puts(m, "Latency Top version : v0.1\n");
+
+	for (i = 0; i < 32; i++) {
+		if (task->latency_record[i].backtrace[0]) {
+			int q;
+			seq_printf(m, "%i %li %li ",
+				task->latency_record[i].count,
+				task->latency_record[i].time,
+				task->latency_record[i].max);
+			for (q = 0; q < LT_BACKTRACEDEPTH; q++) {
+				char sym[KSYM_NAME_LEN];
+				char *c;
+				if (!task->latency_record[i].backtrace[q])
+					break;
+				if (task->latency_record[i].backtrace[q] == ULONG_MAX)
+					break;
+				sprint_symbol(sym, task->latency_record[i].backtrace[q]);
+				c = strchr(sym, '+');
+				if (c)
+					*c = 0;
+				seq_printf(m, "%s ", sym);
+			}
+			seq_printf(m, "\n");
+		}
+
+	}
+	return 0;
+}
+
+static int lstats_open(struct inode *inode, struct file *file)
+{
+	int ret;
+	struct seq_file *m;
+	struct task_struct *task = get_proc_task(inode);
+
+	ret = single_open(file, lstats_show_proc, NULL);
+	if (!ret) {
+		m = file->private_data;
+		m->private = task;
+	}
+	return ret;
+}
+
+static ssize_t lstats_write(struct file *file, const char __user *buf,
+			    size_t count, loff_t *offs)
+{
+	struct seq_file *m;
+	struct task_struct *task;
+
+	m = file->private_data;
+	task = m->private;
+	clear_all_latency_tracing(task);
+
+	return count;
+}
+
+static const struct file_operations proc_lstats_operations = {
+	.open		= lstats_open,
+	.read		= seq_read,
+	.write		= lstats_write,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
 #endif
 
 /* The badness from the OOM killer */
@@ -716,7 +783,7 @@ out_no_task:
 }
 #endif
 
-static loff_t mem_lseek(struct file * file, loff_t offset, int orig)
+loff_t mem_lseek(struct file *file, loff_t offset, int orig)
 {
 	switch (orig) {
 	case 0:
@@ -864,42 +931,6 @@ static const struct file_operations proc_oom_adjust_operations = {
 	.write		= oom_adjust_write,
 };
 
-#ifdef CONFIG_MMU
-static ssize_t clear_refs_write(struct file *file, const char __user *buf,
-				size_t count, loff_t *ppos)
-{
-	struct task_struct *task;
-	char buffer[PROC_NUMBUF], *end;
-	struct mm_struct *mm;
-
-	memset(buffer, 0, sizeof(buffer));
-	if (count > sizeof(buffer) - 1)
-		count = sizeof(buffer) - 1;
-	if (copy_from_user(buffer, buf, count))
-		return -EFAULT;
-	if (!simple_strtol(buffer, &end, 0))
-		return -EINVAL;
-	if (*end == '\n')
-		end++;
-	task = get_proc_task(file->f_path.dentry->d_inode);
-	if (!task)
-		return -ESRCH;
-	mm = get_task_mm(task);
-	if (mm) {
-		clear_refs_smap(mm);
-		mmput(mm);
-	}
-	put_task_struct(task);
-	if (end - buffer == 0)
-		return -EIO;
-	return end - buffer;
-}
-
-static struct file_operations proc_clear_refs_operations = {
-	.write		= clear_refs_write,
-};
-#endif
-
 #ifdef CONFIG_AUDITSYSCALL
 #define TMPBUFLEN 21
 static ssize_t proc_loginuid_read(struct file * file, char __user * buf,
@@ -913,7 +944,7 @@ static ssize_t proc_loginuid_read(struct file * file, char __user * buf,
 	if (!task)
 		return -ESRCH;
 	length = scnprintf(tmpbuf, TMPBUFLEN, "%u",
-				audit_get_loginuid(task->audit_context));
+				audit_get_loginuid(task));
 	put_task_struct(task);
 	return simple_read_from_buffer(buf, count, ppos, tmpbuf, length);
 }
@@ -1019,6 +1050,7 @@ static const struct file_operations proc_fault_inject_operations = {
 	.write		= proc_fault_inject_write,
 };
 #endif
+
 
 #ifdef CONFIG_SCHED_DEBUG
 /*
@@ -2217,9 +2249,10 @@ static const struct pid_entry tgid_base_stuff[] = {
 	LNK("exe",        exe),
 	REG("mounts",     S_IRUGO, mounts),
 	REG("mountstats", S_IRUSR, mountstats),
-#ifdef CONFIG_MMU
+#ifdef CONFIG_PROC_PAGE_MONITOR
 	REG("clear_refs", S_IWUSR, clear_refs),
 	REG("smaps",      S_IRUGO, smaps),
+	REG("pagemap",    S_IRUSR, pagemap),
 #endif
 #ifdef CONFIG_SECURITY
 	DIR("attr",       S_IRUGO|S_IXUGO, attr_dir),
@@ -2229,6 +2262,9 @@ static const struct pid_entry tgid_base_stuff[] = {
 #endif
 #ifdef CONFIG_SCHEDSTATS
 	INF("schedstat",  S_IRUGO, pid_schedstat),
+#endif
+#ifdef CONFIG_LATENCYTOP
+	REG("latency",  S_IRUGO, lstats),
 #endif
 #ifdef CONFIG_PROC_PID_CPUSET
 	REG("cpuset",     S_IRUGO, cpuset),
@@ -2285,7 +2321,8 @@ static void proc_flush_task_mnt(struct vfsmount *mnt, pid_t pid, pid_t tgid)
 	name.len = snprintf(buf, sizeof(buf), "%d", pid);
 	dentry = d_hash_and_lookup(mnt->mnt_root, &name);
 	if (dentry) {
-		shrink_dcache_parent(dentry);
+		if (!(current->flags & PF_EXITING))
+			shrink_dcache_parent(dentry);
 		d_drop(dentry);
 		dput(dentry);
 	}
@@ -2542,9 +2579,10 @@ static const struct pid_entry tid_base_stuff[] = {
 	LNK("root",      root),
 	LNK("exe",       exe),
 	REG("mounts",    S_IRUGO, mounts),
-#ifdef CONFIG_MMU
+#ifdef CONFIG_PROC_PAGE_MONITOR
 	REG("clear_refs", S_IWUSR, clear_refs),
 	REG("smaps",     S_IRUGO, smaps),
+	REG("pagemap",    S_IRUSR, pagemap),
 #endif
 #ifdef CONFIG_SECURITY
 	DIR("attr",      S_IRUGO|S_IXUGO, attr_dir),
@@ -2554,6 +2592,9 @@ static const struct pid_entry tid_base_stuff[] = {
 #endif
 #ifdef CONFIG_SCHEDSTATS
 	INF("schedstat", S_IRUGO, pid_schedstat),
+#endif
+#ifdef CONFIG_LATENCYTOP
+	REG("latency",  S_IRUGO, lstats),
 #endif
 #ifdef CONFIG_PROC_PID_CPUSET
 	REG("cpuset",    S_IRUGO, cpuset),

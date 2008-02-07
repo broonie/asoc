@@ -32,7 +32,6 @@
 #include <linux/pm.h>
 #include <linux/bitops.h>
 #include <linux/platform_device.h>
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -297,14 +296,16 @@ static void close_delayed_work(struct work_struct *work)
 			}
 
 			codec_dai->pop_wait = 0;
-			snd_soc_dapm_stream_event(codec, codec_dai->playback.stream_name,
+			snd_soc_dapm_stream_event(codec,
+				codec_dai->playback.stream_name,
 				SND_SOC_DAPM_STREAM_STOP);
 
 			/* power down the codec power domain if no longer active */
 			if (codec->active == 0) {
 				dbg("pop wq D3 %s %s\n", codec->name,
 					codec_dai->playback.stream_name);
-		 		snd_soc_dapm_device_event(socdev, SNDRV_CTL_POWER_D3hot);
+				snd_soc_dapm_device_event(socdev,
+					SNDRV_CTL_POWER_D3hot);
 			}
 		}
 	}
@@ -360,10 +361,12 @@ static int soc_codec_close(struct snd_pcm_substream *substream)
 	} else {
 		/* capture streams can be powered down now */
 		snd_soc_dapm_stream_event(codec,
-			codec_dai->capture.stream_name, SND_SOC_DAPM_STREAM_STOP);
+			codec_dai->capture.stream_name,
+			SND_SOC_DAPM_STREAM_STOP);
 
 		if (codec->active == 0 && codec_dai->pop_wait == 0)
-			snd_soc_dapm_device_event(socdev, SNDRV_CTL_POWER_D3hot);
+			snd_soc_dapm_device_event(socdev,
+						SNDRV_CTL_POWER_D3hot);
 	}
 
 	mutex_unlock(&pcm_mutex);

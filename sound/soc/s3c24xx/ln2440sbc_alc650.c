@@ -18,7 +18,10 @@
 
 #include <linux/module.h>
 #include <linux/device.h>
+<<<<<<< HEAD:sound/soc/s3c24xx/ln2440sbc_alc650.c
 #include <sound/driver.h>
+=======
+>>>>>>> origin/master:sound/soc/s3c24xx/ln2440sbc_alc650.c
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>

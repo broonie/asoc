@@ -19,7 +19,6 @@
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/ac97_codec.h>
@@ -132,7 +131,7 @@ SOC_SINGLE("Aux Playback Headphone Volume", AC97_CD, 12, 7, 1),
 SOC_SINGLE("Aux Playback Speaker Volume", AC97_CD, 8, 7, 1),
 SOC_SINGLE("Aux Playback Phone Volume", AC97_CD, 4, 7, 1),
 
-SOC_SINGLE("Phone Volume", AC97_PHONE, 0, 15, 0),
+SOC_SINGLE("Phone Volume", AC97_PHONE, 0, 15, 1),
 SOC_DOUBLE("Line Capture Volume", AC97_LINE, 8, 0, 31, 1),
 
 SOC_SINGLE("Capture 20dB Boost Switch", AC97_REC_SEL, 14, 1, 0),

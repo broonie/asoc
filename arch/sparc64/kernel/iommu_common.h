@@ -9,6 +9,7 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/scatterlist.h>
+#include <linux/device.h>
 
 #include <asm/iommu.h>
 #include <asm/scatterlist.h>
@@ -29,6 +30,32 @@
  */
 #define IOMMU_PAGE_SHIFT		13
 
+#define SG_ENT_PHYS_ADDRESS(SG)	(__pa(sg_virt((SG))))
+
+static inline unsigned long iommu_num_pages(unsigned long vaddr,
+					    unsigned long slen)
+{
+	unsigned long npages;
+
+	npages = IO_PAGE_ALIGN(vaddr + slen) - (vaddr & IO_PAGE_MASK);
+	npages >>= IO_PAGE_SHIFT;
+
+	return npages;
+}
+
+static inline unsigned long calc_npages(struct scatterlist *sglist, int nelems)
+{
+	unsigned long i, npages = 0;
+	struct scatterlist *sg;
+
+	for_each_sg(sglist, sg, nelems, i) {
+		unsigned long paddr = SG_ENT_PHYS_ADDRESS(sg);
+		npages += iommu_num_pages(paddr, sg->length);
+	}
+
+	return npages;
+}
+
 /* You are _strongly_ advised to enable the following debugging code
  * any time you make changes to the sg code below, run it for a while
  * with filesystems mounted read-only before buying the farm... -DaveM
@@ -46,4 +73,4 @@ extern void verify_sglist(struct scatterlist *sg, int nents, iopte_t *iopte, int
 #define VCONTIG(__X, __Y)	(((__X) == (__Y)) || \
 				 (((__X) | (__Y)) << (64UL - PAGE_SHIFT)) == 0UL)
 
-extern unsigned long prepare_sg(struct scatterlist *sg, int nents);
+extern unsigned long prepare_sg(struct device *dev, struct scatterlist *sg, int nents);

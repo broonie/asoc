@@ -115,10 +115,8 @@ struct hrtimer {
 	enum hrtimer_restart		(*function)(struct hrtimer *);
 	struct hrtimer_clock_base	*base;
 	unsigned long			state;
-#ifdef CONFIG_HIGH_RES_TIMERS
 	enum hrtimer_cb_mode		cb_mode;
 	struct list_head		cb_entry;
-#endif
 #ifdef CONFIG_TIMER_STATS
 	void				*start_site;
 	char				start_comm[16];
@@ -149,7 +147,6 @@ struct hrtimer_sleeper {
  * @get_time:		function to retrieve the current time of the clock
  * @get_softirq_time:	function to retrieve the current time from the softirq
  * @softirq_time:	the time when running the hrtimer queue in the softirq
- * @cb_pending:		list of timers where the callback is pending
  * @offset:		offset of this clock to the monotonic base
  * @reprogram:		function to reprogram the timer event
  */
@@ -194,10 +191,10 @@ struct hrtimer_cpu_base {
 	spinlock_t			lock;
 	struct lock_class_key		lock_key;
 	struct hrtimer_clock_base	clock_base[HRTIMER_MAX_CLOCK_BASES];
+	struct list_head		cb_pending;
 #ifdef CONFIG_HIGH_RES_TIMERS
 	ktime_t				expires_next;
 	int				hres_active;
-	struct list_head		cb_pending;
 	unsigned long			nr_events;
 #endif
 };
@@ -215,6 +212,11 @@ extern void hrtimer_interrupt(struct clock_event_device *dev);
 static inline ktime_t hrtimer_cb_get_time(struct hrtimer *timer)
 {
 	return timer->base->get_time();
+}
+
+static inline int hrtimer_is_hres_active(struct hrtimer *timer)
+{
+	return timer->base->cpu_base->hres_active;
 }
 
 /*
@@ -248,6 +250,10 @@ static inline ktime_t hrtimer_cb_get_time(struct hrtimer *timer)
 	return timer->base->softirq_time;
 }
 
+static inline int hrtimer_is_hres_active(struct hrtimer *timer)
+{
+	return 0;
+}
 #endif
 
 extern ktime_t ktime_get(void);
@@ -295,8 +301,15 @@ static inline int hrtimer_is_queued(struct hrtimer *timer)
 }
 
 /* Forward a hrtimer so it expires after now: */
-extern unsigned long
+extern u64
 hrtimer_forward(struct hrtimer *timer, ktime_t now, ktime_t interval);
+
+/* Forward a hrtimer so it expires after the hrtimer's current now */
+static inline u64 hrtimer_forward_now(struct hrtimer *timer,
+				      ktime_t interval)
+{
+	return hrtimer_forward(timer, timer->base->get_time(), interval);
+}
 
 /* Precise sleep: */
 extern long hrtimer_nanosleep(struct timespec *rqtp,
@@ -310,14 +323,15 @@ extern void hrtimer_init_sleeper(struct hrtimer_sleeper *sl,
 
 /* Soft interrupt function to run the hrtimer queues: */
 extern void hrtimer_run_queues(void);
+extern void hrtimer_run_pending(void);
 
 /* Bootup initialization: */
 extern void __init hrtimers_init(void);
 
 #if BITS_PER_LONG < 64
-extern unsigned long ktime_divns(const ktime_t kt, s64 div);
+extern u64 ktime_divns(const ktime_t kt, s64 div);
 #else /* BITS_PER_LONG < 64 */
-# define ktime_divns(kt, div)		(unsigned long)((kt).tv64 / (div))
+# define ktime_divns(kt, div)		(u64)((kt).tv64 / (div))
 #endif
 
 /* Show pending timers: */

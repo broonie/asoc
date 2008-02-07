@@ -13,6 +13,9 @@ obj-$(CONFIG_HOTPLUG) += hotplug.o
 
 # Build the PCI Hotplug drivers if we were asked to
 obj-$(CONFIG_HOTPLUG_PCI) += hotplug/
+ifdef CONFIG_HOTPLUG_PCI
+obj-y += hotplug-pci.o
+endif
 
 # Build the PCI MSI interrupt support
 obj-$(CONFIG_PCI_MSI) += msi.o
@@ -32,7 +35,7 @@ obj-$(CONFIG_ARM) += setup-bus.o setup-irq.o
 obj-$(CONFIG_PARISC) += setup-bus.o
 obj-$(CONFIG_SUPERH) += setup-bus.o setup-irq.o
 obj-$(CONFIG_PPC32) += setup-irq.o
-obj-$(CONFIG_PPC64) += setup-bus.o
+obj-$(CONFIG_PPC) += setup-bus.o
 obj-$(CONFIG_MIPS) += setup-bus.o setup-irq.o
 obj-$(CONFIG_X86_VISWS) += setup-irq.o
 

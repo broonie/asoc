@@ -15,7 +15,10 @@
 #include <linux/moduleparam.h>
 #include <linux/device.h>
 
+<<<<<<< HEAD:sound/soc/pxa/e800_wm9712.c
 #include <sound/driver.h>
+=======
+>>>>>>> origin/master:sound/soc/pxa/e800_wm9712.c
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>

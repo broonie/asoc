@@ -877,15 +877,15 @@ config SERIAL_SUNHV
 	  systems.  Say Y if you want to be able to use this device.
 
 config SERIAL_IP22_ZILOG
-	tristate "IP22 Zilog8530 serial support"
-	depends on SGI_IP22
+	tristate "SGI Zilog8530 serial support"
+	depends on SGI_HAS_ZILOG
 	select SERIAL_CORE
 	help
-	  This driver supports the Zilog8530 serial ports found on SGI IP22
+	  This driver supports the Zilog8530 serial ports found on SGI
 	  systems.  Say Y or M if you want to be able to these serial ports.
 
 config SERIAL_IP22_ZILOG_CONSOLE
-	bool "Console on IP22 Zilog8530 serial port"
+	bool "Console on SGI Zilog8530 serial port"
 	depends on SERIAL_IP22_ZILOG=y
 	select SERIAL_CORE_CONSOLE
 
@@ -959,6 +959,30 @@ config SERIAL_COLDFIRE
 	help
 	  This driver supports the built-in serial ports of the Motorola ColdFire
 	  family of CPUs.
+
+config SERIAL_MCF
+	bool "Coldfire serial support (new style driver)"
+	depends on COLDFIRE
+	select SERIAL_CORE
+	help
+	  This new serial driver supports the Freescale Coldfire serial ports
+	  using the new serial driver subsystem.
+
+config SERIAL_MCF_BAUDRATE
+	int "Default baudrate for Coldfire serial ports"
+	depends on SERIAL_MCF
+	default 19200
+	help
+	  This setting lets you define what the default baudrate is for the
+	  ColdFire serial ports. The usual default varies from board to board,
+	  and this setting is a way of catering for that.
+
+config SERIAL_MCF_CONSOLE
+	bool "Coldfire serial console support"
+	depends on SERIAL_MCF
+	select SERIAL_CORE_CONSOLE
+	help
+	  Enable a ColdFire internal serial port to be the system console.
 
 config SERIAL_68360_SMC
 	bool "68360 SMC uart support"
@@ -1271,8 +1295,8 @@ config SERIAL_NETX_CONSOLE
 	depends on SERIAL_NETX
 	select SERIAL_CORE_CONSOLE
 	help
-	  If you have enabled the serial port on the Motorola IMX
-	  CPU you can make it the console by answering Y to this option.
+	  If you have enabled the serial port on the Hilscher NetX SoC
+	  you can make it the console by answering Y to this option.
 
 config SERIAL_OF_PLATFORM
 	tristate "Serial port on Open Firmware platform bus"
@@ -1283,5 +1307,30 @@ config SERIAL_OF_PLATFORM
 	  on a platform specific bus, you should enable this option.
 	  Currently, only 8250 compatible ports are supported, but
 	  others can easily be added.
+
+config SERIAL_QE
+	tristate "Freescale QUICC Engine serial port support"
+	depends on QUICC_ENGINE
+	select SERIAL_CORE
+	select FW_LOADER
+	default n
+	help
+	  This driver supports the QE serial ports on Freescale embedded
+	  PowerPC that contain a QUICC Engine.
+
+config SERIAL_SC26XX
+	tristate "SC2681/SC2692 serial port support"
+	depends on SNI_RM
+	select SERIAL_CORE
+	help
+	  This is a driver for the onboard serial ports of
+	  older RM400 machines.
+
+config SERIAL_SC26XX_CONSOLE
+	bool "Console on SC2681/SC2692 serial port"
+	depends on SERIAL_SC26XX
+	select SERIAL_CORE_CONSOLE
+	help
+	  Support for Console on SC2681/SC2692 serial ports.
 
 endmenu

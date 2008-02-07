@@ -35,7 +35,7 @@ extern const char linux_proc_banner[];
 #define ALIGN(x,a)		__ALIGN_MASK(x,(typeof(x))(a)-1)
 #define __ALIGN_MASK(x,mask)	(((x)+(mask))&~(mask))
 #define PTR_ALIGN(p, a)		((typeof(p))ALIGN((unsigned long)(p), (a)))
-#define IS_ALIGNED(x,a)		(((x) % ((typeof(x))(a))) == 0)
+#define IS_ALIGNED(x, a)		(((x) & ((typeof(x))(a) - 1)) == 0)
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]) + __must_be_array(arr))
 
@@ -105,8 +105,8 @@ struct user;
  * supposed to.
  */
 #ifdef CONFIG_PREEMPT_VOLUNTARY
-extern int cond_resched(void);
-# define might_resched() cond_resched()
+extern int _cond_resched(void);
+# define might_resched() _cond_resched()
 #else
 # define might_resched() do { } while (0)
 #endif
@@ -193,6 +193,9 @@ static inline int log_buf_get_len(void) { return 0; }
 static inline int log_buf_read(int idx) { return 0; }
 static inline int log_buf_copy(char *dest, int idx, int len) { return 0; }
 #endif
+
+extern void __attribute__((format(printf, 1, 2)))
+	early_printk(const char *fmt, ...);
 
 unsigned long int_sqrt(unsigned long);
 

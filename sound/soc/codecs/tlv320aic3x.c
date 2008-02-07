@@ -39,7 +39,10 @@
 #include <linux/pm.h>
 #include <linux/i2c.h>
 #include <linux/platform_device.h>
+<<<<<<< HEAD:sound/soc/codecs/tlv320aic3x.c
 #include <sound/driver.h>
+=======
+>>>>>>> origin/master:sound/soc/codecs/tlv320aic3x.c
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>

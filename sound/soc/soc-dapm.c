@@ -43,7 +43,6 @@
 #include <linux/bitops.h>
 #include <linux/platform_device.h>
 #include <linux/jiffies.h>
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -1308,7 +1307,7 @@ int snd_soc_dapm_device_event(struct snd_soc_device *socdev, int event)
 {
 	struct snd_soc_codec *codec = socdev->codec;
 	struct snd_soc_machine *machine = socdev->machine;
-	
+
 	if (machine->dapm_event)
 		machine->dapm_event(machine, event);
 	if (codec->dapm_event)

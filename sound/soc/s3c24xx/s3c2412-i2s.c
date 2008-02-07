@@ -14,7 +14,11 @@
  * under  the terms of  the GNU General  Public License as published by the
  * Free Software Foundation;  either version 2 of the  License, or (at your
  * option) any later version.
+<<<<<<< HEAD:sound/soc/s3c24xx/s3c2412-i2s.c
 */
+=======
+ */
+>>>>>>> origin/master:sound/soc/s3c24xx/s3c2412-i2s.c
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -23,7 +27,10 @@
 #include <linux/clk.h>
 #include <linux/kernel.h>
 
+<<<<<<< HEAD:sound/soc/s3c24xx/s3c2412-i2s.c
 #include <sound/driver.h>
+=======
+>>>>>>> origin/master:sound/soc/s3c24xx/s3c2412-i2s.c
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -713,7 +720,11 @@ struct snd_soc_cpu_dai s3c2412_i2s_dai = {
 	.id	= 0,
 	.type	= SND_SOC_DAI_I2S,
 	.probe	= s3c2412_i2s_probe,
+<<<<<<< HEAD:sound/soc/s3c24xx/s3c2412-i2s.c
 	.suspend= s3c2412_i2s_suspend,
+=======
+	.suspend = s3c2412_i2s_suspend,
+>>>>>>> origin/master:sound/soc/s3c24xx/s3c2412-i2s.c
 	.resume = s3c2412_i2s_resume,
 	.playback = {
 		.channels_min	= 2,
