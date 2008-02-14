@@ -1119,6 +1119,20 @@ static int wm8900_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->codec;
+	struct wm8900_priv *wm8900 = codec->private_data;
+	int fll_out = wm8900->fll_out;
+	int fll_in  = wm8900->fll_in;
+	int ret;
+
+	/* Stop the FLL in an orderly fashion */
+	ret = wm8900_set_fll(codec, 0, 0, 0);
+	if (ret != 0) {
+		dev_err(&pdev->dev, "Failed to stop FLL\n");
+		return ret;
+	}
+
+	wm8900->fll_out = fll_out;
+	wm8900->fll_in = fll_in;
 
 	wm8900_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
 
@@ -1129,8 +1143,38 @@ static int wm8900_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->codec;
+	struct wm8900_priv *wm8900 = codec->private_data;
+	u16 *cache;
+	int i, ret;
 
+	cache = kmemdup(codec->reg_cache, sizeof(wm8900_reg_defaults),
+			GFP_KERNEL);
+
+	wm8900_reset(codec);
 	wm8900_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+
+	/* Restart the FLL? */
+	if (wm8900->fll_out) {
+		int fll_out = wm8900->fll_out;
+		int fll_in  = wm8900->fll_in;
+
+		wm8900->fll_in = 0;
+		wm8900->fll_out = 0;
+
+		wm8900_set_fll(codec, 0, fll_in, fll_out);
+		if (ret != 0) {
+			dev_err(&pdev->dev, "Failed to restart FLL\n");
+			return ret;
+		}
+	}
+
+	if (cache) {
+		for (i = 0; i < WM8900_MAXREG; i++) {
+			wm8900_write(codec, i, cache[i]);
+		}
+		kfree(cache);
+	} else
+		dev_err(&pdev->dev, "Unable to allocate register cache\n");
 
 	return 0;
 }
