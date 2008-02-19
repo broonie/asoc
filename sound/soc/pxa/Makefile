@@ -38,7 +38,7 @@ obj-$(CONFIG_SND_PXA2XX_SOC_MAINSTONE_WM8731) += snd-soc-mainstone-wm8731.o
 obj-$(CONFIG_SND_PXA2XX_SOC_MAINSTONE_WM8753) += snd-soc-mainstone-wm8753.o
 obj-$(CONFIG_SND_PXA2XX_SOC_MAINSTONE_WM8974) += snd-soc-mainstone-wm8974.o
 obj-$(CONFIG_SND_PXA2XX_SOC_MAINSTONE_WM9713) += snd-soc-mainstone-wm9713.o
-obj-$(CONFIG_SND_PXA2XX_SOC_MAINSTONE_WM9712) += snd-soc-mainstone-wm9712.o
+obj-$(CONFIG_SND_PXA2xx_SOC_MAINSTONE_WM9712) += snd-soc-mainstone-wm9712.o
 obj-$(CONFIG_SND_MAINSTONE_BASEBAND) += snd-soc-mainstone-baseband.o
 obj-$(CONFIG_SND_MAINSTONE_BLUETOOTH) += snd-soc-mainstone-bluetooth.o
 
