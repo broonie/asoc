@@ -133,6 +133,7 @@ static void pxa2xx_ac97_write(struct snd_ac97 *ac97, unsigned short reg,
 
 static void pxa2xx_ac97_warm_reset(struct snd_ac97 *ac97)
 {
+	int timeout = 100;
 	gsr_bits = 0;
 
 #ifdef CONFIG_PXA27x
@@ -143,6 +144,11 @@ static void pxa2xx_ac97_warm_reset(struct snd_ac97 *ac97)
 	GCR |= GCR_WARM_RST;
 	pxa_gpio_mode(113 | GPIO_ALT_FN_2_OUT);
 	udelay(500);
+#elif defined(CONFIG_PXA3xx)
+	/* Can't use interrupts */
+	GCR |= GCR_WARM_RST;
+	while (!((GSR | gsr_bits) & (GSR_PCR | GSR_SCR)) && timeout--)
+		mdelay(1);
 #else
 	GCR |= GCR_WARM_RST | GCR_PRIRDY_IEN | GCR_SECRDY_IEN;
 	wait_event_timeout(gsr_wq, gsr_bits & (GSR_PCR | GSR_SCR), 1);
@@ -158,6 +164,16 @@ static void pxa2xx_ac97_warm_reset(struct snd_ac97 *ac97)
 
 static void pxa2xx_ac97_cold_reset(struct snd_ac97 *ac97)
 {
+	int timeout = 1000;
+
+#ifdef CONFIG_PXA3xx
+	/* Hold CLKBPB for 100us */
+	GCR = 0;
+	GCR = GCR_CLKBPB;
+	udelay(100);
+	GCR = 0;
+#endif
+
 	GCR &=  GCR_COLD_RST;  /* clear everything but nCRST */
 	GCR &= ~GCR_COLD_RST;  /* then assert nCRST */
 
@@ -169,6 +185,13 @@ static void pxa2xx_ac97_cold_reset(struct snd_ac97 *ac97)
 	clk_disable(ac97conf_clk);
 	GCR = GCR_COLD_RST;
 	udelay(50);
+#elif defined(CONFIG_PXA3xx)
+	/* Can't use interrupts on PXA3xx */
+	GCR &= ~(GCR_PRIRDY_IEN|GCR_SECRDY_IEN);
+
+	GCR = GCR_WARM_RST | GCR_COLD_RST;
+	while (!(GSR & (GSR_PCR | GSR_SCR)) && timeout--)
+		mdelay(10);
 #else
 	GCR = GCR_COLD_RST;
 	GCR |= GCR_CDONE_IE|GCR_SDONE_IE;
