@@ -1152,7 +1152,13 @@ static int wm8990_hw_params(struct snd_pcm_substream *substream,
 
 static int wm8990_mute(struct snd_soc_codec_dai *dai, int mute)
 {
-	// TODO mute codec in here
+	struct snd_soc_codec *codec = dai->codec;
+	u16 val = wm8990_read_reg_cache(codec, WM8990_DAC_CTRL) & ~WM8990_DAC_MUTE;
+	
+	if (mute)
+		wm8990_write(codec, WM8990_DAC_CTRL, val | WM8990_DAC_MUTE);
+	else
+		wm8990_write(codec, WM8990_DAC_CTRL, val);
 
 	return 0;
 }
@@ -1160,8 +1166,76 @@ static int wm8990_mute(struct snd_soc_codec_dai *dai, int mute)
 static int wm8990_set_bias_level(struct snd_soc_codec *codec,
 	enum snd_soc_bias_level level)
 {
-	// TODO handle DPAM power events
+	u16 val;
+	
+	switch (level) {
+	case SND_SOC_BIAS_ON:
+		break;
+	case SND_SOC_BIAS_PREPARE:
+		break;
+	case SND_SOC_BIAS_STANDBY:
+		if (codec->bias_level == SND_SOC_BIAS_OFF) {
+			/* Enable all output discharge bits */
+			wm8990_write(codec, WM8990_ANTIPOP1, WM8990_DIS_LLINE |
+				WM8990_DIS_RLINE | WM8990_DIS_OUT3 |
+				WM8990_DIS_OUT4 | WM8990_DIS_LOUT |
+				WM8990_DIS_ROUT);
+				
+			/* Enable POBCTRL, SOFT_ST and BUFDCOPEN */
+			wm8990_write(codec, WM8990_ANTIPOP2, WM8990_SOFTST |
+				WM8990_BUFDCOPEN | WM8990_POBCTRL);
+				
+			/* Delay 250ms to allow output caps to discharge */
+			schedule_timeout_interruptible(msecs_to_jiffies(250));
+			
+			/* disable all output discharge bits */
+			wm8990_write(codec, WM8990_ANTIPOP1, 0);
+			
+			/* Enable VMID SEL = 2x50K Ohm Divider */
+			wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x2);
+			
+			/* Delay 100ms to allow VMID to initially charge */
+			schedule_timeout_interruptible(msecs_to_jiffies(250));
+			
+			/* Enable VREF (VMID SEL = 2x50K Ohm Divider */
+			wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x3);
+			
+			/* disable POBCTRL, SOFT_ST and BUFDCOPEN */
+			wm8990_write(codec, WM8990_ANTIPOP2, 0x0);
+			
+		} else {
+			/* ON -> standby */
+			
+		}
+		break;
 
+	case SND_SOC_BIAS_OFF:
+		/* Enable POBCTRL, SOFT_ST and BUFDCOPEN */
+		wm8990_write(codec, WM8990_ANTIPOP2, WM8990_SOFTST |
+			WM8990_BUFDCOPEN | WM8990_POBCTRL);
+			
+		/* mute DAC */
+		val = wm8990_read_reg_cache(codec, WM8990_DAC_CTRL);
+		wm8990_write(codec, WM8990_DAC_CTRL, val | WM8990_DAC_MUTE);
+		
+		/* Disable VMID SEL = 2x50K Ohm Divider */
+		wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x1);
+		
+		/* Enable all output discharge bits */
+		wm8990_write(codec, WM8990_ANTIPOP1, WM8990_DIS_LLINE |
+			WM8990_DIS_RLINE | WM8990_DIS_OUT3 |
+			WM8990_DIS_OUT4 | WM8990_DIS_LOUT |
+			WM8990_DIS_ROUT);
+			
+		/* Disable VREF (VMID SEL = 2x50K Ohm Divider */
+		wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x0);
+		
+		/* disable POBCTRL, SOFT_ST and BUFDCOPEN */
+		wm8990_write(codec, WM8990_ANTIPOP2, 0x0);
+		break;
+	}
+
+	codec->bias_level = level;
 	return 0;
 }
 
@@ -1277,6 +1351,8 @@ static int wm8990_init(struct snd_soc_device *socdev)
 		goto pcm_err;
 	}
 
+	/* charge output caps */
+	codec->bias_level = SND_SOC_BIAS_OFF;
 	wm8990_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	reg = wm8990_read_reg_cache(codec, WM8990_AUDIO_INTERFACE_4);
@@ -1286,14 +1362,9 @@ static int wm8990_init(struct snd_soc_device *socdev)
 		~WM8990_GPIO1_SEL_MASK;
 	wm8990_write(codec, WM8990_GPIO1_GPIO2, reg | 1);
 
-	reg = wm8990_read_reg_cache(codec, WM8990_POWER_MANAGEMENT_1);
-	wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, reg | WM8990_VREF_ENA|
-		WM8990_VMID_MODE_MASK);
-
 	reg = wm8990_read_reg_cache(codec, WM8990_POWER_MANAGEMENT_2);
 	wm8990_write(codec, WM8990_POWER_MANAGEMENT_2, reg | WM8990_OPCLK_ENA);
 
-	wm8990_write(codec, WM8990_DAC_CTRL, 0);
 	wm8990_write(codec, WM8990_LEFT_OUTPUT_VOLUME, 0x50 | (1<<8));
 	wm8990_write(codec, WM8990_RIGHT_OUTPUT_VOLUME, 0x50 | (1<<8));
 
