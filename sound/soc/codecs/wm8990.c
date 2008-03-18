@@ -42,9 +42,9 @@
  * Debug
  */
 
-#define WM8753_DEBUG 0
+#define WM8990_DEBUG 0
 
-#ifdef WM8753_DEBUG
+#ifdef WM8990_DEBUG
 #define dbg(format, arg...) \
 	printk(KERN_DEBUG AUDIO_NAME ": " format "\n" , ## arg)
 #else
@@ -1402,13 +1402,11 @@ static int wm8990_i2c_attach(struct i2c_adapter *adap)
 	return i2c_probe(adap, &addr_data, wm8990_codec_probe);
 }
 
-/* corgi i2c codec control layer */
 static struct i2c_driver wm8990_i2c_driver = {
 	.driver = {
 		.name = "WM8990 I2C Codec",
 		.owner = THIS_MODULE,
 	},
-	.id =             I2C_DRIVERID_WM8753,
 	.attach_adapter = wm8990_i2c_attach,
 	.detach_client =  wm8990_i2c_detach,
 	.command =        NULL,
