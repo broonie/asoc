@@ -1138,7 +1138,6 @@ static int wm8990_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
 	struct snd_soc_codec *codec = socdev->codec;
-	struct wm8990_priv *wm8990 = codec->private_data;
 	u16 audio1 = wm8990_read_reg_cache(codec, WM8990_AUDIO_INTERFACE_1);
 
 	audio1 &= ~WM8990_AIF_WL_MASK;
