@@ -22,7 +22,6 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/device.h>
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/ac97_codec.h>
@@ -216,7 +215,7 @@ static int wm9713_add_controls(struct snd_soc_codec *codec)
  * register map, thus we add a new (virtual) register to help determine the
  * audio route within the device.
  */
-static int mixer_event (struct snd_soc_dapm_widget *w, 
+static int mixer_event(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
 	u16 l, r, beep, tone, phone, rec, pcm, aux;
