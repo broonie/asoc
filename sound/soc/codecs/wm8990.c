@@ -393,8 +393,8 @@ static int inmixer_event (struct snd_soc_dapm_widget *w,
 {
 	u16 reg, fakepower;
 
-	reg=wm8990_read_reg_cache(w->codec, WM8990_POWER_MANAGEMENT_2);
-	fakepower=wm8990_read_reg_cache(w->codec, WM8990_INTDRIVBITS);
+	reg = wm8990_read_reg_cache(w->codec, WM8990_POWER_MANAGEMENT_2);
+	fakepower = wm8990_read_reg_cache(w->codec, WM8990_INTDRIVBITS);
 
 	if (fakepower & ((1 << WM8990_INMIXL_PWR_BIT) |
 		(1 << WM8990_AINLMUX_PWR_BIT))) {
@@ -420,8 +420,6 @@ static int outmixer_event (struct snd_soc_dapm_widget *w,
 	u32 reg_shift = kcontrol->private_value & 0xfff;
 	int ret = 0;
 	u16 reg;
-
-//	printk("reg_shift %4.4x\n", reg_shift);
 
 	switch (reg_shift) {
 	case WM8990_SPEAKER_MIXER | (WM8990_LDSPK_BIT << 8) :

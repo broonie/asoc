@@ -1,5 +1,5 @@
 /*
- * wm8753.h  --  audio driver for WM8753
+ * wm8990.h  --  audio driver for WM8990
  *
  * Copyright 2007 Wolfson Microelectronics PLC.
  * Author: Graeme Gregory
