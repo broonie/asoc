@@ -1424,7 +1424,7 @@ static int wm8990_probe(struct platform_device *pdev)
 	struct wm8990_priv *wm8990;
 	int ret = 0;
 
-	info("WM8990 Audio Codec %s", WM8990_VERSION);
+	info("WM8990 Audio Codec %s\n", WM8990_VERSION);
 
 	setup = socdev->codec_data;
 	codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);
