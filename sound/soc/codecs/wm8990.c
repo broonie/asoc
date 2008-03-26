@@ -424,7 +424,6 @@ static int outmixer_event (struct snd_soc_dapm_widget *w,
 	switch (reg_shift) {
 	case WM8990_SPEAKER_MIXER | (WM8990_LDSPK_BIT << 8) :
 		reg = wm8990_read_reg_cache(w->codec, WM8990_OUTPUT_MIXER1);
-		printk("reg %4.4x\n", reg);
 		if (reg & WM8990_LDLO) {
 			printk(KERN_WARNING
 			"Cannot set as Output Mixer 1 LDLO Set\n");
