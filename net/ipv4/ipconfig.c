@@ -103,6 +103,7 @@
 					   - '3' from resolv.h */
 
 #define NONE __constant_htonl(INADDR_NONE)
+#define ANY __constant_htonl(INADDR_ANY)
 
 /*
  * Public IP configuration
@@ -753,9 +754,9 @@ static void __init ic_bootp_send_if(struct ic_device *d, unsigned long jiffies_d
 		printk("Unknown ARP type 0x%04x for device %s\n", dev->type, dev->name);
 		b->htype = dev->type; /* can cause undefined behavior */
 	}
+
+	/* server_ip and your_ip address are both already zero per RFC2131 */
 	b->hlen = dev->addr_len;
-	b->your_ip = NONE;
-	b->server_ip = NONE;
 	memcpy(b->hw_addr, dev->dev_addr, dev->addr_len);
 	b->secs = htons(jiffies_diff / HZ);
 	b->xid = d->xid;
@@ -1390,7 +1391,7 @@ static int __init ip_auto_config(void)
 	 * Clue in the operator.
 	 */
 	printk("IP-Config: Complete:");
-	printk("\n      device=%s", ic_dev->name);
+	printk("\n     device=%s", ic_dev->name);
 	printk(", addr=%u.%u.%u.%u", NIPQUAD(ic_myaddr));
 	printk(", mask=%u.%u.%u.%u", NIPQUAD(ic_netmask));
 	printk(", gw=%u.%u.%u.%u", NIPQUAD(ic_gateway));
@@ -1479,19 +1480,19 @@ static int __init ip_auto_config_setup(char *addrs)
 			DBG(("IP-Config: Parameter #%d: `%s'\n", num, ip));
 			switch (num) {
 			case 0:
-				if ((ic_myaddr = in_aton(ip)) == INADDR_ANY)
+				if ((ic_myaddr = in_aton(ip)) == ANY)
 					ic_myaddr = NONE;
 				break;
 			case 1:
-				if ((ic_servaddr = in_aton(ip)) == INADDR_ANY)
+				if ((ic_servaddr = in_aton(ip)) == ANY)
 					ic_servaddr = NONE;
 				break;
 			case 2:
-				if ((ic_gateway = in_aton(ip)) == INADDR_ANY)
+				if ((ic_gateway = in_aton(ip)) == ANY)
 					ic_gateway = NONE;
 				break;
 			case 3:
-				if ((ic_netmask = in_aton(ip)) == INADDR_ANY)
+				if ((ic_netmask = in_aton(ip)) == ANY)
 					ic_netmask = NONE;
 				break;
 			case 4:

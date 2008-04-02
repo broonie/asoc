@@ -987,12 +987,11 @@ static unsigned long resolve_symbol(Elf_Shdr *sechdrs,
 	return ret;
 }
 
-
 /*
  * /sys/module/foo/sections stuff
  * J. Corbet <corbet@lwn.net>
  */
-#ifdef CONFIG_KALLSYMS
+#if defined(CONFIG_KALLSYMS) && defined(CONFIG_SYSFS)
 static ssize_t module_sect_show(struct module_attribute *mattr,
 				struct module *mod, char *buf)
 {
@@ -1188,7 +1187,7 @@ static inline void add_notes_attrs(struct module *mod, unsigned int nsect,
 static inline void remove_notes_attrs(struct module *mod)
 {
 }
-#endif /* CONFIG_KALLSYMS */
+#endif
 
 #ifdef CONFIG_SYSFS
 int module_add_modinfo_attrs(struct module *mod)
@@ -1231,9 +1230,7 @@ void module_remove_modinfo_attrs(struct module *mod)
 	}
 	kfree(mod->modinfo_attrs);
 }
-#endif
 
-#ifdef CONFIG_SYSFS
 int mod_sysfs_init(struct module *mod)
 {
 	int err;
@@ -1936,8 +1933,15 @@ static struct module *load_module(void __user *umod,
 	/* Set up license info based on the info section */
 	set_license(mod, get_modinfo(sechdrs, infoindex, "license"));
 
+	/*
+	 * ndiswrapper is under GPL by itself, but loads proprietary modules.
+	 * Don't use add_taint_module(), as it would prevent ndiswrapper from
+	 * using GPL-only symbols it needs.
+	 */
 	if (strcmp(mod->name, "ndiswrapper") == 0)
-		add_taint_module(mod, TAINT_PROPRIETARY_MODULE);
+		add_taint(TAINT_PROPRIETARY_MODULE);
+
+	/* driverloader was caught wrongly pretending to be under GPL */
 	if (strcmp(mod->name, "driverloader") == 0)
 		add_taint_module(mod, TAINT_PROPRIETARY_MODULE);
 
@@ -2038,7 +2042,7 @@ static struct module *load_module(void __user *umod,
 #ifdef CONFIG_MARKERS
 	if (!mod->taints)
 		marker_update_probe_range(mod->markers,
-			mod->markers + mod->num_markers, NULL, NULL);
+			mod->markers + mod->num_markers);
 #endif
 	err = module_finalize(hdr, sechdrs, mod);
 	if (err < 0)
@@ -2174,10 +2178,20 @@ sys_init_module(void __user *umod,
 		wake_up(&module_wq);
 		return ret;
 	}
+	if (ret > 0) {
+		printk(KERN_WARNING "%s: '%s'->init suspiciously returned %d, "
+				    "it should follow 0/-E convention\n"
+		       KERN_WARNING "%s: loading module anyway...\n",
+		       __func__, mod->name, ret,
+		       __func__);
+		dump_stack();
+	}
 
-	/* Now it's a first class citizen! */
-	mutex_lock(&module_mutex);
+	/* Now it's a first class citizen!  Wake up anyone waiting for it. */
 	mod->state = MODULE_STATE_LIVE;
+	wake_up(&module_wq);
+
+	mutex_lock(&module_mutex);
 	/* Drop initial reference. */
 	module_put(mod);
 	unwind_remove_table(mod->unwind_info, 1);
@@ -2186,7 +2200,6 @@ sys_init_module(void __user *umod,
 	mod->init_size = 0;
 	mod->init_text_size = 0;
 	mutex_unlock(&module_mutex);
-	wake_up(&module_wq);
 
 	return 0;
 }
@@ -2564,7 +2577,7 @@ EXPORT_SYMBOL(struct_module);
 #endif
 
 #ifdef CONFIG_MARKERS
-void module_update_markers(struct module *probe_module, int *refcount)
+void module_update_markers(void)
 {
 	struct module *mod;
 
@@ -2572,8 +2585,7 @@ void module_update_markers(struct module *probe_module, int *refcount)
 	list_for_each_entry(mod, &modules, list)
 		if (!mod->taints)
 			marker_update_probe_range(mod->markers,
-				mod->markers + mod->num_markers,
-				probe_module, refcount);
+				mod->markers + mod->num_markers);
 	mutex_unlock(&module_mutex);
 }
 #endif

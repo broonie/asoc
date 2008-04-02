@@ -91,10 +91,6 @@ static DEFINE_SPINLOCK(acpi_res_lock);
 #define	OSI_STRING_LENGTH_MAX 64	/* arbitrary */
 static char osi_additional_string[OSI_STRING_LENGTH_MAX];
 
-#ifdef CONFIG_ACPI_CUSTOM_DSDT_INITRD
-static int acpi_no_initrd_override;
-#endif
-
 /*
  * "Ode to _OSI(Linux)"
  *
@@ -324,67 +320,6 @@ acpi_os_predefined_override(const struct acpi_predefined_names *init_val,
 	return AE_OK;
 }
 
-#ifdef CONFIG_ACPI_CUSTOM_DSDT_INITRD
-struct acpi_table_header *acpi_find_dsdt_initrd(void)
-{
-	struct file *firmware_file;
-	mm_segment_t oldfs;
-	unsigned long len, len2;
-	struct acpi_table_header *dsdt_buffer, *ret = NULL;
-	struct kstat stat;
-	char *ramfs_dsdt_name = "/DSDT.aml";
-
-	printk(KERN_INFO PREFIX "Checking initramfs for custom DSDT\n");
-
-	/*
-	 * Never do this at home, only the user-space is allowed to open a file.
-	 * The clean way would be to use the firmware loader.
-	 * But this code must be run before there is any userspace available.
-	 * A static/init firmware infrastructure doesn't exist yet...
-	 */
-	if (vfs_stat(ramfs_dsdt_name, &stat) < 0)
-		return ret;
-
-	len = stat.size;
-	/* check especially against empty files */
-	if (len <= 4) {
-		printk(KERN_ERR PREFIX "Failed: DSDT only %lu bytes.\n", len);
-		return ret;
-	}
-
-	firmware_file = filp_open(ramfs_dsdt_name, O_RDONLY, 0);
-	if (IS_ERR(firmware_file)) {
-		printk(KERN_ERR PREFIX "Failed to open %s.\n", ramfs_dsdt_name);
-		return ret;
-	}
-
-	dsdt_buffer = kmalloc(len, GFP_ATOMIC);
-	if (!dsdt_buffer) {
-		printk(KERN_ERR PREFIX "Failed to allocate %lu bytes.\n", len);
-		goto err;
-	}
-
-	oldfs = get_fs();
-	set_fs(KERNEL_DS);
-	len2 = vfs_read(firmware_file, (char __user *)dsdt_buffer, len,
-		&firmware_file->f_pos);
-	set_fs(oldfs);
-	if (len2 < len) {
-		printk(KERN_ERR PREFIX "Failed to read %lu bytes from %s.\n",
-			len, ramfs_dsdt_name);
-		ACPI_FREE(dsdt_buffer);
-		goto err;
-	}
-
-	printk(KERN_INFO PREFIX "Found %lu byte DSDT in %s.\n",
-			len, ramfs_dsdt_name);
-	ret = dsdt_buffer;
-err:
-	filp_close(firmware_file, NULL);
-	return ret;
-}
-#endif
-
 acpi_status
 acpi_os_table_override(struct acpi_table_header * existing_table,
 		       struct acpi_table_header ** new_table)
@@ -398,16 +333,6 @@ acpi_os_table_override(struct acpi_table_header * existing_table,
 	if (strncmp(existing_table->signature, "DSDT", 4) == 0)
 		*new_table = (struct acpi_table_header *)AmlCode;
 #endif
-#ifdef CONFIG_ACPI_CUSTOM_DSDT_INITRD
-	if ((strncmp(existing_table->signature, "DSDT", 4) == 0) &&
-	    !acpi_no_initrd_override) {
-		struct acpi_table_header *initrd_table;
-
-		initrd_table = acpi_find_dsdt_initrd();
-		if (initrd_table)
-			*new_table = initrd_table;
-	}
-#endif
 	if (*new_table != NULL) {
 		printk(KERN_WARNING PREFIX "Override [%4.4s-%8.8s], "
 			   "this is unsafe: tainting kernel\n",
@@ -417,15 +342,6 @@ acpi_os_table_override(struct acpi_table_header * existing_table,
 	}
 	return AE_OK;
 }
-
-#ifdef CONFIG_ACPI_CUSTOM_DSDT_INITRD
-int __init acpi_no_initrd_override_setup(char *s)
-{
-	acpi_no_initrd_override = 1;
-	return 1;
-}
-__setup("acpi_no_initrd_override", acpi_no_initrd_override_setup);
-#endif
 
 static irqreturn_t acpi_irq(int irq, void *dev_id)
 {
@@ -623,7 +539,7 @@ acpi_os_write_memory(acpi_physical_address phys_addr, u32 value, u32 width)
 
 acpi_status
 acpi_os_read_pci_configuration(struct acpi_pci_id * pci_id, u32 reg,
-			       void *value, u32 width)
+			       u32 *value, u32 width)
 {
 	int result, size;
 
@@ -689,7 +605,6 @@ static void acpi_os_derive_pci_id_2(acpi_handle rhandle,	/* upper bound  */
 	acpi_status status;
 	unsigned long temp;
 	acpi_object_type type;
-	u8 tu8;
 
 	acpi_get_parent(chandle, &handle);
 	if (handle != rhandle) {
@@ -704,6 +619,7 @@ static void acpi_os_derive_pci_id_2(acpi_handle rhandle,	/* upper bound  */
 		    acpi_evaluate_integer(handle, METHOD_NAME__ADR, NULL,
 					  &temp);
 		if (ACPI_SUCCESS(status)) {
+			u32 val;
 			pci_id->device = ACPI_HIWORD(ACPI_LODWORD(temp));
 			pci_id->function = ACPI_LOWORD(ACPI_LODWORD(temp));
 
@@ -712,24 +628,24 @@ static void acpi_os_derive_pci_id_2(acpi_handle rhandle,	/* upper bound  */
 
 			/* any nicer way to get bus number of bridge ? */
 			status =
-			    acpi_os_read_pci_configuration(pci_id, 0x0e, &tu8,
+			    acpi_os_read_pci_configuration(pci_id, 0x0e, &val,
 							   8);
 			if (ACPI_SUCCESS(status)
-			    && ((tu8 & 0x7f) == 1 || (tu8 & 0x7f) == 2)) {
+			    && ((val & 0x7f) == 1 || (val & 0x7f) == 2)) {
 				status =
 				    acpi_os_read_pci_configuration(pci_id, 0x18,
-								   &tu8, 8);
+								   &val, 8);
 				if (!ACPI_SUCCESS(status)) {
 					/* Certainly broken...  FIX ME */
 					return;
 				}
 				*is_bridge = 1;
-				pci_id->bus = tu8;
+				pci_id->bus = val;
 				status =
 				    acpi_os_read_pci_configuration(pci_id, 0x19,
-								   &tu8, 8);
+								   &val, 8);
 				if (ACPI_SUCCESS(status)) {
-					*bus_number = tu8;
+					*bus_number = val;
 				}
 			} else
 				*is_bridge = 0;
@@ -1109,7 +1025,7 @@ void __init acpi_dmi_osi_linux(int enable, const struct dmi_system_id *d)
  * string starting with '!' disables that string
  * otherwise string is added to list, augmenting built-in strings
  */
-static int __init acpi_osi_setup(char *str)
+int __init acpi_osi_setup(char *str)
 {
 	if (str == NULL || *str == '\0') {
 		printk(KERN_INFO PREFIX "_OSI method disabled\n");
@@ -1237,7 +1153,7 @@ int acpi_check_resource_conflict(struct resource *res)
 
 	if (clash) {
 		if (acpi_enforce_resources != ENFORCE_RESOURCES_NO) {
-			printk(KERN_INFO "%sACPI: %s resource %s [0x%llx-0x%llx]"
+			printk("%sACPI: %s resource %s [0x%llx-0x%llx]"
 			       " conflicts with ACPI region %s"
 			       " [0x%llx-0x%llx]\n",
 			       acpi_enforce_resources == ENFORCE_RESOURCES_LAX

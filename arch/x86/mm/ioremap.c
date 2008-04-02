@@ -42,6 +42,22 @@ int page_is_ram(unsigned long pagenr)
 	unsigned long addr, end;
 	int i;
 
+	/*
+	 * A special case is the first 4Kb of memory;
+	 * This is a BIOS owned area, not kernel ram, but generally
+	 * not listed as such in the E820 table.
+	 */
+	if (pagenr == 0)
+		return 0;
+
+	/*
+	 * Second special case: Some BIOSen report the PC BIOS
+	 * area (640->1Mb) as ram even though it is not.
+	 */
+	if (pagenr >= (BIOS_BEGIN >> PAGE_SHIFT) &&
+		    pagenr < (BIOS_END >> PAGE_SHIFT))
+		return 0;
+
 	for (i = 0; i < e820.nr_map; i++) {
 		/*
 		 * Not usable memory:
@@ -51,14 +67,6 @@ int page_is_ram(unsigned long pagenr)
 		addr = (e820.map[i].addr + PAGE_SIZE-1) >> PAGE_SHIFT;
 		end = (e820.map[i].addr + e820.map[i].size) >> PAGE_SHIFT;
 
-		/*
-		 * Sanity check: Some BIOSen report areas as RAM that
-		 * are not. Notably the 640->1Mb area, which is the
-		 * PCI BIOS area.
-		 */
-		if (addr >= (BIOS_BEGIN >> PAGE_SHIFT) &&
-		    end < (BIOS_END >> PAGE_SHIFT))
-			continue;
 
 		if ((pagenr >= addr) && (pagenr < end))
 			return 1;
@@ -98,7 +106,7 @@ static int ioremap_change_attr(unsigned long vaddr, unsigned long size,
  * have to convert them into an offset in a page-aligned mapping, but the
  * caller shouldn't need to know that small detail.
  */
-static void __iomem *__ioremap(unsigned long phys_addr, unsigned long size,
+static void __iomem *__ioremap(resource_size_t phys_addr, unsigned long size,
 			       enum ioremap_mode mode)
 {
 	unsigned long pfn, offset, last_addr, vaddr;
@@ -152,7 +160,7 @@ static void __iomem *__ioremap(unsigned long phys_addr, unsigned long size,
 	area->phys_addr = phys_addr;
 	vaddr = (unsigned long) area->addr;
 	if (ioremap_page_range(vaddr, vaddr + size, phys_addr, prot)) {
-		remove_vm_area((void *)(vaddr & PAGE_MASK));
+		free_vm_area(area);
 		return NULL;
 	}
 
@@ -185,13 +193,13 @@ static void __iomem *__ioremap(unsigned long phys_addr, unsigned long size,
  *
  * Must be freed with iounmap.
  */
-void __iomem *ioremap_nocache(unsigned long phys_addr, unsigned long size)
+void __iomem *ioremap_nocache(resource_size_t phys_addr, unsigned long size)
 {
 	return __ioremap(phys_addr, size, IOR_MODE_UNCACHED);
 }
 EXPORT_SYMBOL(ioremap_nocache);
 
-void __iomem *ioremap_cache(unsigned long phys_addr, unsigned long size)
+void __iomem *ioremap_cache(resource_size_t phys_addr, unsigned long size)
 {
 	return __ioremap(phys_addr, size, IOR_MODE_CACHED);
 }
@@ -265,7 +273,9 @@ static __initdata pte_t bm_pte[PAGE_SIZE/sizeof(pte_t)]
 
 static inline pmd_t * __init early_ioremap_pmd(unsigned long addr)
 {
-	pgd_t *pgd = &swapper_pg_dir[pgd_index(addr)];
+	/* Don't assume we're using swapper_pg_dir at this point */
+	pgd_t *base = __va(read_cr3());
+	pgd_t *pgd = &base[pgd_index(addr)];
 	pud_t *pud = pud_offset(pgd, addr);
 	pmd_t *pmd = pmd_offset(pud, addr);
 

@@ -153,6 +153,7 @@ static void xen_cpuid(unsigned int *ax, unsigned int *bx,
 	if (*ax == 1)
 		maskedx = ~((1 << X86_FEATURE_APIC) |  /* disable APIC */
 			    (1 << X86_FEATURE_ACPI) |  /* disable ACPI */
+			    (1 << X86_FEATURE_SEP)  |  /* disable SEP */
 			    (1 << X86_FEATURE_ACC));   /* thermal monitoring */
 
 	asm(XEN_EMULATE_PREFIX "cpuid"
@@ -798,6 +799,10 @@ static __init void xen_pagetable_setup_start(pgd_t *base)
 	 * added to the table can be prepared properly for Xen.
 	 */
 	xen_write_cr3(__pa(base));
+
+	/* Unpin initial Xen pagetable */
+	pin_pagetable_pfn(MMUEXT_UNPIN_TABLE,
+			  PFN_DOWN(__pa(xen_start_info->pt_base)));
 }
 
 static __init void xen_pagetable_setup_done(pgd_t *base)

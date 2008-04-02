@@ -247,7 +247,7 @@ u32 method_id, const struct acpi_buffer *in, struct acpi_buffer *out)
 	block = &wblock->gblock;
 	handle = wblock->handle;
 
-	if (!block->flags & ACPI_WMI_METHOD)
+	if (!(block->flags & ACPI_WMI_METHOD))
 		return AE_BAD_DATA;
 
 	if (block->instance_count < instance)
@@ -293,7 +293,7 @@ struct acpi_buffer *out)
 {
 	struct guid_block *block = NULL;
 	struct wmi_block *wblock = NULL;
-	acpi_handle handle;
+	acpi_handle handle, wc_handle;
 	acpi_status status, wc_status = AE_ERROR;
 	struct acpi_object_list input, wc_input;
 	union acpi_object wc_params[1], wq_params[1];
@@ -338,8 +338,10 @@ struct acpi_buffer *out)
 		 * expensive, but have no corresponding WCxx method. So we
 		 * should not fail if this happens.
 		 */
-		wc_status = acpi_evaluate_object(handle, wc_method,
-			&wc_input, NULL);
+		wc_status = acpi_get_handle(handle, wc_method, &wc_handle);
+		if (ACPI_SUCCESS(wc_status))
+			wc_status = acpi_evaluate_object(handle, wc_method,
+				&wc_input, NULL);
 	}
 
 	strcpy(method, "WQ");
@@ -351,7 +353,7 @@ struct acpi_buffer *out)
 	 * If ACPI_WMI_EXPENSIVE, call the relevant WCxx method, even if
 	 * the WQxx method failed - we should disable collection anyway.
 	 */
-	if ((block->flags & ACPI_WMI_EXPENSIVE) && wc_status) {
+	if ((block->flags & ACPI_WMI_EXPENSIVE) && ACPI_SUCCESS(wc_status)) {
 		wc_params[0].integer.value = 0;
 		status = acpi_evaluate_object(handle,
 		wc_method, &wc_input, NULL);
@@ -673,10 +675,10 @@ static int __init acpi_wmi_init(void)
 {
 	acpi_status result;
 
+	INIT_LIST_HEAD(&wmi_blocks.list);
+
 	if (acpi_disabled)
 		return -ENODEV;
-
-	INIT_LIST_HEAD(&wmi_blocks.list);
 
 	result = acpi_bus_register_driver(&acpi_wmi_driver);
 

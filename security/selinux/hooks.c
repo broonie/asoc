@@ -443,8 +443,7 @@ out:
  * mount options, or whatever.
  */
 static int selinux_get_mnt_opts(const struct super_block *sb,
-				char ***mount_options, int **mnt_opts_flags,
-				int *num_opts)
+				struct security_mnt_opts *opts)
 {
 	int rc = 0, i;
 	struct superblock_security_struct *sbsec = sb->s_security;
@@ -452,9 +451,7 @@ static int selinux_get_mnt_opts(const struct super_block *sb,
 	u32 len;
 	char tmp;
 
-	*num_opts = 0;
-	*mount_options = NULL;
-	*mnt_opts_flags = NULL;
+	security_init_mnt_opts(opts);
 
 	if (!sbsec->initialized)
 		return -EINVAL;
@@ -470,18 +467,18 @@ static int selinux_get_mnt_opts(const struct super_block *sb,
 	/* count the number of mount options for this sb */
 	for (i = 0; i < 8; i++) {
 		if (tmp & 0x01)
-			(*num_opts)++;
+			opts->num_mnt_opts++;
 		tmp >>= 1;
 	}
 
-	*mount_options = kcalloc(*num_opts, sizeof(char *), GFP_ATOMIC);
-	if (!*mount_options) {
+	opts->mnt_opts = kcalloc(opts->num_mnt_opts, sizeof(char *), GFP_ATOMIC);
+	if (!opts->mnt_opts) {
 		rc = -ENOMEM;
 		goto out_free;
 	}
 
-	*mnt_opts_flags = kcalloc(*num_opts, sizeof(int), GFP_ATOMIC);
-	if (!*mnt_opts_flags) {
+	opts->mnt_opts_flags = kcalloc(opts->num_mnt_opts, sizeof(int), GFP_ATOMIC);
+	if (!opts->mnt_opts_flags) {
 		rc = -ENOMEM;
 		goto out_free;
 	}
@@ -491,22 +488,22 @@ static int selinux_get_mnt_opts(const struct super_block *sb,
 		rc = security_sid_to_context(sbsec->sid, &context, &len);
 		if (rc)
 			goto out_free;
-		(*mount_options)[i] = context;
-		(*mnt_opts_flags)[i++] = FSCONTEXT_MNT;
+		opts->mnt_opts[i] = context;
+		opts->mnt_opts_flags[i++] = FSCONTEXT_MNT;
 	}
 	if (sbsec->flags & CONTEXT_MNT) {
 		rc = security_sid_to_context(sbsec->mntpoint_sid, &context, &len);
 		if (rc)
 			goto out_free;
-		(*mount_options)[i] = context;
-		(*mnt_opts_flags)[i++] = CONTEXT_MNT;
+		opts->mnt_opts[i] = context;
+		opts->mnt_opts_flags[i++] = CONTEXT_MNT;
 	}
 	if (sbsec->flags & DEFCONTEXT_MNT) {
 		rc = security_sid_to_context(sbsec->def_sid, &context, &len);
 		if (rc)
 			goto out_free;
-		(*mount_options)[i] = context;
-		(*mnt_opts_flags)[i++] = DEFCONTEXT_MNT;
+		opts->mnt_opts[i] = context;
+		opts->mnt_opts_flags[i++] = DEFCONTEXT_MNT;
 	}
 	if (sbsec->flags & ROOTCONTEXT_MNT) {
 		struct inode *root = sbsec->sb->s_root->d_inode;
@@ -515,24 +512,16 @@ static int selinux_get_mnt_opts(const struct super_block *sb,
 		rc = security_sid_to_context(isec->sid, &context, &len);
 		if (rc)
 			goto out_free;
-		(*mount_options)[i] = context;
-		(*mnt_opts_flags)[i++] = ROOTCONTEXT_MNT;
+		opts->mnt_opts[i] = context;
+		opts->mnt_opts_flags[i++] = ROOTCONTEXT_MNT;
 	}
 
-	BUG_ON(i != *num_opts);
+	BUG_ON(i != opts->num_mnt_opts);
 
 	return 0;
 
 out_free:
-	/* don't leak context string if security_sid_to_context had an error */
-	if (*mount_options && i)
-		for (; i > 0; i--)
-			kfree((*mount_options)[i-1]);
-	kfree(*mount_options);
-	*mount_options = NULL;
-	kfree(*mnt_opts_flags);
-	*mnt_opts_flags = NULL;
-	*num_opts = 0;
+	security_free_mnt_opts(opts);
 	return rc;
 }
 
@@ -553,12 +542,13 @@ static int bad_option(struct superblock_security_struct *sbsec, char flag,
 			return 1;
 	return 0;
 }
+
 /*
  * Allow filesystems with binary mount data to explicitly set mount point
  * labeling information.
  */
-static int selinux_set_mnt_opts(struct super_block *sb, char **mount_options,
-				int *flags, int num_opts)
+static int selinux_set_mnt_opts(struct super_block *sb,
+				struct security_mnt_opts *opts)
 {
 	int rc = 0, i;
 	struct task_security_struct *tsec = current->security;
@@ -568,6 +558,9 @@ static int selinux_set_mnt_opts(struct super_block *sb, char **mount_options,
 	struct inode_security_struct *root_isec = inode->i_security;
 	u32 fscontext_sid = 0, context_sid = 0, rootcontext_sid = 0;
 	u32 defcontext_sid = 0;
+	char **mount_options = opts->mnt_opts;
+	int *flags = opts->mnt_opts_flags;
+	int num_opts = opts->num_mnt_opts;
 
 	mutex_lock(&sbsec->lock);
 
@@ -587,6 +580,21 @@ static int selinux_set_mnt_opts(struct super_block *sb, char **mount_options,
 		       "the security server is initialized\n");
 		goto out;
 	}
+
+	/*
+	 * Binary mount data FS will come through this function twice.  Once
+	 * from an explicit call and once from the generic calls from the vfs.
+	 * Since the generic VFS calls will not contain any security mount data
+	 * we need to skip the double mount verification.
+	 *
+	 * This does open a hole in which we will not notice if the first
+	 * mount using this sb set explict options and a second mount using
+	 * this sb does not set any security options.  (The first options
+	 * will be used for both mounts)
+	 */
+	if (sbsec->initialized && (sb->s_type->fs_flags & FS_BINARY_MOUNTDATA)
+	    && (num_opts == 0))
+	        goto out;
 
 	/*
 	 * parse the mount options, check if they are valid sids.
@@ -792,43 +800,15 @@ static void selinux_sb_clone_mnt_opts(const struct super_block *oldsb,
 	mutex_unlock(&newsbsec->lock);
 }
 
-/*
- * string mount options parsing and call set the sbsec
- */
-static int superblock_doinit(struct super_block *sb, void *data)
+static int selinux_parse_opts_str(char *options,
+				  struct security_mnt_opts *opts)
 {
+	char *p;
 	char *context = NULL, *defcontext = NULL;
 	char *fscontext = NULL, *rootcontext = NULL;
-	int rc = 0;
-	char *p, *options = data;
-	/* selinux only know about a fixed number of mount options */
-	char *mnt_opts[NUM_SEL_MNT_OPTS];
-	int mnt_opts_flags[NUM_SEL_MNT_OPTS], num_mnt_opts = 0;
+	int rc, num_mnt_opts = 0;
 
-	if (!data)
-		goto out;
-
-	/* with the nfs patch this will become a goto out; */
-	if (sb->s_type->fs_flags & FS_BINARY_MOUNTDATA) {
-		const char *name = sb->s_type->name;
-		/* NFS we understand. */
-		if (!strcmp(name, "nfs")) {
-			struct nfs_mount_data *d = data;
-
-			if (d->version !=  NFS_MOUNT_VERSION)
-				goto out;
-
-			if (d->context[0]) {
-				context = kstrdup(d->context, GFP_KERNEL);
-				if (!context) {
-					rc = -ENOMEM;
-					goto out;
-				}
-			}
-			goto build_flags;
-		} else
-			goto out;
-	}
+	opts->num_mnt_opts = 0;
 
 	/* Standard string-based options. */
 	while ((p = strsep(&options, "|")) != NULL) {
@@ -901,31 +881,69 @@ static int superblock_doinit(struct super_block *sb, void *data)
 		}
 	}
 
-build_flags:
-	if (fscontext) {
-		mnt_opts[num_mnt_opts] = fscontext;
-		mnt_opts_flags[num_mnt_opts++] = FSCONTEXT_MNT;
-	}
-	if (context) {
-		mnt_opts[num_mnt_opts] = context;
-		mnt_opts_flags[num_mnt_opts++] = CONTEXT_MNT;
-	}
-	if (rootcontext) {
-		mnt_opts[num_mnt_opts] = rootcontext;
-		mnt_opts_flags[num_mnt_opts++] = ROOTCONTEXT_MNT;
-	}
-	if (defcontext) {
-		mnt_opts[num_mnt_opts] = defcontext;
-		mnt_opts_flags[num_mnt_opts++] = DEFCONTEXT_MNT;
+	rc = -ENOMEM;
+	opts->mnt_opts = kcalloc(NUM_SEL_MNT_OPTS, sizeof(char *), GFP_ATOMIC);
+	if (!opts->mnt_opts)
+		goto out_err;
+
+	opts->mnt_opts_flags = kcalloc(NUM_SEL_MNT_OPTS, sizeof(int), GFP_ATOMIC);
+	if (!opts->mnt_opts_flags) {
+		kfree(opts->mnt_opts);
+		goto out_err;
 	}
 
-out:
-	rc = selinux_set_mnt_opts(sb, mnt_opts, mnt_opts_flags, num_mnt_opts);
+	if (fscontext) {
+		opts->mnt_opts[num_mnt_opts] = fscontext;
+		opts->mnt_opts_flags[num_mnt_opts++] = FSCONTEXT_MNT;
+	}
+	if (context) {
+		opts->mnt_opts[num_mnt_opts] = context;
+		opts->mnt_opts_flags[num_mnt_opts++] = CONTEXT_MNT;
+	}
+	if (rootcontext) {
+		opts->mnt_opts[num_mnt_opts] = rootcontext;
+		opts->mnt_opts_flags[num_mnt_opts++] = ROOTCONTEXT_MNT;
+	}
+	if (defcontext) {
+		opts->mnt_opts[num_mnt_opts] = defcontext;
+		opts->mnt_opts_flags[num_mnt_opts++] = DEFCONTEXT_MNT;
+	}
+
+	opts->num_mnt_opts = num_mnt_opts;
+	return 0;
+
 out_err:
 	kfree(context);
 	kfree(defcontext);
 	kfree(fscontext);
 	kfree(rootcontext);
+	return rc;
+}
+/*
+ * string mount options parsing and call set the sbsec
+ */
+static int superblock_doinit(struct super_block *sb, void *data)
+{
+	int rc = 0;
+	char *options = data;
+	struct security_mnt_opts opts;
+
+	security_init_mnt_opts(&opts);
+
+	if (!data)
+		goto out;
+
+	BUG_ON(sb->s_type->fs_flags & FS_BINARY_MOUNTDATA);
+
+	rc = selinux_parse_opts_str(options, &opts);
+	if (rc)
+		goto out_err;
+
+out:
+	rc = selinux_set_mnt_opts(sb, &opts);
+
+out_err:
+	security_free_mnt_opts(&opts);
 	return rc;
 }
 
@@ -1272,12 +1290,18 @@ static int task_has_perm(struct task_struct *tsk1,
 			    SECCLASS_PROCESS, perms, NULL);
 }
 
+#if CAP_LAST_CAP > 63
+#error Fix SELinux to handle capabilities > 63.
+#endif
+
 /* Check whether a task is allowed to use a capability. */
 static int task_has_capability(struct task_struct *tsk,
 			       int cap)
 {
 	struct task_security_struct *tsec;
 	struct avc_audit_data ad;
+	u16 sclass;
+	u32 av = CAP_TO_MASK(cap);
 
 	tsec = tsk->security;
 
@@ -1285,8 +1309,19 @@ static int task_has_capability(struct task_struct *tsk,
 	ad.tsk = tsk;
 	ad.u.cap = cap;
 
-	return avc_has_perm(tsec->sid, tsec->sid,
-			    SECCLASS_CAPABILITY, CAP_TO_MASK(cap), &ad);
+	switch (CAP_TO_INDEX(cap)) {
+	case 0:
+		sclass = SECCLASS_CAPABILITY;
+		break;
+	case 1:
+		sclass = SECCLASS_CAPABILITY2;
+		break;
+	default:
+		printk(KERN_ERR
+		       "SELinux:  out of range capability %d\n", cap);
+		BUG();
+	}
+	return avc_has_perm(tsec->sid, tsec->sid, sclass, av, &ad);
 }
 
 /* Check whether a task is allowed to use a system operation. */
@@ -1339,8 +1374,8 @@ static inline int dentry_has_perm(struct task_struct *tsk,
 	struct inode *inode = dentry->d_inode;
 	struct avc_audit_data ad;
 	AVC_AUDIT_DATA_INIT(&ad,FS);
-	ad.u.fs.mnt = mnt;
-	ad.u.fs.dentry = dentry;
+	ad.u.fs.path.mnt = mnt;
+	ad.u.fs.path.dentry = dentry;
 	return inode_has_perm(tsk, inode, av, &ad);
 }
 
@@ -1358,15 +1393,12 @@ static int file_has_perm(struct task_struct *tsk,
 {
 	struct task_security_struct *tsec = tsk->security;
 	struct file_security_struct *fsec = file->f_security;
-	struct vfsmount *mnt = file->f_path.mnt;
-	struct dentry *dentry = file->f_path.dentry;
-	struct inode *inode = dentry->d_inode;
+	struct inode *inode = file->f_path.dentry->d_inode;
 	struct avc_audit_data ad;
 	int rc;
 
 	AVC_AUDIT_DATA_INIT(&ad, FS);
-	ad.u.fs.mnt = mnt;
-	ad.u.fs.dentry = dentry;
+	ad.u.fs.path = file->f_path;
 
 	if (tsec->sid != fsec->sid) {
 		rc = avc_has_perm(tsec->sid, fsec->sid,
@@ -1401,7 +1433,7 @@ static int may_create(struct inode *dir,
 	sbsec = dir->i_sb->s_security;
 
 	AVC_AUDIT_DATA_INIT(&ad, FS);
-	ad.u.fs.dentry = dentry;
+	ad.u.fs.path.dentry = dentry;
 
 	rc = avc_has_perm(tsec->sid, dsec->sid, SECCLASS_DIR,
 			  DIR__ADD_NAME | DIR__SEARCH,
@@ -1459,7 +1491,7 @@ static int may_link(struct inode *dir,
 	isec = dentry->d_inode->i_security;
 
 	AVC_AUDIT_DATA_INIT(&ad, FS);
-	ad.u.fs.dentry = dentry;
+	ad.u.fs.path.dentry = dentry;
 
 	av = DIR__SEARCH;
 	av |= (kind ? DIR__REMOVE_NAME : DIR__ADD_NAME);
@@ -1506,7 +1538,7 @@ static inline int may_rename(struct inode *old_dir,
 
 	AVC_AUDIT_DATA_INIT(&ad, FS);
 
-	ad.u.fs.dentry = old_dentry;
+	ad.u.fs.path.dentry = old_dentry;
 	rc = avc_has_perm(tsec->sid, old_dsec->sid, SECCLASS_DIR,
 			  DIR__REMOVE_NAME | DIR__SEARCH, &ad);
 	if (rc)
@@ -1522,7 +1554,7 @@ static inline int may_rename(struct inode *old_dir,
 			return rc;
 	}
 
-	ad.u.fs.dentry = new_dentry;
+	ad.u.fs.path.dentry = new_dentry;
 	av = DIR__ADD_NAME | DIR__SEARCH;
 	if (new_dentry->d_inode)
 		av |= DIR__REMOVE_NAME;
@@ -1901,8 +1933,7 @@ static int selinux_bprm_set_security(struct linux_binprm *bprm)
 	}
 
 	AVC_AUDIT_DATA_INIT(&ad, FS);
-	ad.u.fs.mnt = bprm->file->f_path.mnt;
-	ad.u.fs.dentry = bprm->file->f_path.dentry;
+	ad.u.fs.path = bprm->file->f_path;
 
 	if (bprm->file->f_path.mnt->mnt_flags & MNT_NOSUID)
 		newsid = tsec->sid;
@@ -2240,7 +2271,7 @@ static inline void take_selinux_option(char **to, char *from, int *first,
 	}
 }
 
-static int selinux_sb_copy_data(struct file_system_type *type, void *orig, void *copy)
+static int selinux_sb_copy_data(char *orig, char *copy)
 {
 	int fnosec, fsec, rc = 0;
 	char *in_save, *in_curr, *in_end;
@@ -2249,12 +2280,6 @@ static int selinux_sb_copy_data(struct file_system_type *type, void *orig, void 
 
 	in_curr = orig;
 	sec_curr = copy;
-
-	/* Binary mount data: just copy */
-	if (type->fs_flags & FS_BINARY_MOUNTDATA) {
-		copy_page(sec_curr, in_curr);
-		goto out;
-	}
 
 	nosec = (char *)get_zeroed_page(GFP_KERNEL);
 	if (!nosec) {
@@ -2298,7 +2323,7 @@ static int selinux_sb_kern_mount(struct super_block *sb, void *data)
 		return rc;
 
 	AVC_AUDIT_DATA_INIT(&ad,FS);
-	ad.u.fs.dentry = sb->s_root;
+	ad.u.fs.path.dentry = sb->s_root;
 	return superblock_has_perm(current, sb, FILESYSTEM__MOUNT, &ad);
 }
 
@@ -2307,7 +2332,7 @@ static int selinux_sb_statfs(struct dentry *dentry)
 	struct avc_audit_data ad;
 
 	AVC_AUDIT_DATA_INIT(&ad,FS);
-	ad.u.fs.dentry = dentry->d_sb->s_root;
+	ad.u.fs.path.dentry = dentry->d_sb->s_root;
 	return superblock_has_perm(current, dentry->d_sb, FILESYSTEM__GETATTR, &ad);
 }
 
@@ -2324,10 +2349,10 @@ static int selinux_mount(char * dev_name,
 		return rc;
 
 	if (flags & MS_REMOUNT)
-		return superblock_has_perm(current, nd->mnt->mnt_sb,
+		return superblock_has_perm(current, nd->path.mnt->mnt_sb,
 		                           FILESYSTEM__REMOUNT, NULL);
 	else
-		return dentry_has_perm(current, nd->mnt, nd->dentry,
+		return dentry_has_perm(current, nd->path.mnt, nd->path.dentry,
 		                       FILE__MOUNTON);
 }
 
@@ -2570,7 +2595,7 @@ static int selinux_inode_setxattr(struct dentry *dentry, char *name, void *value
 		return -EPERM;
 
 	AVC_AUDIT_DATA_INIT(&ad,FS);
-	ad.u.fs.dentry = dentry;
+	ad.u.fs.path.dentry = dentry;
 
 	rc = avc_has_perm(tsec->sid, isec->sid, isec->sclass,
 			  FILE__RELABELFROM, &ad);
@@ -5238,6 +5263,8 @@ static struct security_operations selinux_ops = {
 	.sb_get_mnt_opts =		selinux_get_mnt_opts,
 	.sb_set_mnt_opts =		selinux_set_mnt_opts,
 	.sb_clone_mnt_opts = 		selinux_sb_clone_mnt_opts,
+	.sb_parse_opts_str = 		selinux_parse_opts_str,
+
 
 	.inode_alloc_security =		selinux_inode_alloc_security,
 	.inode_free_security =		selinux_inode_free_security,

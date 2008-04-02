@@ -155,7 +155,7 @@ all: zImage
 
 CPPFLAGS_vmlinux.lds	:= -Upowerpc
 
-BOOT_TARGETS = zImage zImage.initrd uImage treeImage.% cuImage.%
+BOOT_TARGETS = zImage zImage.initrd uImage zImage% dtbImage% treeImage.% cuImage.%
 
 PHONY += $(BOOT_TARGETS)
 
@@ -176,7 +176,7 @@ define archhelp
   @echo '  *_defconfig     - Select default config from arch/$(ARCH)/configs'
 endef
 
-install: vdso_install
+install:
 	$(Q)$(MAKE) $(build)=$(boot) install
 
 vdso_install:

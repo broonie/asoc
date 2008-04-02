@@ -1,9 +1,13 @@
 /*
+ *  IDE DMA support (including IDE PCI BM-DMA).
+ *
  *  Copyright (C) 1995-1998   Mark Lord
  *  Copyright (C) 1999-2000   Andre Hedrick <andre@linux-ide.org>
  *  Copyright (C) 2004, 2007  Bartlomiej Zolnierkiewicz
  *
  *  May be copied or modified under the terms of the GNU General Public License
+ *
+ *  DMA is supported for all IDE devices (disk drives, cdroms, tapes, floppies).
  */
 
 /*
@@ -11,49 +15,6 @@
  */
 
 /*
- * This module provides support for the bus-master IDE DMA functions
- * of various PCI chipsets, including the Intel PIIX (i82371FB for
- * the 430 FX chipset), the PIIX3 (i82371SB for the 430 HX/VX and 
- * 440 chipsets), and the PIIX4 (i82371AB for the 430 TX chipset)
- * ("PIIX" stands for "PCI ISA IDE Xcellerator").
- *
- * Pretty much the same code works for other IDE PCI bus-mastering chipsets.
- *
- * DMA is supported for all IDE devices (disk drives, cdroms, tapes, floppies).
- *
- * By default, DMA support is prepared for use, but is currently enabled only
- * for drives which already have DMA enabled (UltraDMA or mode 2 multi/single),
- * or which are recognized as "good" (see table below).  Drives with only mode0
- * or mode1 (multi/single) DMA should also work with this chipset/driver
- * (eg. MC2112A) but are not enabled by default.
- *
- * Use "hdparm -i" to view modes supported by a given drive.
- *
- * The hdparm-3.5 (or later) utility can be used for manually enabling/disabling
- * DMA support, but must be (re-)compiled against this kernel version or later.
- *
- * To enable DMA, use "hdparm -d1 /dev/hd?" on a per-drive basis after booting.
- * If problems arise, ide.c will disable DMA operation after a few retries.
- * This error recovery mechanism works and has been extremely well exercised.
- *
- * IDE drives, depending on their vintage, may support several different modes
- * of DMA operation.  The boot-time modes are indicated with a "*" in
- * the "hdparm -i" listing, and can be changed with *knowledgeable* use of
- * the "hdparm -X" feature.  There is seldom a need to do this, as drives
- * normally power-up with their "best" PIO/DMA modes enabled.
- *
- * Testing has been done with a rather extensive number of drives,
- * with Quantum & Western Digital models generally outperforming the pack,
- * and Fujitsu & Conner (and some Seagate which are really Conner) drives
- * showing more lackluster throughput.
- *
- * Keep an eye on /var/adm/messages for "DMA disabled" messages.
- *
- * Some people have reported trouble with Intel Zappa motherboards.
- * This can be fixed by upgrading the AMI BIOS to version 1.00.04.BS0,
- * available from ftp://ftp.intel.com/pub/bios/10004bs0.exe
- * (thanks to Glen Morrell <glen@spin.Stanford.edu> for researching this).
- *
  * Thanks to "Christopher J. Reimer" <reimer@doe.carleton.ca> for
  * fixing the problem with the BIOS on some Acer motherboards.
  *
@@ -65,11 +26,6 @@
  *
  * Most importantly, thanks to Robert Bringman <rob@mars.trion.com>
  * for supplying a Promise UDMA board & WD UDMA drive for this work!
- *
- * And, yes, Intel Zappa boards really *do* use both PIIX IDE ports.
- *
- * ATA-66/100 and recovery functions, I forgot the rest......
- *
  */
 
 #include <linux/module.h>
@@ -198,7 +154,7 @@ int ide_build_sglist(ide_drive_t *drive, struct request *rq)
 
 EXPORT_SYMBOL_GPL(ide_build_sglist);
 
-#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
+#ifdef CONFIG_BLK_DEV_IDEDMA_SFF
 /**
  *	ide_build_dmatable	-	build IDE DMA table
  *
@@ -316,7 +272,7 @@ void ide_destroy_dmatable (ide_drive_t *drive)
 
 EXPORT_SYMBOL_GPL(ide_destroy_dmatable);
 
-#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
+#ifdef CONFIG_BLK_DEV_IDEDMA_SFF
 /**
  *	config_drive_for_dma	-	attempt to activate IDE DMA
  *	@drive: the drive to place in DMA mode
@@ -424,7 +380,7 @@ void ide_dma_host_set(ide_drive_t *drive, int on)
 }
 
 EXPORT_SYMBOL_GPL(ide_dma_host_set);
-#endif /* CONFIG_BLK_DEV_IDEDMA_PCI */
+#endif /* CONFIG_BLK_DEV_IDEDMA_SFF  */
 
 /**
  *	ide_dma_off_quietly	-	Generic DMA kill
@@ -474,7 +430,7 @@ void ide_dma_on(ide_drive_t *drive)
 	drive->hwif->dma_host_set(drive, 1);
 }
 
-#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
+#ifdef CONFIG_BLK_DEV_IDEDMA_SFF
 /**
  *	ide_dma_setup	-	begin a DMA phase
  *	@drive: target device
@@ -591,7 +547,7 @@ static int __ide_dma_test_irq(ide_drive_t *drive)
 }
 #else
 static inline int config_drive_for_dma(ide_drive_t *drive) { return 0; }
-#endif /* CONFIG_BLK_DEV_IDEDMA_PCI */
+#endif /* CONFIG_BLK_DEV_IDEDMA_SFF */
 
 int __ide_dma_bad_drive (ide_drive_t *drive)
 {
@@ -757,7 +713,7 @@ static int ide_tune_dma(ide_drive_t *drive)
 	}
 
 	if (hwif->host_flags & IDE_HFLAG_NO_SET_MODE)
-		return 0;
+		return 1;
 
 	if (ide_set_dma_mode(drive, speed))
 		return 0;
@@ -840,7 +796,7 @@ void ide_check_dma_crc(ide_drive_t *drive)
 		ide_dma_on(drive);
 }
 
-#ifdef CONFIG_BLK_DEV_IDEDMA_PCI
+#ifdef CONFIG_BLK_DEV_IDEDMA_SFF
 void ide_dma_lost_irq (ide_drive_t *drive)
 {
 	printk("%s: DMA interrupt recovery\n", drive->name);
@@ -1002,4 +958,4 @@ void ide_setup_dma(ide_hwif_t *hwif, unsigned long base)
 }
 
 EXPORT_SYMBOL_GPL(ide_setup_dma);
-#endif /* CONFIG_BLK_DEV_IDEDMA_PCI */
+#endif /* CONFIG_BLK_DEV_IDEDMA_SFF */

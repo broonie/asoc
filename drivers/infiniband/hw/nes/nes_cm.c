@@ -40,6 +40,7 @@
 #include <linux/tcp.h>
 #include <linux/init.h>
 #include <linux/if_arp.h>
+#include <linux/if_vlan.h>
 #include <linux/notifier.h>
 #include <linux/net.h>
 #include <linux/types.h>
@@ -370,11 +371,11 @@ int schedule_nes_timer(struct nes_cm_node *cm_node, struct sk_buff *skb,
 	int ret = 0;
 	u32 was_timer_set;
 
+	if (!cm_node)
+		return -EINVAL;
 	new_send = kzalloc(sizeof(*new_send), GFP_ATOMIC);
 	if (!new_send)
 		return -1;
-	if (!cm_node)
-		return -EINVAL;
 
 	/* new_send->timetosend = currenttime */
 	new_send->retrycount = NES_DEFAULT_RETRYS;
@@ -947,6 +948,7 @@ static int mini_cm_dec_refcnt_listen(struct nes_cm_core *cm_core,
 		nes_debug(NES_DBG_CM, "destroying listener (%p)\n", listener);
 
 		kfree(listener);
+		listener = NULL;
 		ret = 0;
 		cm_listens_destroyed++;
 	} else {
@@ -1071,7 +1073,7 @@ static struct nes_cm_node *make_cm_node(struct nes_cm_core *cm_core,
 	ts = current_kernel_time();
 	cm_node->tcp_cntxt.loc_seq_num = htonl(ts.tv_nsec);
 	cm_node->tcp_cntxt.mss = nesvnic->max_frame_size - sizeof(struct iphdr) -
-			sizeof(struct tcphdr) - ETH_HLEN;
+			sizeof(struct tcphdr) - ETH_HLEN - VLAN_HLEN;
 	cm_node->tcp_cntxt.rcv_nxt = 0;
 	/* get a unique session ID , add thread_id to an upcounter to handle race */
 	atomic_inc(&cm_core->node_cnt);
@@ -2319,6 +2321,7 @@ int nes_accept(struct iw_cm_id *cm_id, struct iw_cm_conn_param *conn_param)
 	struct iw_cm_event cm_event;
 	struct nes_hw_qp_wqe *wqe;
 	struct nes_v4_quad nes_quad;
+	u32 crc_value;
 	int ret;
 
 	ibqp = nes_get_qp(cm_id->device, conn_param->qpn);
@@ -2435,8 +2438,8 @@ int nes_accept(struct iw_cm_id *cm_id, struct iw_cm_conn_param *conn_param)
 	nes_quad.TcpPorts[1]   = cm_id->local_addr.sin_port;
 
 	/* Produce hash key */
-	nesqp->hte_index = cpu_to_be32(
-			crc32c(~0, (void *)&nes_quad, sizeof(nes_quad)) ^ 0xffffffff);
+	crc_value = get_crc_value(&nes_quad);
+	nesqp->hte_index = cpu_to_be32(crc_value ^ 0xffffffff);
 	nes_debug(NES_DBG_CM, "HTE Index = 0x%08X, CRC = 0x%08X\n",
 			nesqp->hte_index, nesqp->hte_index & adapter->hte_index_mask);
 
@@ -2750,6 +2753,7 @@ void cm_event_connected(struct nes_cm_event *event)
 	struct iw_cm_event cm_event;
 	struct nes_hw_qp_wqe *wqe;
 	struct nes_v4_quad nes_quad;
+	u32 crc_value;
 	int ret;
 
 	/* get all our handles */
@@ -2827,8 +2831,8 @@ void cm_event_connected(struct nes_cm_event *event)
 	nes_quad.TcpPorts[1] = cm_id->local_addr.sin_port;
 
 	/* Produce hash key */
-	nesqp->hte_index = cpu_to_be32(
-			crc32c(~0, (void *)&nes_quad, sizeof(nes_quad)) ^ 0xffffffff);
+	crc_value = get_crc_value(&nes_quad);
+	nesqp->hte_index = cpu_to_be32(crc_value ^ 0xffffffff);
 	nes_debug(NES_DBG_CM, "HTE Index = 0x%08X, After CRC = 0x%08X\n",
 			nesqp->hte_index, nesqp->hte_index & nesadapter->hte_index_mask);
 

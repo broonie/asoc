@@ -311,9 +311,10 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= &proc_dointvec,
 	},
+#endif
 	{
 		.ctl_name	= CTL_UNNUMBERED,
-		.procname	= "sched_rt_period_ms",
+		.procname	= "sched_rt_period_us",
 		.data		= &sysctl_sched_rt_period,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
@@ -321,31 +322,12 @@ static struct ctl_table kern_table[] = {
 	},
 	{
 		.ctl_name	= CTL_UNNUMBERED,
-		.procname	= "sched_rt_ratio",
-		.data		= &sysctl_sched_rt_ratio,
-		.maxlen		= sizeof(unsigned int),
+		.procname	= "sched_rt_runtime_us",
+		.data		= &sysctl_sched_rt_runtime,
+		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= &proc_dointvec,
 	},
-#if defined(CONFIG_FAIR_GROUP_SCHED) && defined(CONFIG_SMP)
-	{
-		.ctl_name       = CTL_UNNUMBERED,
-		.procname       = "sched_min_bal_int_shares",
-		.data           = &sysctl_sched_min_bal_int_shares,
-		.maxlen         = sizeof(unsigned int),
-		.mode           = 0644,
-		.proc_handler   = &proc_dointvec,
-	},
-	{
-		.ctl_name       = CTL_UNNUMBERED,
-		.procname       = "sched_max_bal_int_shares",
-		.data           = &sysctl_sched_max_bal_int_shares,
-		.maxlen         = sizeof(unsigned int),
-		.mode           = 0644,
-		.proc_handler   = &proc_dointvec,
-	},
-#endif
-#endif
 	{
 		.ctl_name	= CTL_UNNUMBERED,
 		.procname	= "sched_compat_yield",
@@ -978,8 +960,8 @@ static struct ctl_table vm_table[] = {
 	{
 		.ctl_name	= CTL_UNNUMBERED,
 		.procname	= "nr_overcommit_hugepages",
-		.data		= &nr_overcommit_huge_pages,
-		.maxlen		= sizeof(nr_overcommit_huge_pages),
+		.data		= &sysctl_overcommit_huge_pages,
+		.maxlen		= sizeof(sysctl_overcommit_huge_pages),
 		.mode		= 0644,
 		.proc_handler	= &hugetlb_overcommit_handler,
 	},

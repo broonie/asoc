@@ -78,9 +78,13 @@ static int	audit_default;
 /* If auditing cannot proceed, audit_failure selects what happens. */
 static int	audit_failure = AUDIT_FAIL_PRINTK;
 
-/* If audit records are to be written to the netlink socket, audit_pid
- * contains the (non-zero) pid. */
+/*
+ * If audit records are to be written to the netlink socket, audit_pid
+ * contains the pid of the auditd process and audit_nlk_pid contains
+ * the pid to use to send netlink messages to that process.
+ */
 int		audit_pid;
+static int	audit_nlk_pid;
 
 /* If audit_rate_limit is non-zero, limit the rate of sending audit records
  * to that number per second.  This prevents DoS attacks, but results in
@@ -170,7 +174,9 @@ void audit_panic(const char *message)
 			printk(KERN_ERR "audit: %s\n", message);
 		break;
 	case AUDIT_FAIL_PANIC:
-		panic("audit: %s\n", message);
+		/* test audit_pid since printk is always losey, why bother? */
+		if (audit_pid)
+			panic("audit: %s\n", message);
 		break;
 	}
 }
@@ -348,10 +354,11 @@ static int kauditd_thread(void *dummy)
 		wake_up(&audit_backlog_wait);
 		if (skb) {
 			if (audit_pid) {
-				int err = netlink_unicast(audit_sock, skb, audit_pid, 0);
+				int err = netlink_unicast(audit_sock, skb, audit_nlk_pid, 0);
 				if (err < 0) {
 					BUG_ON(err != -ECONNREFUSED); /* Shoudn't happen */
 					printk(KERN_ERR "audit: *NO* daemon at audit_pid=%d\n", audit_pid);
+					audit_log_lost("auditd dissapeared\n");
 					audit_pid = 0;
 				}
 			} else {
@@ -623,6 +630,7 @@ static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 							sid, 1);
 
 			audit_pid = new_pid;
+			audit_nlk_pid = NETLINK_CB(skb).pid;
 		}
 		if (status_get->mask & AUDIT_STATUS_RATE_LIMIT)
 			err = audit_set_rate_limit(status_get->rate_limit,
@@ -1312,26 +1320,26 @@ void audit_log_untrustedstring(struct audit_buffer *ab, const char *string)
 
 /* This is a helper-function to print the escaped d_path */
 void audit_log_d_path(struct audit_buffer *ab, const char *prefix,
-		      struct dentry *dentry, struct vfsmount *vfsmnt)
+		      struct path *path)
 {
-	char *p, *path;
+	char *p, *pathname;
 
 	if (prefix)
 		audit_log_format(ab, " %s", prefix);
 
 	/* We will allow 11 spaces for ' (deleted)' to be appended */
-	path = kmalloc(PATH_MAX+11, ab->gfp_mask);
-	if (!path) {
+	pathname = kmalloc(PATH_MAX+11, ab->gfp_mask);
+	if (!pathname) {
 		audit_log_format(ab, "<no memory>");
 		return;
 	}
-	p = d_path(dentry, vfsmnt, path, PATH_MAX+11);
+	p = d_path(path, pathname, PATH_MAX+11);
 	if (IS_ERR(p)) { /* Should never happen since we send PATH_MAX */
 		/* FIXME: can we save some information here? */
 		audit_log_format(ab, "<too long>");
 	} else
 		audit_log_untrustedstring(ab, p);
-	kfree(path);
+	kfree(pathname);
 }
 
 /**
@@ -1350,17 +1358,19 @@ void audit_log_end(struct audit_buffer *ab)
 	if (!audit_rate_check()) {
 		audit_log_lost("rate limit exceeded");
 	} else {
+		struct nlmsghdr *nlh = nlmsg_hdr(ab->skb);
 		if (audit_pid) {
-			struct nlmsghdr *nlh = nlmsg_hdr(ab->skb);
 			nlh->nlmsg_len = ab->skb->len - NLMSG_SPACE(0);
 			skb_queue_tail(&audit_skb_queue, ab->skb);
 			ab->skb = NULL;
 			wake_up_interruptible(&kauditd_wait);
-		} else if (printk_ratelimit()) {
-			struct nlmsghdr *nlh = nlmsg_hdr(ab->skb);
-			printk(KERN_NOTICE "type=%d %s\n", nlh->nlmsg_type, ab->skb->data + NLMSG_SPACE(0));
-		} else {
-			audit_log_lost("printk limit exceeded\n");
+		} else if (nlh->nlmsg_type != AUDIT_EOE) {
+			if (printk_ratelimit()) {
+				printk(KERN_NOTICE "type=%d %s\n",
+					nlh->nlmsg_type,
+					ab->skb->data + NLMSG_SPACE(0));
+			} else
+				audit_log_lost("printk limit exceeded\n");
 		}
 	}
 	audit_buffer_free(ab);

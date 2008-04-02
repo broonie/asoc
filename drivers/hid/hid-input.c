@@ -97,18 +97,21 @@ struct hidinput_key_translation {
 #define APPLE_FLAG_FKEY 0x01
 
 static struct hidinput_key_translation apple_fn_keys[] = {
-	{ KEY_F1,       KEY_BRIGHTNESSDOWN,     APPLE_FLAG_FKEY },
-	{ KEY_F2,       KEY_BRIGHTNESSUP,       APPLE_FLAG_FKEY },
-	{ KEY_F3,       KEY_CYCLEWINDOWS,       APPLE_FLAG_FKEY }, /* ExposÃ© */
-	{ KEY_F4,       KEY_FN_F4,              APPLE_FLAG_FKEY }, /* Dashboard */
-	{ KEY_F5,       KEY_FN_F5 },
-	{ KEY_F6,       KEY_FN_F6 },
-	{ KEY_F7,       KEY_BACK,               APPLE_FLAG_FKEY },
-	{ KEY_F8,       KEY_PLAYPAUSE,          APPLE_FLAG_FKEY },
-	{ KEY_F9,       KEY_FORWARD,            APPLE_FLAG_FKEY },
-	{ KEY_F10,      KEY_MUTE,               APPLE_FLAG_FKEY },
-	{ KEY_F11,      KEY_VOLUMEDOWN,         APPLE_FLAG_FKEY },
-	{ KEY_F12,      KEY_VOLUMEUP,           APPLE_FLAG_FKEY },
+	{ KEY_BACKSPACE, KEY_DELETE },
+	{ KEY_F1,       KEY_BRIGHTNESSDOWN, APPLE_FLAG_FKEY },
+	{ KEY_F2,       KEY_BRIGHTNESSUP,   APPLE_FLAG_FKEY },
+	{ KEY_F3,       KEY_FN_F5,          APPLE_FLAG_FKEY }, /* Exposé */
+	{ KEY_F4,       KEY_FN_F4,          APPLE_FLAG_FKEY }, /* Dashboard */
+	{ KEY_F7,       KEY_PREVIOUSSONG,   APPLE_FLAG_FKEY },
+	{ KEY_F8,       KEY_PLAYPAUSE,      APPLE_FLAG_FKEY },
+	{ KEY_F9,       KEY_NEXTSONG,       APPLE_FLAG_FKEY },
+	{ KEY_F10,      KEY_MUTE,           APPLE_FLAG_FKEY },
+	{ KEY_F11,      KEY_VOLUMEDOWN,     APPLE_FLAG_FKEY },
+	{ KEY_F12,      KEY_VOLUMEUP,       APPLE_FLAG_FKEY },
+	{ KEY_UP,       KEY_PAGEUP },
+	{ KEY_DOWN,     KEY_PAGEDOWN },
+	{ KEY_LEFT,     KEY_HOME },
+	{ KEY_RIGHT,    KEY_END },
 	{ }
 };
 
@@ -854,7 +857,8 @@ void hidinput_hid_event(struct hid_device *hid, struct hid_field *field, struct 
 		return;
 
 	/* handle input events for quirky devices */
-	hidinput_event_quirks(hid, field, usage, value);
+	if (hidinput_event_quirks(hid, field, usage, value))
+		return;
 
 	if (usage->hat_min < usage->hat_max || usage->hat_dir) {
 		int hat_dir = usage->hat_dir;

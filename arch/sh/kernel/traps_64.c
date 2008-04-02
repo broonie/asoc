@@ -238,7 +238,7 @@ DO_ERROR(12, SIGILL,  "reserved instruction", reserved_inst, current)
 /* Called with interrupts disabled */
 asmlinkage void do_exception_error(unsigned long ex, struct pt_regs *regs)
 {
-	show_excp_regs(__FUNCTION__, -1, -1, regs);
+	show_excp_regs(__func__, -1, -1, regs);
 	die_if_kernel("exception", regs, ex);
 }
 
@@ -630,7 +630,7 @@ static int misaligned_fpu_load(struct pt_regs *regs,
 				current->thread.fpu.hard.fp_regs[destreg] = buflo;
 				current->thread.fpu.hard.fp_regs[destreg+1] = bufhi;
 			} else {
-#if defined(CONFIG_LITTLE_ENDIAN)
+#if defined(CONFIG_CPU_LITTLE_ENDIAN)
 				current->thread.fpu.hard.fp_regs[destreg] = bufhi;
 				current->thread.fpu.hard.fp_regs[destreg+1] = buflo;
 #else
@@ -700,7 +700,7 @@ static int misaligned_fpu_store(struct pt_regs *regs,
 				buflo = current->thread.fpu.hard.fp_regs[srcreg];
 				bufhi = current->thread.fpu.hard.fp_regs[srcreg+1];
 			} else {
-#if defined(CONFIG_LITTLE_ENDIAN)
+#if defined(CONFIG_CPU_LITTLE_ENDIAN)
 				bufhi = current->thread.fpu.hard.fp_regs[srcreg];
 				buflo = current->thread.fpu.hard.fp_regs[srcreg+1];
 #else

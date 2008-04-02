@@ -39,10 +39,6 @@
 #include <linux/pm.h>
 #include <linux/i2c.h>
 #include <linux/platform_device.h>
-<<<<<<< HEAD:sound/soc/codecs/tlv320aic3x.c
-#include <sound/driver.h>
-=======
->>>>>>> origin/master:sound/soc/codecs/tlv320aic3x.c
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -1202,10 +1198,8 @@ static struct i2c_driver aic3x_i2c_driver = {
 		.name = "aic3x I2C Codec",
 		.owner = THIS_MODULE,
 	},
-	.id = I2C_DRIVERID_I2CDEV,
 	.attach_adapter = aic3x_i2c_attach,
 	.detach_client = aic3x_i2c_detach,
-	.command = NULL,
 };
 
 static struct i2c_client client_template = {

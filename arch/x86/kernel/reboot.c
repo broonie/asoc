@@ -152,6 +152,24 @@ static struct dmi_system_id __initdata reboot_dmi_table[] = {
 			DMI_MATCH(DMI_BOARD_NAME, "0WF810"),
 		},
 	},
+	{       /* Handle problems with rebooting on Dell Optiplex 745's DFF*/
+		.callback = set_bios_reboot,
+		.ident = "Dell OptiPlex 745",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "OptiPlex 745"),
+			DMI_MATCH(DMI_BOARD_NAME, "0MM599"),
+		},
+	},
+	{       /* Handle problems with rebooting on Dell Optiplex 745 with 0KW626 */
+		.callback = set_bios_reboot,
+		.ident = "Dell OptiPlex 745",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "OptiPlex 745"),
+			DMI_MATCH(DMI_BOARD_NAME, "0KW626"),
+		},
+	},
 	{	/* Handle problems with rebooting on Dell 2400's */
 		.callback = set_bios_reboot,
 		.ident = "Dell PowerEdge 2400",
@@ -326,7 +344,11 @@ static inline void kb_wait(void)
 	}
 }
 
-void machine_emergency_restart(void)
+void __attribute__((weak)) mach_reboot_fixups(void)
+{
+}
+
+static void native_machine_emergency_restart(void)
 {
 	int i;
 
@@ -337,6 +359,8 @@ void machine_emergency_restart(void)
 		/* Could also try the reset bit in the Hammer NB */
 		switch (reboot_type) {
 		case BOOT_KBD:
+			mach_reboot_fixups(); /* for board specific fixups */
+
 			for (i = 0; i < 10; i++) {
 				kb_wait();
 				udelay(50);
@@ -376,7 +400,7 @@ void machine_emergency_restart(void)
 	}
 }
 
-void machine_shutdown(void)
+static void native_machine_shutdown(void)
 {
 	/* Stop the cpus and apics */
 #ifdef CONFIG_SMP
@@ -420,7 +444,7 @@ void machine_shutdown(void)
 #endif
 }
 
-void machine_restart(char *__unused)
+static void native_machine_restart(char *__unused)
 {
 	printk("machine restart\n");
 
@@ -429,11 +453,11 @@ void machine_restart(char *__unused)
 	machine_emergency_restart();
 }
 
-void machine_halt(void)
+static void native_machine_halt(void)
 {
 }
 
-void machine_power_off(void)
+static void native_machine_power_off(void)
 {
 	if (pm_power_off) {
 		if (!reboot_force)
@@ -443,9 +467,35 @@ void machine_power_off(void)
 }
 
 struct machine_ops machine_ops = {
-	.power_off = machine_power_off,
-	.shutdown = machine_shutdown,
-	.emergency_restart = machine_emergency_restart,
-	.restart = machine_restart,
-	.halt = machine_halt
+	.power_off = native_machine_power_off,
+	.shutdown = native_machine_shutdown,
+	.emergency_restart = native_machine_emergency_restart,
+	.restart = native_machine_restart,
+	.halt = native_machine_halt
 };
+
+void machine_power_off(void)
+{
+	machine_ops.power_off();
+}
+
+void machine_shutdown(void)
+{
+	machine_ops.shutdown();
+}
+
+void machine_emergency_restart(void)
+{
+	machine_ops.emergency_restart();
+}
+
+void machine_restart(char *cmd)
+{
+	machine_ops.restart(cmd);
+}
+
+void machine_halt(void)
+{
+	machine_ops.halt();
+}
+

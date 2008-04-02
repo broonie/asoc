@@ -989,6 +989,8 @@ int get_user_pages(struct task_struct *tsk, struct mm_struct *mm,
 	int i;
 	unsigned int vm_flags;
 
+	if (len <= 0)
+		return 0;
 	/* 
 	 * Require read or write permissions.
 	 * If 'force' is set, we only require the "MAY" flags.
@@ -1709,7 +1711,7 @@ unlock:
 	}
 	return ret;
 oom_free_new:
-	__free_page(new_page);
+	page_cache_release(new_page);
 oom:
 	if (old_page)
 		page_cache_release(old_page);
@@ -2091,12 +2093,9 @@ static int do_swap_page(struct mm_struct *mm, struct vm_area_struct *vma,
 	unlock_page(page);
 
 	if (write_access) {
-		/* XXX: We could OR the do_wp_page code with this one? */
-		if (do_wp_page(mm, vma, address,
-				page_table, pmd, ptl, pte) & VM_FAULT_OOM) {
-			mem_cgroup_uncharge_page(page);
-			ret = VM_FAULT_OOM;
-		}
+		ret |= do_wp_page(mm, vma, address, page_table, pmd, ptl, pte);
+		if (ret & VM_FAULT_ERROR)
+			ret &= VM_FAULT_ERROR;
 		goto out;
 	}
 
@@ -2161,7 +2160,7 @@ release:
 	page_cache_release(page);
 	goto unlock;
 oom_free_page:
-	__free_page(page);
+	page_cache_release(page);
 oom:
 	return VM_FAULT_OOM;
 }
@@ -2709,6 +2708,13 @@ void print_vma_addr(char *prefix, unsigned long ip)
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 
+	/*
+	 * Do not print if we are in atomic
+	 * contexts (in exception stacks, etc.):
+	 */
+	if (preempt_count())
+		return;
+
 	down_read(&mm->mmap_sem);
 	vma = find_vma(mm, ip);
 	if (vma && vma->vm_file) {
@@ -2717,7 +2723,7 @@ void print_vma_addr(char *prefix, unsigned long ip)
 		if (buf) {
 			char *p, *s;
 
-			p = d_path(f->f_dentry, f->f_vfsmnt, buf, PAGE_SIZE);
+			p = d_path(&f->f_path, buf, PAGE_SIZE);
 			if (IS_ERR(p))
 				p = "?";
 			s = strrchr(p, '/');

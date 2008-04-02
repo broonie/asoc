@@ -41,6 +41,7 @@
 #include <linux/delay.h>
 #include <linux/console.h>
 #include <linux/platform_device.h>
+#include <linux/serial_sci.h>
 
 #ifdef CONFIG_CPU_FREQ
 #include <linux/notifier.h>
@@ -54,7 +55,6 @@
 #include <asm/kgdb.h>
 #endif
 
-#include <asm/sci.h>
 #include "sh-sci.h"
 
 struct sci_port {
@@ -393,7 +393,7 @@ static void sci_init_pins_scif(struct uart_port *port, unsigned int cflag)
 	if (cflag & CRTSCTS) {
 		fcr_val |= SCFCR_MCE;
 	} else {
-#ifdef CONFIG_CPU_SUBTYPE_SH7343
+#if defined(CONFIG_CPU_SUBTYPE_SH7343) || defined(CONFIG_CPU_SUBTYPE_SH7366)
 		/* Nothing */
 #elif defined(CONFIG_CPU_SUBTYPE_SH7763) || \
       defined(CONFIG_CPU_SUBTYPE_SH7780) || \
@@ -414,12 +414,12 @@ static void sci_init_pins_scif(struct uart_port *port, unsigned int cflag)
     defined(CONFIG_CPU_SUBTYPE_SH7785)
 static inline int scif_txroom(struct uart_port *port)
 {
-	return SCIF_TXROOM_MAX - (sci_in(port, SCTFDR) & 0x7f);
+	return SCIF_TXROOM_MAX - (sci_in(port, SCTFDR) & 0xff);
 }
 
 static inline int scif_rxroom(struct uart_port *port)
 {
-	return sci_in(port, SCRFDR) & 0x7f;
+	return sci_in(port, SCRFDR) & 0xff;
 }
 #else
 static inline int scif_txroom(struct uart_port *port)

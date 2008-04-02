@@ -903,7 +903,7 @@ void bio_set_pages_dirty(struct bio *bio)
 	}
 }
 
-void bio_release_pages(struct bio *bio)
+static void bio_release_pages(struct bio *bio)
 {
 	struct bio_vec *bvec = bio->bi_io_vec;
 	int i;
@@ -1194,6 +1194,8 @@ EXPORT_SYMBOL(bio_hw_segments);
 EXPORT_SYMBOL(bio_add_page);
 EXPORT_SYMBOL(bio_add_pc_page);
 EXPORT_SYMBOL(bio_get_nr_vecs);
+EXPORT_SYMBOL(bio_map_user);
+EXPORT_SYMBOL(bio_unmap_user);
 EXPORT_SYMBOL(bio_map_kern);
 EXPORT_SYMBOL(bio_pair_release);
 EXPORT_SYMBOL(bio_split);

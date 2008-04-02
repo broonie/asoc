@@ -221,8 +221,7 @@ void __init setup_node_bootmem(int nodeid, unsigned long start,
 				 bootmap_pages<<PAGE_SHIFT, PAGE_SIZE);
 	if (bootmap == NULL)  {
 		if (nodedata_phys < start || nodedata_phys >= end)
-			free_bootmem((unsigned long)node_data[nodeid],
-				     pgdat_size);
+			free_bootmem(nodedata_phys, pgdat_size);
 		node_data[nodeid] = NULL;
 		return;
 	}
@@ -494,11 +493,13 @@ void __init numa_initmem_init(unsigned long start_pfn, unsigned long end_pfn)
 	int i;
 
 	nodes_clear(node_possible_map);
+	nodes_clear(node_online_map);
 
 #ifdef CONFIG_NUMA_EMU
 	if (cmdline && !numa_emulation(start_pfn, end_pfn))
 		return;
 	nodes_clear(node_possible_map);
+	nodes_clear(node_online_map);
 #endif
 
 #ifdef CONFIG_ACPI_NUMA
@@ -506,6 +507,7 @@ void __init numa_initmem_init(unsigned long start_pfn, unsigned long end_pfn)
 					  end_pfn << PAGE_SHIFT))
 		return;
 	nodes_clear(node_possible_map);
+	nodes_clear(node_online_map);
 #endif
 
 #ifdef CONFIG_K8_NUMA
@@ -513,6 +515,7 @@ void __init numa_initmem_init(unsigned long start_pfn, unsigned long end_pfn)
 					end_pfn<<PAGE_SHIFT))
 		return;
 	nodes_clear(node_possible_map);
+	nodes_clear(node_online_map);
 #endif
 	printk(KERN_INFO "%s\n",
 	       numa_off ? "NUMA turned off" : "No NUMA configuration found");
@@ -524,7 +527,6 @@ void __init numa_initmem_init(unsigned long start_pfn, unsigned long end_pfn)
 	memnode_shift = 63;
 	memnodemap = memnode.embedded_map;
 	memnodemap[0] = 0;
-	nodes_clear(node_online_map);
 	node_set_online(0);
 	node_set(0, node_possible_map);
 	for (i = 0; i < NR_CPUS; i++)
@@ -619,13 +621,17 @@ void __init init_cpu_to_node(void)
 	int i;
 
 	for (i = 0; i < NR_CPUS; i++) {
+		int node;
 		u16 apicid = x86_cpu_to_apicid_init[i];
 
 		if (apicid == BAD_APICID)
 			continue;
-		if (apicid_to_node[apicid] == NUMA_NO_NODE)
+		node = apicid_to_node[apicid];
+		if (node == NUMA_NO_NODE)
 			continue;
-		numa_set_node(i, apicid_to_node[apicid]);
+		if (!node_online(node))
+			continue;
+		numa_set_node(i, node);
 	}
 }
 

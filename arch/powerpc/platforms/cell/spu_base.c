@@ -81,9 +81,12 @@ struct spu_slb {
 void spu_invalidate_slbs(struct spu *spu)
 {
 	struct spu_priv2 __iomem *priv2 = spu->priv2;
+	unsigned long flags;
 
+	spin_lock_irqsave(&spu->register_lock, flags);
 	if (spu_mfc_sr1_get(spu) & MFC_STATE1_RELOCATE_MASK)
 		out_be64(&priv2->slb_invalidate_all_W, 0UL);
+	spin_unlock_irqrestore(&spu->register_lock, flags);
 }
 EXPORT_SYMBOL_GPL(spu_invalidate_slbs);
 
@@ -148,7 +151,11 @@ static inline void spu_load_slb(struct spu *spu, int slbe, struct spu_slb *slb)
 			__func__, slbe, slb->vsid, slb->esid);
 
 	out_be64(&priv2->slb_index_W, slbe);
+	/* set invalid before writing vsid */
+	out_be64(&priv2->slb_esid_RW, 0);
+	/* now it's safe to write the vsid */
 	out_be64(&priv2->slb_vsid_RW, slb->vsid);
+	/* setting the new esid makes the entry valid again */
 	out_be64(&priv2->slb_esid_RW, slb->esid);
 }
 
@@ -160,13 +167,6 @@ static int __spu_trap_data_seg(struct spu *spu, unsigned long ea)
 
 	pr_debug("%s\n", __FUNCTION__);
 
-	if (test_bit(SPU_CONTEXT_SWITCH_ACTIVE, &spu->flags)) {
-		/* SLBs are pre-loaded for context switch, so
-		 * we should never get here!
-		 */
-		printk("%s: invalid access during switch!\n", __func__);
-		return 1;
-	}
 	slb.esid = (ea & ESID_MASK) | SLB_ESID_V;
 
 	switch(REGION_ID(ea)) {
@@ -224,11 +224,6 @@ static int __spu_trap_data_map(struct spu *spu, unsigned long ea, u64 dsisr)
 	    && hash_page(ea, _PAGE_PRESENT, 0x300) == 0) {
 		spu_restart_dma(spu);
 		return 0;
-	}
-
-	if (test_bit(SPU_CONTEXT_SWITCH_ACTIVE, &spu->flags)) {
-		printk("%s: invalid access during switch!\n", __func__);
-		return 1;
 	}
 
 	spu->class_0_pending = 0;
@@ -302,9 +297,11 @@ void spu_setup_kernel_slbs(struct spu *spu, struct spu_lscsa *lscsa,
 		nr_slbs++;
 	}
 
+	spin_lock_irq(&spu->register_lock);
 	/* Add the set of SLBs */
 	for (i = 0; i < nr_slbs; i++)
 		spu_load_slb(spu, i, &slbs[i]);
+	spin_unlock_irq(&spu->register_lock);
 }
 EXPORT_SYMBOL_GPL(spu_setup_kernel_slbs);
 
@@ -349,12 +346,13 @@ spu_irq_class_1(int irq, void *data)
 	if (stat & CLASS1_STORAGE_FAULT_INTR)
 		spu_mfc_dsisr_set(spu, 0ul);
 	spu_int_stat_clear(spu, 1, stat);
-	spin_unlock(&spu->register_lock);
-	pr_debug("%s: %lx %lx %lx %lx\n", __FUNCTION__, mask, stat,
-			dar, dsisr);
 
 	if (stat & CLASS1_SEGMENT_FAULT_INTR)
 		__spu_trap_data_seg(spu, dar);
+
+	spin_unlock(&spu->register_lock);
+	pr_debug("%s: %lx %lx %lx %lx\n", __FUNCTION__, mask, stat,
+			dar, dsisr);
 
 	if (stat & CLASS1_STORAGE_FAULT_INTR)
 		__spu_trap_data_map(spu, dar, dsisr);

@@ -3587,8 +3587,6 @@ static void cm_release_port_obj(struct kobject *obj)
 {
 	struct cm_port *cm_port;
 
-	printk(KERN_ERR "free cm port\n");
-
 	cm_port = container_of(obj, struct cm_port, port_obj);
 	kfree(cm_port);
 }
@@ -3600,8 +3598,6 @@ static struct kobj_type cm_port_obj_type = {
 static void cm_release_dev_obj(struct kobject *obj)
 {
 	struct cm_device *cm_dev;
-
-	printk(KERN_ERR "free cm dev\n");
 
 	cm_dev = container_of(obj, struct cm_device, dev_obj);
 	kfree(cm_dev);
@@ -3616,18 +3612,12 @@ struct class cm_class = {
 };
 EXPORT_SYMBOL(cm_class);
 
-static void cm_remove_fs_obj(struct kobject *obj)
-{
-	kobject_put(obj->parent);
-	kobject_put(obj);
-}
-
 static int cm_create_port_fs(struct cm_port *port)
 {
 	int i, ret;
 
 	ret = kobject_init_and_add(&port->port_obj, &cm_port_obj_type,
-				   kobject_get(&port->cm_dev->dev_obj),
+				   &port->cm_dev->dev_obj,
 				   "%d", port->port_num);
 	if (ret) {
 		kfree(port);
@@ -3637,7 +3627,7 @@ static int cm_create_port_fs(struct cm_port *port)
 	for (i = 0; i < CM_COUNTER_GROUPS; i++) {
 		ret = kobject_init_and_add(&port->counter_group[i].obj,
 					   &cm_counter_obj_type,
-					   kobject_get(&port->port_obj),
+					   &port->port_obj,
 					   "%s", counter_group_names[i]);
 		if (ret)
 			goto error;
@@ -3647,8 +3637,8 @@ static int cm_create_port_fs(struct cm_port *port)
 
 error:
 	while (i--)
-		cm_remove_fs_obj(&port->counter_group[i].obj);
-	cm_remove_fs_obj(&port->port_obj);
+		kobject_put(&port->counter_group[i].obj);
+	kobject_put(&port->port_obj);
 	return ret;
 
 }
@@ -3658,9 +3648,9 @@ static void cm_remove_port_fs(struct cm_port *port)
 	int i;
 
 	for (i = 0; i < CM_COUNTER_GROUPS; i++)
-		cm_remove_fs_obj(&port->counter_group[i].obj);
+		kobject_put(&port->counter_group[i].obj);
 
-	cm_remove_fs_obj(&port->port_obj);
+	kobject_put(&port->port_obj);
 }
 
 static void cm_add_one(struct ib_device *device)
@@ -3744,7 +3734,7 @@ error1:
 		ib_unregister_mad_agent(port->mad_agent);
 		cm_remove_port_fs(port);
 	}
-	cm_remove_fs_obj(&cm_dev->dev_obj);
+	kobject_put(&cm_dev->dev_obj);
 }
 
 static void cm_remove_one(struct ib_device *device)
@@ -3769,9 +3759,10 @@ static void cm_remove_one(struct ib_device *device)
 		port = cm_dev->port[i-1];
 		ib_modify_port(device, port->port_num, 0, &port_modify);
 		ib_unregister_mad_agent(port->mad_agent);
+		flush_workqueue(cm.wq);
 		cm_remove_port_fs(port);
 	}
-	cm_remove_fs_obj(&cm_dev->dev_obj);
+	kobject_put(&cm_dev->dev_obj);
 }
 
 static int __init ib_cm_init(void)
@@ -3823,6 +3814,7 @@ static void __exit ib_cm_cleanup(void)
 		cancel_delayed_work(&timewait_info->work.work);
 	spin_unlock_irq(&cm.lock);
 
+	ib_unregister_client(&cm_client);
 	destroy_workqueue(cm.wq);
 
 	list_for_each_entry_safe(timewait_info, tmp, &cm.timewait_list, list) {
@@ -3830,7 +3822,6 @@ static void __exit ib_cm_cleanup(void)
 		kfree(timewait_info);
 	}
 
-	ib_unregister_client(&cm_client);
 	class_unregister(&cm_class);
 	idr_destroy(&cm.local_id_table);
 }

@@ -74,7 +74,7 @@ static char *cifs_get_share_name(const char *node_name)
 	pSep = memchr(UNC+2, '\\', len-2);
 	if (!pSep) {
 		cERROR(1, ("%s: no server name end in node name: %s",
-			__FUNCTION__, node_name));
+			__func__, node_name));
 		kfree(UNC);
 		return NULL;
 	}
@@ -84,7 +84,7 @@ static char *cifs_get_share_name(const char *node_name)
 	pSep = memchr(UNC+(pSep-UNC), '\\', len-(pSep-UNC));
 	if (!pSep) {
 		cERROR(1, ("%s:2 cant find share name in node name: %s",
-			__FUNCTION__, node_name));
+			__func__, node_name));
 		kfree(UNC);
 		return NULL;
 	}
@@ -127,7 +127,7 @@ static char *compose_mount_options(const char *sb_mountdata,
 	rc = dns_resolve_server_name_to_ip(*devname, &srvIP);
 	if (rc != 0) {
 		cERROR(1, ("%s: Failed to resolve server part of %s to IP",
-			  __FUNCTION__, *devname));
+			  __func__, *devname));
 		mountdata = ERR_PTR(rc);
 		goto compose_mount_options_out;
 	}
@@ -181,8 +181,8 @@ static char *compose_mount_options(const char *sb_mountdata,
 		}
 	}
 
-	/*cFYI(1,("%s: parent mountdata: %s", __FUNCTION__,sb_mountdata));*/
-	/*cFYI(1, ("%s: submount mountdata: %s", __FUNCTION__, mountdata ));*/
+	/*cFYI(1,("%s: parent mountdata: %s", __func__,sb_mountdata));*/
+	/*cFYI(1, ("%s: submount mountdata: %s", __func__, mountdata ));*/
 
 compose_mount_options_out:
 	kfree(srvIP);
@@ -259,18 +259,18 @@ static int add_mount_helper(struct vfsmount *newmnt, struct nameidata *nd,
 	int err;
 
 	mntget(newmnt);
-	err = do_add_mount(newmnt, nd, nd->mnt->mnt_flags, mntlist);
+	err = do_add_mount(newmnt, nd, nd->path.mnt->mnt_flags, mntlist);
 	switch (err) {
 	case 0:
-		dput(nd->dentry);
-		mntput(nd->mnt);
-		nd->mnt = newmnt;
-		nd->dentry = dget(newmnt->mnt_root);
+		dput(nd->path.dentry);
+		mntput(nd->path.mnt);
+		nd->path.mnt = newmnt;
+		nd->path.dentry = dget(newmnt->mnt_root);
 		break;
 	case -EBUSY:
 		/* someone else made a mount here whilst we were busy */
-		while (d_mountpoint(nd->dentry) &&
-		       follow_down(&nd->mnt, &nd->dentry))
+		while (d_mountpoint(nd->path.dentry) &&
+		       follow_down(&nd->path.mnt, &nd->path.dentry))
 			;
 		err = 0;
 	default:
@@ -286,7 +286,7 @@ static void dump_referral(const struct dfs_info3_param *ref)
 	cFYI(1, ("DFS: node path: %s", ref->node_name));
 	cFYI(1, ("DFS: fl: %hd, srv_type: %hd", ref->flags, ref->server_type));
 	cFYI(1, ("DFS: ref_flags: %hd, path_consumed: %hd", ref->ref_flag,
-				ref->PathConsumed));
+				ref->path_consumed));
 }
 
 
@@ -302,13 +302,13 @@ cifs_dfs_follow_mountpoint(struct dentry *dentry, struct nameidata *nd)
 	int rc = 0;
 	struct vfsmount *mnt = ERR_PTR(-ENOENT);
 
-	cFYI(1, ("in %s", __FUNCTION__));
+	cFYI(1, ("in %s", __func__));
 	BUG_ON(IS_ROOT(dentry));
 
 	xid = GetXid();
 
-	dput(nd->dentry);
-	nd->dentry = dget(dentry);
+	dput(nd->path.dentry);
+	nd->path.dentry = dget(dentry);
 
 	cifs_sb = CIFS_SB(dentry->d_inode->i_sb);
 	ses = cifs_sb->tcon->ses;
@@ -336,14 +336,15 @@ cifs_dfs_follow_mountpoint(struct dentry *dentry, struct nameidata *nd)
 			len = strlen(referrals[i].node_name);
 			if (len < 2) {
 				cERROR(1, ("%s: Net Address path too short: %s",
-					__FUNCTION__, referrals[i].node_name));
+					__func__, referrals[i].node_name));
 				rc = -EINVAL;
 				goto out_err;
 			}
-			mnt = cifs_dfs_do_refmount(nd->mnt, nd->dentry,
+			mnt = cifs_dfs_do_refmount(nd->path.mnt,
+						nd->path.dentry,
 						referrals[i].node_name);
 			cFYI(1, ("%s: cifs_dfs_do_refmount:%s , mnt:%p",
-					 __FUNCTION__,
+					 __func__,
 					referrals[i].node_name, mnt));
 
 			/* complete mount procedure if we accured submount */
@@ -357,17 +358,17 @@ cifs_dfs_follow_mountpoint(struct dentry *dentry, struct nameidata *nd)
 	if (IS_ERR(mnt))
 		goto out_err;
 
-	nd->mnt->mnt_flags |= MNT_SHRINKABLE;
+	nd->path.mnt->mnt_flags |= MNT_SHRINKABLE;
 	rc = add_mount_helper(mnt, nd, &cifs_dfs_automount_list);
 
 out:
 	FreeXid(xid);
 	free_dfs_info_array(referrals, num_referrals);
 	kfree(full_path);
-	cFYI(1, ("leaving %s" , __FUNCTION__));
+	cFYI(1, ("leaving %s" , __func__));
 	return ERR_PTR(rc);
 out_err:
-	path_release(nd);
+	path_put(&nd->path);
 	goto out;
 }
 

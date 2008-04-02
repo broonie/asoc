@@ -314,24 +314,6 @@ int pci_find_ht_capability(struct pci_dev *dev, int ht_cap)
 }
 EXPORT_SYMBOL_GPL(pci_find_ht_capability);
 
-void pcie_wait_pending_transaction(struct pci_dev *dev)
-{
-	int pos;
-	u16 reg16;
-
-	pos = pci_find_capability(dev, PCI_CAP_ID_EXP);
-	if (!pos)
-		return;
-	while (1) {
-		pci_read_config_word(dev, pos + PCI_EXP_DEVSTA, &reg16);
-		if (!(reg16 & PCI_EXP_DEVSTA_TRPND))
-			break;
-		cpu_relax();
-	}
-
-}
-EXPORT_SYMBOL_GPL(pcie_wait_pending_transaction);
-
 /**
  * pci_find_parent_resource - return resource region of parent bus of given region
  * @dev: PCI device structure contains resources to be searched
@@ -554,6 +536,7 @@ pci_power_t pci_choose_state(struct pci_dev *dev, pm_message_t state)
 	case PM_EVENT_PRETHAW:
 		/* REVISIT both freeze and pre-thaw "should" use D0 */
 	case PM_EVENT_SUSPEND:
+	case PM_EVENT_HIBERNATE:
 		return PCI_D3hot;
 	default:
 		printk("Unrecognized suspend event %d\n", state.event);
@@ -934,9 +917,6 @@ pci_disable_device(struct pci_dev *dev)
 
 	if (atomic_sub_return(1, &dev->enable_cnt) != 0)
 		return;
-
-	/* Wait for all transactions are finished before disabling the device */
-	pcie_wait_pending_transaction(dev);
 
 	pci_read_config_word(dev, PCI_COMMAND, &pci_command);
 	if (pci_command & PCI_COMMAND_MASTER) {

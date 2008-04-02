@@ -109,6 +109,8 @@ cpu-hotplug.txt
 	- document describing CPU hotplug support in the Linux kernel.
 cpu-load.txt
 	- document describing how CPU load statistics are collected.
+cpuidle/
+	- info on CPU_IDLE, CPU idle state management subsystem.
 cpusets.txt
 	- documents the cpusets feature; assign CPUs and Mem to a set of tasks.
 cputopology.txt
@@ -181,8 +183,6 @@ i386/
 	- directory with info about Linux on Intel 32 bit architecture.
 ia64/
 	- directory with info about Linux on Intel 64 bit architecture.
-ide.txt
-	- important info for users of ATA devices (IDE/EIDE disks and CD-ROMS).
 infiniband/
 	- directory with documents concerning Linux InfiniBand support.
 initrd.txt
@@ -225,8 +225,6 @@ kprobes.txt
 	- documents the kernel probes debugging feature.
 kref.txt
 	- docs on adding reference counters (krefs) to kernel objects.
-laptop-mode.txt
-	- how to conserve battery power using laptop-mode.
 laptops/
 	- directory with laptop related info and laptop driver documentation.
 ldm.txt
@@ -301,12 +299,8 @@ pcmcia/
 	- info on the Linux PCMCIA driver.
 pi-futex.txt
 	- documentation on lightweight PI-futexes.
-pm.txt
-	- info on Linux power management support.
 pnp.txt
 	- Linux Plug and Play documentation.
-power_supply_class.txt
-	- Tells userspace about battery, UPS, AC or DC power supply properties
 power/
 	- directory with info on Linux PCI power management.
 powerpc/

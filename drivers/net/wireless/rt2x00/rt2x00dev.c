@@ -61,11 +61,33 @@ EXPORT_SYMBOL_GPL(rt2x00lib_get_ring);
 /*
  * Link tuning handlers
  */
-static void rt2x00lib_start_link_tuner(struct rt2x00_dev *rt2x00dev)
+void rt2x00lib_reset_link_tuner(struct rt2x00_dev *rt2x00dev)
 {
+	if (!test_bit(DEVICE_ENABLED_RADIO, &rt2x00dev->flags))
+		return;
+
+	/*
+	 * Reset link information.
+	 * Both the currently active vgc level as well as
+	 * the link tuner counter should be reset. Resetting
+	 * the counter is important for devices where the
+	 * device should only perform link tuning during the
+	 * first minute after being enabled.
+	 */
 	rt2x00dev->link.count = 0;
 	rt2x00dev->link.vgc_level = 0;
 
+	/*
+	 * Reset the link tuner.
+	 */
+	rt2x00dev->ops->lib->reset_tuner(rt2x00dev);
+}
+
+static void rt2x00lib_start_link_tuner(struct rt2x00_dev *rt2x00dev)
+{
+	/*
+	 * Clear all (possibly) pre-existing quality statistics.
+	 */
 	memset(&rt2x00dev->link.qual, 0, sizeof(rt2x00dev->link.qual));
 
 	/*
@@ -79,10 +101,7 @@ static void rt2x00lib_start_link_tuner(struct rt2x00_dev *rt2x00dev)
 	rt2x00dev->link.qual.rx_percentage = 50;
 	rt2x00dev->link.qual.tx_percentage = 50;
 
-	/*
-	 * Reset the link tuner.
-	 */
-	rt2x00dev->ops->lib->reset_tuner(rt2x00dev);
+	rt2x00lib_reset_link_tuner(rt2x00dev);
 
 	queue_delayed_work(rt2x00dev->hw->workqueue,
 			   &rt2x00dev->link.work, LINK_TUNE_INTERVAL);
@@ -91,15 +110,6 @@ static void rt2x00lib_start_link_tuner(struct rt2x00_dev *rt2x00dev)
 static void rt2x00lib_stop_link_tuner(struct rt2x00_dev *rt2x00dev)
 {
 	cancel_delayed_work_sync(&rt2x00dev->link.work);
-}
-
-void rt2x00lib_reset_link_tuner(struct rt2x00_dev *rt2x00dev)
-{
-	if (!test_bit(DEVICE_ENABLED_RADIO, &rt2x00dev->flags))
-		return;
-
-	rt2x00lib_stop_link_tuner(rt2x00dev);
-	rt2x00lib_start_link_tuner(rt2x00dev);
 }
 
 /*
@@ -260,19 +270,11 @@ static void rt2x00lib_evaluate_antenna_sample(struct rt2x00_dev *rt2x00dev)
 	if (sample_a == sample_b)
 		return;
 
-	if (rt2x00dev->link.ant.flags & ANTENNA_RX_DIVERSITY) {
-		if (sample_a > sample_b && rx == ANTENNA_B)
-			rx = ANTENNA_A;
-		else if (rx == ANTENNA_A)
-			rx = ANTENNA_B;
-	}
+	if (rt2x00dev->link.ant.flags & ANTENNA_RX_DIVERSITY)
+		rx = (sample_a > sample_b) ? ANTENNA_A : ANTENNA_B;
 
-	if (rt2x00dev->link.ant.flags & ANTENNA_TX_DIVERSITY) {
-		if (sample_a > sample_b && tx == ANTENNA_B)
-			tx = ANTENNA_A;
-		else if (tx == ANTENNA_A)
-			tx = ANTENNA_B;
-	}
+	if (rt2x00dev->link.ant.flags & ANTENNA_TX_DIVERSITY)
+		tx = (sample_a > sample_b) ? ANTENNA_A : ANTENNA_B;
 
 	rt2x00lib_config_antenna(rt2x00dev, rx, tx);
 }
@@ -293,7 +295,7 @@ static void rt2x00lib_evaluate_antenna_eval(struct rt2x00_dev *rt2x00dev)
 	 * sample the rssi from the other antenna to make a valid
 	 * comparison between the 2 antennas.
 	 */
-	if ((rssi_curr - rssi_old) > -5 || (rssi_curr - rssi_old) < 5)
+	if (abs(rssi_curr - rssi_old) < 5)
 		return;
 
 	rt2x00dev->link.ant.flags |= ANTENNA_MODE_SAMPLE;
@@ -319,15 +321,15 @@ static void rt2x00lib_evaluate_antenna(struct rt2x00_dev *rt2x00dev)
 	rt2x00dev->link.ant.flags &= ~ANTENNA_TX_DIVERSITY;
 
 	if (rt2x00dev->hw->conf.antenna_sel_rx == 0 &&
-	    rt2x00dev->default_ant.rx != ANTENNA_SW_DIVERSITY)
+	    rt2x00dev->default_ant.rx == ANTENNA_SW_DIVERSITY)
 		rt2x00dev->link.ant.flags |= ANTENNA_RX_DIVERSITY;
 	if (rt2x00dev->hw->conf.antenna_sel_tx == 0 &&
-	    rt2x00dev->default_ant.tx != ANTENNA_SW_DIVERSITY)
+	    rt2x00dev->default_ant.tx == ANTENNA_SW_DIVERSITY)
 		rt2x00dev->link.ant.flags |= ANTENNA_TX_DIVERSITY;
 
 	if (!(rt2x00dev->link.ant.flags & ANTENNA_RX_DIVERSITY) &&
 	    !(rt2x00dev->link.ant.flags & ANTENNA_TX_DIVERSITY)) {
-		rt2x00dev->link.ant.flags &= ~ANTENNA_MODE_SAMPLE;
+		rt2x00dev->link.ant.flags = 0;
 		return;
 	}
 
@@ -441,15 +443,16 @@ static void rt2x00lib_link_tuner(struct work_struct *work)
 		rt2x00dev->ops->lib->link_tuner(rt2x00dev);
 
 	/*
-	 * Evaluate antenna setup.
-	 */
-	rt2x00lib_evaluate_antenna(rt2x00dev);
-
-	/*
 	 * Precalculate a portion of the link signal which is
 	 * in based on the tx/rx success/failure counters.
 	 */
 	rt2x00lib_precalculate_link_signal(&rt2x00dev->link.qual);
+
+	/*
+	 * Evaluate antenna setup, make this the last step since this could
+	 * possibly reset some statistics.
+	 */
+	rt2x00lib_evaluate_antenna(rt2x00dev);
 
 	/*
 	 * Increase tuner counter, and reschedule the next link tuner run.
@@ -1095,7 +1098,7 @@ static void rt2x00lib_uninitialize(struct rt2x00_dev *rt2x00dev)
 		return;
 
 	/*
-	 * Unregister rfkill.
+	 * Unregister extra components.
 	 */
 	rt2x00rfkill_unregister(rt2x00dev);
 
@@ -1136,16 +1139,11 @@ static int rt2x00lib_initialize(struct rt2x00_dev *rt2x00dev)
 	__set_bit(DEVICE_INITIALIZED, &rt2x00dev->flags);
 
 	/*
-	 * Register the rfkill handler.
+	 * Register the extra components.
 	 */
-	status = rt2x00rfkill_register(rt2x00dev);
-	if (status)
-		goto exit_unitialize;
+	rt2x00rfkill_register(rt2x00dev);
 
 	return 0;
-
-exit_unitialize:
-	rt2x00lib_uninitialize(rt2x00dev);
 
 exit:
 	rt2x00lib_free_ring_entries(rt2x00dev);
@@ -1310,15 +1308,9 @@ int rt2x00lib_probe_dev(struct rt2x00_dev *rt2x00dev)
 	}
 
 	/*
-	 * Allocatie rfkill.
+	 * Register extra components.
 	 */
-	retval = rt2x00rfkill_allocate(rt2x00dev);
-	if (retval)
-		goto exit;
-
-	/*
-	 * Open the debugfs entry.
-	 */
+	rt2x00rfkill_allocate(rt2x00dev);
 	rt2x00debug_register(rt2x00dev);
 
 	__set_bit(DEVICE_PRESENT, &rt2x00dev->flags);
@@ -1347,13 +1339,9 @@ void rt2x00lib_remove_dev(struct rt2x00_dev *rt2x00dev)
 	rt2x00lib_uninitialize(rt2x00dev);
 
 	/*
-	 * Close debugfs entry.
+	 * Free extra components
 	 */
 	rt2x00debug_deregister(rt2x00dev);
-
-	/*
-	 * Free rfkill
-	 */
 	rt2x00rfkill_free(rt2x00dev);
 
 	/*
@@ -1392,11 +1380,15 @@ int rt2x00lib_suspend(struct rt2x00_dev *rt2x00dev, pm_message_t state)
 	__set_bit(DEVICE_STARTED_SUSPEND, &rt2x00dev->flags);
 
 	/*
-	 * Disable radio and unitialize all items
-	 * that must be recreated on resume.
+	 * Disable radio.
 	 */
 	rt2x00lib_stop(rt2x00dev);
 	rt2x00lib_uninitialize(rt2x00dev);
+
+	/*
+	 * Suspend/disable extra components.
+	 */
+	rt2x00rfkill_suspend(rt2x00dev);
 	rt2x00debug_deregister(rt2x00dev);
 
 exit:
@@ -1419,9 +1411,10 @@ int rt2x00lib_resume(struct rt2x00_dev *rt2x00dev)
 	NOTICE(rt2x00dev, "Waking up.\n");
 
 	/*
-	 * Open the debugfs entry.
+	 * Restore/enable extra components.
 	 */
 	rt2x00debug_register(rt2x00dev);
+	rt2x00rfkill_resume(rt2x00dev);
 
 	/*
 	 * Only continue if mac80211 had open interfaces.

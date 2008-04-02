@@ -627,8 +627,7 @@ repeat:
 }
 
 /**
- * sync_mapping_buffers - write out and wait upon a mapping's "associated"
- *                        buffers
+ * sync_mapping_buffers - write out & wait upon a mapping's "associated" buffers
  * @mapping: the mapping which wants those buffers written
  *
  * Starts I/O against the buffers at mapping->private_list, and waits upon
@@ -836,7 +835,7 @@ static int fsync_buffers_list(spinlock_t *lock, struct list_head *list)
 		smp_mb();
 		if (buffer_dirty(bh)) {
 			list_add(&bh->b_assoc_buffers,
-				 &bh->b_assoc_map->private_list);
+				 &mapping->private_list);
 			bh->b_assoc_map = mapping;
 		}
 		spin_unlock(lock);
@@ -3214,7 +3213,7 @@ static int buffer_cpu_notify(struct notifier_block *self,
 }
 
 /**
- * bh_uptodate_or_lock: Test whether the buffer is uptodate
+ * bh_uptodate_or_lock - Test whether the buffer is uptodate
  * @bh: struct buffer_head
  *
  * Return true if the buffer is up-to-date and false,
@@ -3233,7 +3232,7 @@ int bh_uptodate_or_lock(struct buffer_head *bh)
 EXPORT_SYMBOL(bh_uptodate_or_lock);
 
 /**
- * bh_submit_read: Submit a locked buffer for reading
+ * bh_submit_read - Submit a locked buffer for reading
  * @bh: struct buffer_head
  *
  * Returns zero on success and -EIO on error.
