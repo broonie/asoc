@@ -133,7 +133,9 @@ static void pxa2xx_ac97_write(struct snd_ac97 *ac97, unsigned short reg,
 
 static void pxa2xx_ac97_warm_reset(struct snd_ac97 *ac97)
 {
+#ifdef CONFIG_PXA3xx
 	int timeout = 100;
+#endif
 	gsr_bits = 0;
 
 #ifdef CONFIG_PXA27x
@@ -164,9 +166,9 @@ static void pxa2xx_ac97_warm_reset(struct snd_ac97 *ac97)
 
 static void pxa2xx_ac97_cold_reset(struct snd_ac97 *ac97)
 {
+#ifdef CONFIG_PXA3xx
 	int timeout = 1000;
 
-#ifdef CONFIG_PXA3xx
 	/* Hold CLKBPB for 100us */
 	GCR = 0;
 	GCR = GCR_CLKBPB;
