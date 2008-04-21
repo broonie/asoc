@@ -373,10 +373,10 @@ static inline
 	dma_addr_t dmaaddr;
 
 	if (tx) {
-		dmaaddr = dma_map_single(ring->dev->dev->dev,
+		dmaaddr = dma_map_single(ring->dev->dev->dma_dev,
 					 buf, len, DMA_TO_DEVICE);
 	} else {
-		dmaaddr = dma_map_single(ring->dev->dev->dev,
+		dmaaddr = dma_map_single(ring->dev->dev->dma_dev,
 					 buf, len, DMA_FROM_DEVICE);
 	}
 
@@ -388,9 +388,10 @@ static inline
 			  dma_addr_t addr, size_t len, int tx)
 {
 	if (tx) {
-		dma_unmap_single(ring->dev->dev->dev, addr, len, DMA_TO_DEVICE);
+		dma_unmap_single(ring->dev->dev->dma_dev,
+				 addr, len, DMA_TO_DEVICE);
 	} else {
-		dma_unmap_single(ring->dev->dev->dev,
+		dma_unmap_single(ring->dev->dev->dma_dev,
 				 addr, len, DMA_FROM_DEVICE);
 	}
 }
@@ -400,7 +401,7 @@ static inline
 				 dma_addr_t addr, size_t len)
 {
 	B43_WARN_ON(ring->tx);
-	dma_sync_single_for_cpu(ring->dev->dev->dev,
+	dma_sync_single_for_cpu(ring->dev->dev->dma_dev,
 				addr, len, DMA_FROM_DEVICE);
 }
 
@@ -409,7 +410,7 @@ static inline
 				    dma_addr_t addr, size_t len)
 {
 	B43_WARN_ON(ring->tx);
-	dma_sync_single_for_device(ring->dev->dev->dev,
+	dma_sync_single_for_device(ring->dev->dev->dma_dev,
 				   addr, len, DMA_FROM_DEVICE);
 }
 
@@ -425,7 +426,7 @@ static inline
 
 static int alloc_ringmemory(struct b43_dmaring *ring)
 {
-	struct device *dev = ring->dev->dev->dev;
+	struct device *dma_dev = ring->dev->dev->dma_dev;
 	gfp_t flags = GFP_KERNEL;
 
 	/* The specs call for 4K buffers for 30- and 32-bit DMA with 4K
@@ -439,7 +440,7 @@ static int alloc_ringmemory(struct b43_dmaring *ring)
 	 */
 	if (ring->type == B43_DMA_64BIT)
 		flags |= GFP_DMA;
-	ring->descbase = dma_alloc_coherent(dev, B43_DMA_RINGMEMSIZE,
+	ring->descbase = dma_alloc_coherent(dma_dev, B43_DMA_RINGMEMSIZE,
 					    &(ring->dmabase), flags);
 	if (!ring->descbase) {
 		b43err(ring->dev->wl, "DMA ringmemory allocation failed\n");
@@ -452,9 +453,9 @@ static int alloc_ringmemory(struct b43_dmaring *ring)
 
 static void free_ringmemory(struct b43_dmaring *ring)
 {
-	struct device *dev = ring->dev->dev->dev;
+	struct device *dma_dev = ring->dev->dev->dma_dev;
 
-	dma_free_coherent(dev, B43_DMA_RINGMEMSIZE,
+	dma_free_coherent(dma_dev, B43_DMA_RINGMEMSIZE,
 			  ring->descbase, ring->dmabase);
 }
 
@@ -560,7 +561,7 @@ static int b43_dmacontroller_tx_reset(struct b43_wldev *dev, u16 mmio_base,
 /* Check if a DMA mapping address is invalid. */
 static bool b43_dma_mapping_error(struct b43_dmaring *ring,
 				  dma_addr_t addr,
-				  size_t buffersize)
+				  size_t buffersize, bool dma_to_device)
 {
 	if (unlikely(dma_mapping_error(addr)))
 		return 1;
@@ -568,11 +569,11 @@ static bool b43_dma_mapping_error(struct b43_dmaring *ring,
 	switch (ring->type) {
 	case B43_DMA_30BIT:
 		if ((u64)addr + buffersize > (1ULL << 30))
-			return 1;
+			goto address_error;
 		break;
 	case B43_DMA_32BIT:
 		if ((u64)addr + buffersize > (1ULL << 32))
-			return 1;
+			goto address_error;
 		break;
 	case B43_DMA_64BIT:
 		/* Currently we can't have addresses beyond
@@ -582,6 +583,12 @@ static bool b43_dma_mapping_error(struct b43_dmaring *ring,
 
 	/* The address is OK. */
 	return 0;
+
+address_error:
+	/* We can't support this address. Unmap it again. */
+	unmap_descbuffer(ring, addr, buffersize, dma_to_device);
+
+	return 1;
 }
 
 static int setup_rx_descbuffer(struct b43_dmaring *ring,
@@ -599,7 +606,7 @@ static int setup_rx_descbuffer(struct b43_dmaring *ring,
 	if (unlikely(!skb))
 		return -ENOMEM;
 	dmaaddr = map_descbuffer(ring, skb->data, ring->rx_buffersize, 0);
-	if (b43_dma_mapping_error(ring, dmaaddr, ring->rx_buffersize)) {
+	if (b43_dma_mapping_error(ring, dmaaddr, ring->rx_buffersize, 0)) {
 		/* ugh. try to realloc in zone_dma */
 		gfp_flags |= GFP_DMA;
 
@@ -612,7 +619,8 @@ static int setup_rx_descbuffer(struct b43_dmaring *ring,
 					 ring->rx_buffersize, 0);
 	}
 
-	if (b43_dma_mapping_error(ring, dmaaddr, ring->rx_buffersize)) {
+	if (b43_dma_mapping_error(ring, dmaaddr, ring->rx_buffersize, 0)) {
+		b43err(ring->dev->wl, "RX DMA buffer allocation failed\n");
 		dev_kfree_skb_any(skb);
 		return -EIO;
 	}
@@ -847,12 +855,13 @@ struct b43_dmaring *b43_setup_dmaring(struct b43_wldev *dev,
 			goto err_kfree_meta;
 
 		/* test for ability to dma to txhdr_cache */
-		dma_test = dma_map_single(dev->dev->dev,
+		dma_test = dma_map_single(dev->dev->dma_dev,
 					  ring->txhdr_cache,
 					  b43_txhdr_size(dev),
 					  DMA_TO_DEVICE);
 
-		if (b43_dma_mapping_error(ring, dma_test, b43_txhdr_size(dev))) {
+		if (b43_dma_mapping_error(ring, dma_test,
+					  b43_txhdr_size(dev), 1)) {
 			/* ugh realloc */
 			kfree(ring->txhdr_cache);
 			ring->txhdr_cache = kcalloc(nr_slots,
@@ -861,17 +870,21 @@ struct b43_dmaring *b43_setup_dmaring(struct b43_wldev *dev,
 			if (!ring->txhdr_cache)
 				goto err_kfree_meta;
 
-			dma_test = dma_map_single(dev->dev->dev,
+			dma_test = dma_map_single(dev->dev->dma_dev,
 						  ring->txhdr_cache,
 						  b43_txhdr_size(dev),
 						  DMA_TO_DEVICE);
 
 			if (b43_dma_mapping_error(ring, dma_test,
-						  b43_txhdr_size(dev)))
+						  b43_txhdr_size(dev), 1)) {
+
+				b43err(dev->wl,
+				       "TXHDR DMA allocation failed\n");
 				goto err_kfree_txhdr_cache;
+			}
 		}
 
-		dma_unmap_single(dev->dev->dev,
+		dma_unmap_single(dev->dev->dma_dev,
 				 dma_test, b43_txhdr_size(dev),
 				 DMA_TO_DEVICE);
 	}
@@ -1189,7 +1202,7 @@ static int dma_tx_fragment(struct b43_dmaring *ring,
 
 	meta_hdr->dmaaddr = map_descbuffer(ring, (unsigned char *)header,
 					   hdrsize, 1);
-	if (b43_dma_mapping_error(ring, meta_hdr->dmaaddr, hdrsize)) {
+	if (b43_dma_mapping_error(ring, meta_hdr->dmaaddr, hdrsize, 1)) {
 		ring->current_slot = old_top_slot;
 		ring->used_slots = old_used_slots;
 		return -EIO;
@@ -1208,7 +1221,7 @@ static int dma_tx_fragment(struct b43_dmaring *ring,
 
 	meta->dmaaddr = map_descbuffer(ring, skb->data, skb->len, 1);
 	/* create a bounce buffer in zone_dma on mapping failure. */
-	if (b43_dma_mapping_error(ring, meta->dmaaddr, skb->len)) {
+	if (b43_dma_mapping_error(ring, meta->dmaaddr, skb->len, 1)) {
 		bounce_skb = __dev_alloc_skb(skb->len, GFP_ATOMIC | GFP_DMA);
 		if (!bounce_skb) {
 			ring->current_slot = old_top_slot;
@@ -1222,7 +1235,7 @@ static int dma_tx_fragment(struct b43_dmaring *ring,
 		skb = bounce_skb;
 		meta->skb = skb;
 		meta->dmaaddr = map_descbuffer(ring, skb->data, skb->len, 1);
-		if (b43_dma_mapping_error(ring, meta->dmaaddr, skb->len)) {
+		if (b43_dma_mapping_error(ring, meta->dmaaddr, skb->len, 1)) {
 			ring->current_slot = old_top_slot;
 			ring->used_slots = old_used_slots;
 			err = -EIO;
@@ -1337,6 +1350,7 @@ out_unlock:
 	return err;
 }
 
+/* Called with IRQs disabled. */
 void b43_dma_handle_txstatus(struct b43_wldev *dev,
 			     const struct b43_txstatus *status)
 {
@@ -1349,8 +1363,8 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 	ring = parse_cookie(dev, status->cookie, &slot);
 	if (unlikely(!ring))
 		return;
-	B43_WARN_ON(!irqs_disabled());
-	spin_lock(&ring->lock);
+
+	spin_lock(&ring->lock); /* IRQs are already disabled. */
 
 	B43_WARN_ON(!ring->tx);
 	ops = ring->ops;

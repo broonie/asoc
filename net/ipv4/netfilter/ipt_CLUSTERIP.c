@@ -82,8 +82,8 @@ clusterip_config_put(struct clusterip_config *c)
 static inline void
 clusterip_config_entry_put(struct clusterip_config *c)
 {
+	write_lock_bh(&clusterip_lock);
 	if (atomic_dec_and_test(&c->entries)) {
-		write_lock_bh(&clusterip_lock);
 		list_del(&c->list);
 		write_unlock_bh(&clusterip_lock);
 
@@ -96,7 +96,9 @@ clusterip_config_entry_put(struct clusterip_config *c)
 #ifdef CONFIG_PROC_FS
 		remove_proc_entry(c->pde->name, c->pde->parent);
 #endif
+		return;
 	}
+	write_unlock_bh(&clusterip_lock);
 }
 
 static struct clusterip_config *
@@ -167,14 +169,13 @@ clusterip_config_init(struct ipt_clusterip_tgt_info *i, __be32 ip,
 
 		/* create proc dir entry */
 		sprintf(buffer, "%u.%u.%u.%u", NIPQUAD(ip));
-		c->pde = create_proc_entry(buffer, S_IWUSR|S_IRUSR,
-					   clusterip_procdir);
+		c->pde = proc_create(buffer, S_IWUSR|S_IRUSR,
+				     clusterip_procdir, &clusterip_proc_fops);
 		if (!c->pde) {
 			kfree(c);
 			return NULL;
 		}
 	}
-	c->pde->proc_fops = &clusterip_proc_fops;
 	c->pde->data = c;
 #endif
 
