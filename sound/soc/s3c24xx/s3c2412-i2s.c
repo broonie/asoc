@@ -14,11 +14,7 @@
  * under  the terms of  the GNU General  Public License as published by the
  * Free Software Foundation;  either version 2 of the  License, or (at your
  * option) any later version.
-<<<<<<< HEAD:sound/soc/s3c24xx/s3c2412-i2s.c
-*/
-=======
  */
->>>>>>> origin/master:sound/soc/s3c24xx/s3c2412-i2s.c
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -27,10 +23,6 @@
 #include <linux/clk.h>
 #include <linux/kernel.h>
 
-<<<<<<< HEAD:sound/soc/s3c24xx/s3c2412-i2s.c
-#include <sound/driver.h>
-=======
->>>>>>> origin/master:sound/soc/s3c24xx/s3c2412-i2s.c
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
