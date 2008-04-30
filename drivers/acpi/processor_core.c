@@ -112,6 +112,7 @@ static struct acpi_driver acpi_processor_driver = {
 #define UNINSTALL_NOTIFY_HANDLER	2
 
 static const struct file_operations acpi_processor_info_fops = {
+	.owner = THIS_MODULE,
 	.open = acpi_processor_info_open_fs,
 	.read = seq_read,
 	.llseek = seq_lseek,
@@ -326,40 +327,30 @@ static int acpi_processor_add_fs(struct acpi_device *device)
 	acpi_device_dir(device)->owner = THIS_MODULE;
 
 	/* 'info' [R] */
-	entry = create_proc_entry(ACPI_PROCESSOR_FILE_INFO,
-				  S_IRUGO, acpi_device_dir(device));
+	entry = proc_create_data(ACPI_PROCESSOR_FILE_INFO,
+				 S_IRUGO, acpi_device_dir(device),
+				 &acpi_processor_info_fops,
+				 acpi_driver_data(device));
 	if (!entry)
 		return -EIO;
-	else {
-		entry->proc_fops = &acpi_processor_info_fops;
-		entry->data = acpi_driver_data(device);
-		entry->owner = THIS_MODULE;
-	}
 
 	/* 'throttling' [R/W] */
-	entry = create_proc_entry(ACPI_PROCESSOR_FILE_THROTTLING,
-				  S_IFREG | S_IRUGO | S_IWUSR,
-				  acpi_device_dir(device));
+	entry = proc_create_data(ACPI_PROCESSOR_FILE_THROTTLING,
+				 S_IFREG | S_IRUGO | S_IWUSR,
+				 acpi_device_dir(device),
+				 &acpi_processor_throttling_fops,
+				 acpi_driver_data(device));
 	if (!entry)
 		return -EIO;
-	else {
-		entry->proc_fops = &acpi_processor_throttling_fops;
-		entry->data = acpi_driver_data(device);
-		entry->owner = THIS_MODULE;
-	}
 
 	/* 'limit' [R/W] */
-	entry = create_proc_entry(ACPI_PROCESSOR_FILE_LIMIT,
-				  S_IFREG | S_IRUGO | S_IWUSR,
-				  acpi_device_dir(device));
+	entry = proc_create_data(ACPI_PROCESSOR_FILE_LIMIT,
+				 S_IFREG | S_IRUGO | S_IWUSR,
+				 acpi_device_dir(device),
+				 &acpi_processor_limit_fops,
+				 acpi_driver_data(device));
 	if (!entry)
 		return -EIO;
-	else {
-		entry->proc_fops = &acpi_processor_limit_fops;
-		entry->data = acpi_driver_data(device);
-		entry->owner = THIS_MODULE;
-	}
-
 	return 0;
 }
 
@@ -611,6 +602,15 @@ static int acpi_processor_get_info(struct acpi_processor *pr, unsigned has_uid)
 		 */
 		request_region(pr->throttling.address, 6, "ACPI CPU throttle");
 	}
+
+	/*
+	 * If ACPI describes a slot number for this CPU, we can use it
+	 * ensure we get the right value in the "physical id" field
+	 * of /proc/cpuinfo
+	 */
+	status = acpi_evaluate_object(pr->handle, "_SUN", NULL, &buffer);
+	if (ACPI_SUCCESS(status))
+		arch_fix_phys_package_id(pr->id, object.integer.value);
 
 	return 0;
 }
