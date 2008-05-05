@@ -39,6 +39,7 @@
 #include <linux/spinlock.h>
 #include <linux/syscalls.h>
 #include <linux/file.h>
+#include <linux/fdtable.h>
 #include <linux/namei.h>
 #include <linux/mount.h>
 #include <linux/ext2_fs.h>
@@ -3285,9 +3286,6 @@ static int selinux_task_kill(struct task_struct *p, struct siginfo *info,
 	rc = secondary_ops->task_kill(p, info, sig, secid);
 	if (rc)
 		return rc;
-
-	if (info != SEND_SIG_NOINFO && (is_si_special(info) || SI_FROMKERNEL(info)))
-		return 0;
 
 	if (!sig)
 		perm = PROCESS__SIGNULL; /* null signal; existence test */
