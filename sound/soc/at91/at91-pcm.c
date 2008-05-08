@@ -192,10 +192,12 @@ static int at91_pcm_trigger(struct snd_pcm_substream *substream,
 		at91_ssc_write(params->ssc_base + AT91_SSC_IER,
 			params->mask->ssc_endx | params->mask->ssc_endbuf);
 
-		at91_ssc_write(params->ssc_base + ATMEL_PDC_PTCR, params->mask->pdc_enable);
+		at91_ssc_write(params->ssc_base + ATMEL_PDC_PTCR,
+			params->mask->pdc_enable);
 
-		DBG("sr=%lx imr=%lx\n", at91_ssc_read(params->ssc_base + AT91_SSC_SR),
-					at91_ssc_read(params->ssc_base + AT91_SSC_IMR));
+		DBG("sr=%lx imr=%lx\n",
+		    at91_ssc_read(params->ssc_base + AT91_SSC_SR),
+		    at91_ssc_read(params->ssc_base + AT91_SSC_IMR));
 		break;
 
 	case SNDRV_PCM_TRIGGER_STOP:
