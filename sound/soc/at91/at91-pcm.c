@@ -103,7 +103,8 @@ static void at91_pcm_dma_irq(u32 ssc_sr,
 		if (prtd->period_ptr >= prtd->dma_buffer_end) {
 			prtd->period_ptr = prtd->dma_buffer;
 		}
-		at91_ssc_write(params->ssc_base + params->pdc->xnpr, prtd->period_ptr);
+		at91_ssc_write(params->ssc_base + params->pdc->xnpr,
+			       prtd->period_ptr);
 		at91_ssc_write(params->ssc_base + params->pdc->xncr,
 				prtd->period_size / params->pdc_xfer_size);
 	}
