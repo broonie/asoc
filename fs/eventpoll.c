@@ -1050,8 +1050,6 @@ asmlinkage long sys_epoll_create(int size)
 {
 	int error, fd = -1;
 	struct eventpoll *ep;
-	struct inode *inode;
-	struct file *file;
 
 	DNPRINTK(3, (KERN_INFO "[%p] eventpoll: sys_epoll_create(%d)\n",
 		     current, size));
@@ -1061,29 +1059,24 @@ asmlinkage long sys_epoll_create(int size)
 	 * structure ( "struct eventpoll" ).
 	 */
 	error = -EINVAL;
-	if (size <= 0 || (error = ep_alloc(&ep)) != 0)
+	if (size <= 0 || (error = ep_alloc(&ep)) < 0) {
+		fd = error;
 		goto error_return;
+	}
 
 	/*
 	 * Creates all the items needed to setup an eventpoll file. That is,
-	 * a file structure, and inode and a free file descriptor.
+	 * a file structure and a free file descriptor.
 	 */
-	error = anon_inode_getfd(&fd, &inode, &file, "[eventpoll]",
-				 &eventpoll_fops, ep);
-	if (error)
-		goto error_free;
+	fd = anon_inode_getfd("[eventpoll]", &eventpoll_fops, ep);
+	if (fd < 0)
+		ep_free(ep);
 
+error_return:
 	DNPRINTK(3, (KERN_INFO "[%p] eventpoll: sys_epoll_create(%d) = %d\n",
 		     current, size, fd));
 
 	return fd;
-
-error_free:
-	ep_free(ep);
-error_return:
-	DNPRINTK(3, (KERN_INFO "[%p] eventpoll: sys_epoll_create(%d) = %d\n",
-		     current, size, error));
-	return error;
 }
 
 /*
@@ -1241,7 +1234,7 @@ error_return:
 	return error;
 }
 
-#ifdef TIF_RESTORE_SIGMASK
+#ifdef HAVE_SET_RESTORE_SIGMASK
 
 /*
  * Implement the event wait interface for the eventpoll file. It is the kernel
@@ -1279,7 +1272,7 @@ asmlinkage long sys_epoll_pwait(int epfd, struct epoll_event __user *events,
 		if (error == -EINTR) {
 			memcpy(&current->saved_sigmask, &sigsaved,
 			       sizeof(sigsaved));
-			set_thread_flag(TIF_RESTORE_SIGMASK);
+			set_restore_sigmask();
 		} else
 			sigprocmask(SIG_SETMASK, &sigsaved, NULL);
 	}
@@ -1287,7 +1280,7 @@ asmlinkage long sys_epoll_pwait(int epfd, struct epoll_event __user *events,
 	return error;
 }
 
-#endif /* #ifdef TIF_RESTORE_SIGMASK */
+#endif /* HAVE_SET_RESTORE_SIGMASK */
 
 static int __init eventpoll_init(void)
 {
@@ -1309,4 +1302,3 @@ static int __init eventpoll_init(void)
 	return 0;
 }
 fs_initcall(eventpoll_init);
-

@@ -22,6 +22,7 @@
 #include <linux/mempolicy.h>
 #include <linux/sem.h>
 #include <linux/file.h>
+#include <linux/fdtable.h>
 #include <linux/key.h>
 #include <linux/binfmts.h>
 #include <linux/mman.h>
@@ -892,7 +893,7 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 	sig->group_exit_code = 0;
 	sig->group_exit_task = NULL;
 	sig->group_stop_count = 0;
-	sig->curr_target = NULL;
+	sig->curr_target = tsk;
 	init_sigpending(&sig->shared_pending);
 	INIT_LIST_HEAD(&sig->posix_timers);
 

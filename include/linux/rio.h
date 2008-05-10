@@ -14,8 +14,6 @@
 #ifndef LINUX_RIO_H
 #define LINUX_RIO_H
 
-#ifdef __KERNEL__
-
 #include <linux/types.h>
 #include <linux/ioport.h>
 #include <linux/list.h>
@@ -163,6 +161,8 @@ enum rio_phy_type {
  * @ops: configuration space functions
  * @id: Port ID, unique among all ports
  * @index: Port index, unique among all port interfaces of the same type
+ * @sys_size: RapidIO common transport system size
+ * @phy_type: RapidIO phy type
  * @name: Port name string
  * @priv: Master port private data
  */
@@ -331,5 +331,4 @@ extern void rio_close_inb_mbox(struct rio_mport *, int);
 extern int rio_open_outb_mbox(struct rio_mport *, void *, int, int);
 extern void rio_close_outb_mbox(struct rio_mport *, int);
 
-#endif				/* __KERNEL__ */
 #endif				/* LINUX_RIO_H */
