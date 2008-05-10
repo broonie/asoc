@@ -25,7 +25,6 @@
 #include <linux/ioctl.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/control.h>
 #include <sound/initval.h>
@@ -36,20 +35,8 @@
 
 #include "uda1380.h"
 
-#define UDA1380_VERSION "0.5"
+#define UDA1380_VERSION "0.6"
 #define AUDIO_NAME "uda1380"
-/*
- * Debug
- */
-
-#define UDA1380_DEBUG 0
-
-#ifdef UDA1380_DEBUG
-#define dbg(format, arg...) \
-	printk(KERN_DEBUG AUDIO_NAME ": " format "\n" , ## arg)
-#else
-#define dbg(format, arg...) do {} while (0)
-#endif
 
 /*
  * uda1380 register cache
@@ -109,21 +96,22 @@ static int uda1380_write(struct snd_soc_codec *codec, unsigned int reg,
 	data[1] = (value & 0xff00) >> 8;
 	data[2] = value & 0x00ff;
 
-	uda1380_write_reg_cache (codec, reg, value);
+	uda1380_write_reg_cache(codec, reg, value);
 
 	/* the interpolator & decimator regs must only be written when the
 	 * codec DAI is active.
 	 */
 	if (!codec->active && (reg >= UDA1380_MVOL))
 		return 0;
-	dbg("uda hw write %x val %x", reg, value);
+	pr_debug("uda1380: hw write %x val %x\n", reg, value);
 	if (codec->hw_write(codec->control_data, data, 3) == 3) {
 		unsigned int val;
 		i2c_master_send(codec->control_data, data, 1);
 		i2c_master_recv(codec->control_data, data, 2);
 		val = (data[0]<<8) | data[1];
 		if (val != value) {
-			dbg("READ BACK VAL %x", (data[0]<<8) | data[1]);
+			pr_debug("uda1380: READ BACK VAL %x\n",
+					(data[0]<<8) | data[1]);
 			return -EIO;
 		}
 		return 0;
@@ -134,17 +122,54 @@ static int uda1380_write(struct snd_soc_codec *codec, unsigned int reg,
 #define uda1380_reset(c)	uda1380_write(c, UDA1380_RESET, 0)
 
 /* declarations of ALSA reg_elem_REAL controls */
-static const char *uda1380_deemp[] = {"None", "32kHz", "44.1kHz", "48kHz",
-				      "96kHz"};
-static const char *uda1380_input_sel[] = { "Line", "Mic + Line R", "Line L", "Mic" };
-static const char *uda1380_output_sel[] = {"DAC", "Analog Mixer"};
-static const char *uda1380_spf_mode[] = {"Flat", "Minimum1", "Minimum2",
-					 "Maximum"};
-static const char *uda1380_capture_sel[] = {"ADC", "Digital Mixer"};
-static const char *uda1380_sel_ns[] = { "3rd-order", "5th-order" };
-static const char *uda1380_mix_control[] = { "off", "PCM only", "before sound processing", "after sound processing" };
-static const char *uda1380_sdet_setting[] = { "3200", "4800", "9600", "19200" };
-static const char *uda1380_os_setting[] = { "single-speed", "double-speed (no mixing)", "quad-speed (no mixing)" };
+static const char *uda1380_deemp[] = {
+	"None",
+	"32kHz",
+	"44.1kHz",
+	"48kHz",
+	"96kHz",
+};
+static const char *uda1380_input_sel[] = {
+	"Line",
+	"Mic + Line R",
+	"Line L",
+	"Mic",
+};
+static const char *uda1380_output_sel[] = {
+	"DAC",
+	"Analog Mixer",
+};
+static const char *uda1380_spf_mode[] = {
+	"Flat",
+	"Minimum1",
+	"Minimum2",
+	"Maximum"
+};
+static const char *uda1380_capture_sel[] = {
+	"ADC",
+	"Digital Mixer"
+};
+static const char *uda1380_sel_ns[] = {
+	"3rd-order",
+	"5th-order"
+};
+static const char *uda1380_mix_control[] = {
+	"off",
+	"PCM only",
+	"before sound processing",
+	"after sound processing"
+};
+static const char *uda1380_sdet_setting[] = {
+	"3200",
+	"4800",
+	"9600",
+	"19200"
+};
+static const char *uda1380_os_setting[] = {
+	"single-speed",
+	"double-speed (no mixing)",
+	"quad-speed (no mixing)"
+};
 
 static const struct soc_enum uda1380_deemp_enum[] = {
 	SOC_ENUM_SINGLE(UDA1380_DEEMP, 8, 5, uda1380_deemp),
@@ -179,15 +204,13 @@ static const struct soc_enum uda1380_os_enum =
 int snd_soc_info_volsw_s8(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_info *uinfo)
 {
-	int max = (kcontrol->private_value >> 16) & 0xff;
-	int min = (kcontrol->private_value >> 24) & 0xff;
-
-	/* 00000000 (0) ...(-0.25 dB)... 11111000 (-78 dB), 11111100 -INF */
+	int max = (signed char)((kcontrol->private_value >> 16) & 0xff);
+	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
 
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
 	uinfo->count = 2;
-	uinfo->value.integer.min = min;
-	uinfo->value.integer.max = max;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = max-min;
 	return 0;
 }
 
@@ -205,14 +228,13 @@ int snd_soc_get_volsw_s8(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	int reg = kcontrol->private_value & 0xff;
-	int max = (kcontrol->private_value >> 16) & 0xff;
-	int min = (kcontrol->private_value >> 24) & 0xff;
+	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
+	int val = snd_soc_read(codec, reg);
 
 	ucontrol->value.integer.value[0] =
-		(signed char)(snd_soc_read(codec, reg) & 0xff);
+		((signed char)(val & 0xff))-min;
 	ucontrol->value.integer.value[1] =
-		(signed char)((snd_soc_read(codec, reg) >> 8) & 0xff);
-
+		((signed char)((val >> 8) & 0xff))-min;
 	return 0;
 }
 
@@ -230,56 +252,65 @@ int snd_soc_put_volsw_s8(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	int reg = kcontrol->private_value & 0xff;
-	int max = (kcontrol->private_value >> 16) & 0xff;
-	int min = (kcontrol->private_value >> 24) & 0xff;
-	int err;
-	unsigned short val, val2, val_mask;
+	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
+	unsigned short val;
 
-	val = (signed char)ucontrol->value.integer.value[0] & 0xff;
-	val2 = (signed char)ucontrol->value.integer.value[1] & 0xff;
-	val |= val2<<8;
-	err = snd_soc_update_bits(codec, reg, val_mask, val);
-	return err;
+	val = (ucontrol->value.integer.value[0]+min) & 0xff;
+	val |= ((ucontrol->value.integer.value[1]+min) & 0xff) << 8;
+
+	return snd_soc_update_bits(codec, reg, 0xffff, val);
 }
 
-DECLARE_TLV_DB_SCALE(amix_tlv, -4950, 150, 1);	/* from -48 dB in 1.5 dB steps (mute instead of -49.5 dB) */
+/*
+ * from -48 dB in 1.5 dB steps (mute instead of -49.5 dB)
+ */
+DECLARE_TLV_DB_SCALE(amix_tlv, -4950, 150, 1);
 
+/*
+ * from -78 dB in 1 dB steps (3 dB steps, really. LSB are ignored),
+ * from -66 dB in 0.5 dB steps (2 dB steps, really) and
+ * from -52 dB in 0.25 dB steps
+ */
 static const unsigned int mvol_tlv[] = {
 	TLV_DB_RANGE_HEAD(3),
-	0,15, TLV_DB_SCALE_ITEM(-8200, 100, 1),	/* from -78 dB in 1 dB steps (3 dB steps, really) */
-	16,43, TLV_DB_SCALE_ITEM(-6600, 50, 0),	/* from -66 dB in 0.5 dB steps (2 dB steps, really) */
-	44,252, TLV_DB_SCALE_ITEM(-5200, 25, 0),	/* from -52 dB in 0.25 dB steps */
+	0, 15, TLV_DB_SCALE_ITEM(-8200, 100, 1),
+	16, 43, TLV_DB_SCALE_ITEM(-6600, 50, 0),
+	44, 252, TLV_DB_SCALE_ITEM(-5200, 25, 0),
 };
 
+/*
+ * from -72 dB in 1.5 dB steps (6 dB steps really),
+ * from -66 dB in 0.75 dB steps (3 dB steps really),
+ * from -60 dB in 0.5 dB steps (2 dB steps really) and
+ * from -46 dB in 0.25 dB steps
+ */
 static const unsigned int vc_tlv[] = {
 	TLV_DB_RANGE_HEAD(4),
-	0,7, TLV_DB_SCALE_ITEM(-7800, 150, 1),	/* from -72 dB in 1.5 dB steps (6 dB steps really) */
-	8,15, TLV_DB_SCALE_ITEM(-6600, 75, 0),	/* from -66 dB in 0.75 dB steps (3 dB steps really) */
-	16,43, TLV_DB_SCALE_ITEM(-6000, 50, 0),	/* from -60 dB in 0.5 dB steps (2 dB steps really) */ 
-	44,228, TLV_DB_SCALE_ITEM(-4600, 25, 0),/* from -46 dB in 0.25 dB steps */
+	0, 7, TLV_DB_SCALE_ITEM(-7800, 150, 1),
+	8, 15, TLV_DB_SCALE_ITEM(-6600, 75, 0),
+	16, 43, TLV_DB_SCALE_ITEM(-6000, 50, 0),
+	44, 228, TLV_DB_SCALE_ITEM(-4600, 25, 0),
 };
 
-DECLARE_TLV_DB_SCALE(tr_tlv, 0, 200, 0);	/* from 0 dB to 6 dB in 2 dB steps, if SPF mode != flat */
-DECLARE_TLV_DB_SCALE(bb_tlv, 0, 200, 0);	/* from 0 dB to 24 dB in 2 dB steps, if SPF mode == maximum */
-						/* (SPF mode == flat cuts off at 18 dB max */
-
-static const unsigned int dec_tlv[] = {
-	TLV_DB_RANGE_HEAD(1),
-	-128,48, TLV_DB_SCALE_ITEM(-6350, 50, 1),
-	/* 0011000 (48 dB) ...(0.5 dB)... 10000001 (-63 dB) 10000000 -INF */
-};
-
-DECLARE_TLV_DB_SCALE(pga_tlv, 0, 300, 0);	/* from 0 dB to 24 dB in 3 dB steps */
-DECLARE_TLV_DB_SCALE(vga_tlv, 0, 200, 0);	/* from 0 dB to 30 dB in 2 dB steps */
-
+DECLARE_TLV_DB_SCALE(tr_tlv, 0, 200, 0);  /* from 0 to 6 dB in 2 dB steps
+					     if SPF mode != flat */
+DECLARE_TLV_DB_SCALE(bb_tlv, 0, 200, 0);  /* from 0 to 24 dB in 2 dB steps,
+					     if SPF mode == maximum, otherwise
+					     cuts off at 18 dB max) */
+DECLARE_TLV_DB_SCALE(dec_tlv, -6400, 50, 1); /* from -63 to 24 dB in 0.5 dB
+						steps (-128...48) */
+DECLARE_TLV_DB_SCALE(pga_tlv, 0, 300, 0); /* from 0 to 24 dB in 3 dB steps */
+DECLARE_TLV_DB_SCALE(vga_tlv, 0, 200, 0); /* from 0 to 30 dB in 2 dB steps */
 
 #define SOC_DOUBLE_S8_TLV(xname, reg, min, max, tlv_array) \
-{	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname),\
-	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ|SNDRV_CTL_ELEM_ACCESS_READWRITE,\
-	.tlv.p = (tlv_array), \
-	.info = snd_soc_info_volsw_s8, .get = snd_soc_get_volsw_s8, \
-	.put = snd_soc_put_volsw_s8, \
-	.private_value = (reg) | (((signed char)max) << 16) | (((signed char)min) << 24) }
+{	.iface  = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname), \
+	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ | \
+		  SNDRV_CTL_ELEM_ACCESS_READWRITE, \
+	.tlv.p  = (tlv_array), \
+	.info   = snd_soc_info_volsw_s8, .get = snd_soc_get_volsw_s8, \
+	.put    = snd_soc_put_volsw_s8, \
+	.private_value = (reg) | (((signed char)max) << 16) | \
+			 (((signed char)min) << 24) }
 
 static const struct snd_kcontrol_new uda1380_snd_controls[] = {
 	SOC_DOUBLE_TLV("Analog Mixer Volume", UDA1380_AMIX, 0, 8, 44, 1, amix_tlv),	/* AVCR, AVCL */
@@ -314,24 +345,6 @@ static const struct snd_kcontrol_new uda1380_snd_controls[] = {
 	SOC_SINGLE("AGC Switch", UDA1380_AGC, 0, 1, 0),
 };
 
-/**
- * uda1380_snd_soc_cnew
- *
- * temporary copy of snd_soc_cnew that doesn't overwrite .access
- */
-struct snd_kcontrol *uda1380_snd_soc_cnew(const struct snd_kcontrol_new *_template,
-	void *data, char *long_name)
-{
-	struct snd_kcontrol_new template;
-
-	memcpy(&template, _template, sizeof(template));
-	if (long_name)
-		template.name = long_name;
-	template.index = 0;
-
-	return snd_ctl_new1(&template, data);
-}
-
 /* add non dapm controls */
 static int uda1380_add_controls(struct snd_soc_codec *codec)
 {
@@ -339,7 +352,7 @@ static int uda1380_add_controls(struct snd_soc_codec *codec)
 
 	for (i = 0; i < ARRAY_SIZE(uda1380_snd_controls); i++) {
 		err = snd_ctl_add(codec->card,
-			uda1380_snd_soc_cnew(&uda1380_snd_controls[i],codec, NULL));
+			snd_soc_cnew(&uda1380_snd_controls[i], codec, NULL));
 		if (err < 0)
 			return err;
 	}
@@ -447,7 +460,7 @@ static int uda1380_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 	int iface;
 	/* set up DAI based upon fmt */
 
-	iface = uda1380_read_reg_cache (codec, UDA1380_IFACE);
+	iface = uda1380_read_reg_cache(codec, UDA1380_IFACE);
 	iface &= ~(R01_SFORI_MASK | R01_SIM | R01_SFORO_MASK);
 
 	/* FIXME: how to select I2S for DATAO and MSB for DATAI correctly? */
@@ -489,22 +502,16 @@ static int uda1380_pcm_prepare(struct snd_pcm_substream *substream)
 	} else {
 		reg_start = UDA1380_DEC;
 		reg_end = UDA1380_AGC;
-		/* FIXME - wince values */
-//		uda1380_write(codec, UDA1380_PM, uda1380_read_reg_cache (codec, UDA1380_PM) | R02_PON_LNA | R02_PON_DAC);
-		uda1380_write(codec, UDA1380_PM, 0x851f);
-//		uda1380_write_reg_cache(codec, UDA1380_DEC, 0x0000);
-//		uda1380_write_reg_cache(codec, UDA1380_PGA, uda1380_read_reg_cache (codec, UDA1380_PM) & ~R21_MT_ADC); /* unmute */
-//		uda1380_write_reg_cache(codec, UDA1380_ADC, 0x0001/*0x090d*/);
-			// ADC_POL_INV=0 VGA_CTRL=9(1001:18dB) gain SEL_LNA=1 SEL_MIC=1 EN_DCFIL=1
 	}
 
 	/* FIXME disable DAC_CLK */
-	clk = uda1380_read_reg_cache (codec, 00);
+	clk = uda1380_read_reg_cache(codec, UDA1380_CLK);
 	uda1380_write(codec, UDA1380_CLK, clk & ~R00_DAC_CLK);
 
-	for (reg = reg_start; reg <= reg_end; reg++ ) {
-		dbg("flush reg %x val %x:",reg, uda1380_read_reg_cache (codec, reg));
-		uda1380_write(codec, reg, uda1380_read_reg_cache (codec, reg));
+	for (reg = reg_start; reg <= reg_end; reg++) {
+		pr_debug("uda1380: flush reg %x val %x:", reg,
+				uda1380_read_reg_cache(codec, reg));
+		uda1380_write(codec, reg, uda1380_read_reg_cache(codec, reg));
 	}
 
 	/* FIXME enable DAC_CLK */
@@ -644,7 +651,7 @@ struct snd_soc_codec_dai uda1380_dai[] = {
 		.set_fmt = uda1380_set_dai_fmt,
 	},
 },
-{/* playback only  - dual interface */
+{ /* playback only - dual interface */
 	.name = "UDA1380",
 	.playback = {
 		.stream_name = "Playback",
@@ -714,7 +721,7 @@ static int uda1380_resume(struct platform_device *pdev)
 
 /*
  * initialise the UDA1380 driver
- * register the mixer and dsp interfaces with the kernel
+ * register mixer and dsp interfaces with the kernel
  */
 static int uda1380_init(struct snd_soc_device *socdev, int dac_clk)
 {
@@ -728,18 +735,17 @@ static int uda1380_init(struct snd_soc_device *socdev, int dac_clk)
 	codec->dapm_event = uda1380_dapm_event;
 	codec->dai = uda1380_dai;
 	codec->num_dai = ARRAY_SIZE(uda1380_dai);
-	codec->reg_cache_size = sizeof(uda1380_reg);
 	codec->reg_cache = kmemdup(uda1380_reg, sizeof(uda1380_reg), GFP_KERNEL);
-
 	if (codec->reg_cache == NULL)
 		return -ENOMEM;
-
+	codec->reg_cache_size = sizeof(uda1380_reg);
+	codec->reg_cache_step = 2;
 	uda1380_reset(codec);
 
 	/* register pcms */
 	ret = snd_soc_new_pcms(socdev, SNDRV_DEFAULT_IDX1, SNDRV_DEFAULT_STR1);
-	if(ret < 0) {
-		printk(KERN_ERR "uda1380: failed to create pcms\n");
+	if (ret < 0) {
+		pr_err("uda1380: failed to create pcms\n");
 		goto pcm_err;
 	}
 
@@ -760,7 +766,7 @@ static int uda1380_init(struct snd_soc_device *socdev, int dac_clk)
 	uda1380_add_widgets(codec);
 	ret = snd_soc_register_card(socdev);
 	if (ret < 0) {
-		printk(KERN_ERR "uda1380: failed to register card\n");
+		pr_err("uda1380: failed to register card\n");
 		goto card_err;
 	}
 
@@ -815,13 +821,13 @@ static int uda1380_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 
 	ret = i2c_attach_client(i2c);
 	if (ret < 0) {
-		printk(KERN_ERR "failed to attach codec at addr %x\n", addr);
+		pr_err("uda1380: failed to attach codec at addr %x\n", addr);
 		goto err;
 	}
 
 	ret = uda1380_init(socdev, setup->dac_clk);
 	if (ret < 0) {
-		printk(KERN_ERR "failed to initialise UDA1380\n");
+		pr_err("uda1380: failed to initialise UDA1380\n");
 		goto err;
 	}
 	return ret;
@@ -834,7 +840,7 @@ err:
 
 static int uda1380_i2c_detach(struct i2c_client *client)
 {
-	struct snd_soc_codec* codec = i2c_get_clientdata(client);
+	struct snd_soc_codec *codec = i2c_get_clientdata(client);
 	i2c_detach_client(client);
 	kfree(codec->reg_cache);
 	kfree(client);
@@ -846,7 +852,6 @@ static int uda1380_i2c_attach(struct i2c_adapter *adap)
 	return i2c_probe(adap, &addr_data, uda1380_codec_probe);
 }
 
-/* corgi i2c codec control layer */
 static struct i2c_driver uda1380_i2c_driver = {
 	.driver = {
 		.name =  "UDA1380 I2C Codec",
@@ -868,10 +873,10 @@ static int uda1380_probe(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct uda1380_setup_data *setup;
-	struct snd_soc_codec* codec;
+	struct snd_soc_codec *codec;
 	int ret = 0;
 
-	printk(KERN_INFO "UDA1380 Audio Codec %s", UDA1380_VERSION);
+	pr_info("UDA1380 Audio Codec %s", UDA1380_VERSION);
 
 	setup = socdev->codec_data;
 	codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);
@@ -902,14 +907,14 @@ static int uda1380_probe(struct platform_device *pdev)
 static int uda1380_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec* codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
 		uda1380_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	i2c_del_driver(&uda1380_i2c_driver);
 #endif
 	kfree(codec);
@@ -923,7 +928,6 @@ struct snd_soc_codec_device soc_codec_dev_uda1380 = {
 	.suspend = 	uda1380_suspend,
 	.resume =	uda1380_resume,
 };
-
 EXPORT_SYMBOL_GPL(soc_codec_dev_uda1380);
 
 MODULE_AUTHOR("Giorgio Padrin");
