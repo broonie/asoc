@@ -3,6 +3,7 @@
  *
  * Copyright:	Analog Device Inc.
  * Author:	Roy Huang <roy.huang@analog.com>
+ * 		Cliff Cai <cliff.cai@analog.com>
  *
  *  This program is free software; you can redistribute  it and/or modify it
  *  under  the terms of  the GNU General  Public License as published by the
@@ -222,7 +223,6 @@ static int ad1980_soc_probe(struct platform_device *pdev)
 			ARRAY_SIZE(ad1980_reg));
 	codec->reg_cache_size = sizeof(u16) * ARRAY_SIZE(ad1980_reg);
 	codec->reg_cache_step = 2;
-
 	codec->name = "AD1980";
 	codec->owner = THIS_MODULE;
 	codec->dai = &ad1980_dai;
@@ -260,9 +260,9 @@ static int ad1980_soc_probe(struct platform_device *pdev)
 		if (vendor_id2 != 0x5374)
 			goto reset_err;
 		else
-			printk(KERN_WARNING "ad1980: Expected AD1980 but "
-				"found AD1981 - This might not work in all "
-				"cases\n");
+			printk(KERN_WARNING "ad1980: "
+				"Found AD1981 - only 2/2 IN/OUT Channels "
+				"supported\n");
 	}
 
 	ac97_write(codec, AC97_MASTER, 0x0000); /* unmute line out volume */
@@ -318,5 +318,5 @@ struct snd_soc_codec_device soc_codec_dev_ad1980 = {
 EXPORT_SYMBOL_GPL(soc_codec_dev_ad1980);
 
 MODULE_DESCRIPTION("ASoC ad1980 driver");
-MODULE_AUTHOR("Roy Huang ");
+MODULE_AUTHOR("Roy Huang, Cliff Cai");
 MODULE_LICENSE("GPL");
