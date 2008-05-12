@@ -173,25 +173,10 @@ SND_SOC_DAPM_MIXER("Right Mixer", SND_SOC_NOPM, 0, 0,
 	ARRAY_SIZE(wm8956_routput_mixer_controls)),
 };
 
-static const char *intercon[][3] = {
-	/* TODO */
-	/* terminator */
-	{NULL, NULL, NULL},
-};
-
 static int wm8956_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
-
-	for(i = 0; i < ARRAY_SIZE(wm8956_dapm_widgets); i++) {
-		snd_soc_dapm_new_control(codec, &wm8956_dapm_widgets[i]);
-	}
-
-	/* set up audio path interconnects */
-	for(i = 0; intercon[i][0] != NULL; i++) {
-		snd_soc_dapm_connect_input(codec, intercon[i][0],
-			intercon[i][1], intercon[i][2]);
-	}
+	snd_soc_dapm_new_controls(codec, wm8956_dapm_widgets,
+				  ARRAY_SIZE(wm8956_dapm_widgets));
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;

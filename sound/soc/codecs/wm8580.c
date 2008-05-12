@@ -383,7 +383,7 @@ SND_SOC_DAPM_INPUT("AINL"),
 SND_SOC_DAPM_INPUT("AINR"),
 };
 
-static const char *audio_map[][3] = {
+static const struct snd_soc_dapm_route audio_map[] = {
 	{ "VOUT1L", NULL, "DAC1" },
 	{ "VOUT1R", NULL, "DAC1" },
 
@@ -395,20 +395,14 @@ static const char *audio_map[][3] = {
 
 	{ "ADC", NULL, "AINL" },
 	{ "ADC", NULL, "AINR" },
-
-	{ NULL, NULL, NULL }
 };
 
 static int wm8580_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
+	snd_soc_dapm_new_controls(codec, wm8580_dapm_widgets,
+				  ARRAY_SIZE(wm8580_dapm_widgets));
 
-	for (i = 0; i < ARRAY_SIZE(wm8580_dapm_widgets); i++)
-		snd_soc_dapm_new_control(codec, &wm8580_dapm_widgets[i]);
-
-	for (i = 0; audio_map[i][0] != NULL; i++)
-		snd_soc_dapm_connect_input(codec, audio_map[i][0],
-					   audio_map[i][1], audio_map[i][2]);
+	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;

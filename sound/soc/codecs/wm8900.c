@@ -580,7 +580,7 @@ SND_SOC_DAPM_MIXER("Right Output Mixer", WM8900_REG_POWER3, 2, 0,
 };
 
 /* Target, Path, Source */
-static const char *audio_map[][3] = {
+static const struct snd_soc_dapm_route audio_map[] = {
 /* Inputs */
 {"Left Input PGA", "LINPUT1 Switch", "LINPUT1"},
 {"Left Input PGA", "LINPUT2 Switch", "LINPUT2"},
@@ -644,22 +644,17 @@ static const char *audio_map[][3] = {
 {"HP_OPSTAGE", NULL, "HP_IPSTAGE"},
 {"HP_L", NULL, "HP_OPSTAGE"},
 {"HP_R", NULL, "HP_OPSTAGE"},
-
-/* terminator */
-{NULL, NULL, NULL},
 };
 
 static int wm8900_add_widgets(struct snd_soc_codec *codec)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(wm8900_dapm_widgets); i++)
-		snd_soc_dapm_new_control(codec, &wm8900_dapm_widgets[i]);
+	snd_soc_dapm_new_controls(codec, wm8900_dapm_widgets,
+				  ARRAY_SIZE(wm8900_dapm_widgets));
 
 	/* set up audio path audio_mapnects */
-	for (i = 0; audio_map[i][0] != NULL; i++)
-		snd_soc_dapm_connect_input(codec, audio_map[i][0],
-			audio_map[i][1], audio_map[i][2]);
+	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;

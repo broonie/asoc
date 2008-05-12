@@ -160,7 +160,7 @@ SND_SOC_DAPM_OUTPUT("ROUT"),
 SND_SOC_DAPM_OUTPUT("RHPOUT"),
 };
 
-static const char *intercon[][3] = {
+static const struct snd_soc_dapm_route intercon[] = {
 	/* output mixer */
 	{"Output Mixer", "Line Bypass Switch", "Line Input"},
 	{"Output Mixer", "HiFi Playback Switch", "DAC"},
@@ -170,22 +170,14 @@ static const char *intercon[][3] = {
 	{"ROUT", NULL, "Output Mixer"},
 	{"LHPOUT", NULL, "Output Mixer"},
 	{"LOUT", NULL, "Output Mixer"},
-
-	/* terminator */
-	{NULL, NULL, NULL},
 };
 
 static int wm8711_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
+	snd_soc_dapm_new_controls(codec, wm8711_dapm_widgets,
+				  ARRAY_SIZE(wm8711_dapm_widgets));
 
-	for (i = 0; i < ARRAY_SIZE(wm8711_dapm_widgets); i++)
-		snd_soc_dapm_new_control(codec, &wm8711_dapm_widgets[i]);
-
-	/* set up audio path interconnects */
-	for (i = 0; intercon[i][0] != NULL; i++)
-		snd_soc_dapm_connect_input(codec, intercon[i][0],
-				intercon[i][1], intercon[i][2]);
+	snd_soc_dapm_add_routes(codec, intercon, ARRAY_SIZE(intercon));
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;

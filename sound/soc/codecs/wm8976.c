@@ -322,7 +322,7 @@ SND_SOC_DAPM_OUTPUT("SPKOUTN"),
 #endif
 };
 
-static const char *audio_map[][3] = {
+static const struct snd_soc_dapm_route audio_map[] = {
 	/* Mono output mixer */
 	{"Mono Mixer", "PCM Playback Switch", "DAC"},
 	{"Mono Mixer", "Aux Playback Switch", "Aux Input"},
@@ -353,26 +353,14 @@ static const char *audio_map[][3] = {
 	{"MICN", NULL, "Mic PGA"},
 	{"Mic PGA", NULL, "Capture Boost"},
 	{"AUX", NULL, "Aux Input"},
-
-    /*  */
-
-	/* terminator */
-	{NULL, NULL, NULL},
 };
 
 static int wm8976_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
+	snd_soc_dapm_new_controls(codec, wm8976_dapm_widgets,
+				  ARRAY_SIZE(wm8976_dapm_widgets));
 
-	for(i = 0; i < ARRAY_SIZE(wm8976_dapm_widgets); i++) {
-		snd_soc_dapm_new_control(codec, &wm8976_dapm_widgets[i]);
-	}
-
-	/* set up audio path map */
-	for(i = 0; audio_map[i][0] != NULL; i++) {
-		snd_soc_dapm_connect_input(codec, audio_map[i][0], audio_map[i][1],
-            audio_map[i][2]);
-	}
+	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;
@@ -429,7 +417,6 @@ static int wm8976_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 		int pll_id, unsigned int freq_in, unsigned int freq_out)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
-	int i;
 	u16 reg;
 
 	if(freq_in == 0 || freq_out == 0) {

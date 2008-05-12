@@ -823,7 +823,7 @@ SND_SOC_DAPM_OUTPUT("RON"),
 SND_SOC_DAPM_OUTPUT("Internal DAC Sink"),
 };
 
-static const char *audio_map[][3] = {
+static const struct snd_soc_dapm_route audio_map[] = {
 	/* Make DACs turn on when playing even if not mixed into any outputs */
 	{"Internal DAC Sink", NULL, "Left DAC"},
 	{"Internal DAC Sink", NULL, "Right DAC"},
@@ -946,23 +946,14 @@ static const char *audio_map[][3] = {
 	{"OUT4", NULL, "OUT4MIX"},
 	{"ROP", NULL, "ROPMIX"},
 	{"RON", NULL, "RONMIX"},
-
-	/* terminator */
-	{NULL, NULL, NULL},
 };
 
 static int wm8991_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
+	snd_soc_dapm_new_controls(codec, wm8991_dapm_widgets,
+				  ARRAY_SIZE(wm8991_dapm_widgets));
 
-	for (i = 0; i < ARRAY_SIZE(wm8991_dapm_widgets); i++)
-		snd_soc_dapm_new_control(codec, &wm8991_dapm_widgets[i]);
-
-	/* set up the WM8991 audio map */
-	for (i = 0; audio_map[i][0] != NULL; i++) {
-		snd_soc_dapm_connect_input(codec, audio_map[i][0],
-			audio_map[i][1], audio_map[i][2]);
-	}
+	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;
