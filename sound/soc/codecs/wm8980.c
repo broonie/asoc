@@ -265,7 +265,7 @@ static int wm8980_add_controls(struct snd_soc_codec *codec)
 }
 
 /* Left Output Mixer */
-static const snd_kcontrol_new_t wm8980_left_mixer_controls[] = {
+static const struct snd_kcontrol_new wm8980_left_mixer_controls[] = {
 SOC_DAPM_SINGLE("Right PCM Playback Switch", WM8980_OUTPUT, 6, 1, 1),
 SOC_DAPM_SINGLE("Left PCM Playback Switch", WM8980_MIXL, 0, 1, 1),
 SOC_DAPM_SINGLE("Line Bypass Switch", WM8980_MIXL, 1, 1, 0),
@@ -273,7 +273,7 @@ SOC_DAPM_SINGLE("Aux Playback Switch", WM8980_MIXL, 5, 1, 0),
 };
 
 /* Right Output Mixer */
-static const snd_kcontrol_new_t wm8980_right_mixer_controls[] = {
+static const struct snd_kcontrol_new wm8980_right_mixer_controls[] = {
 SOC_DAPM_SINGLE("Left PCM Playback Switch", WM8980_OUTPUT, 5, 1, 1),
 SOC_DAPM_SINGLE("Right PCM Playback Switch", WM8980_MIXR, 0, 1, 1),
 SOC_DAPM_SINGLE("Line Bypass Switch", WM8980_MIXR, 1, 1, 0),
@@ -281,43 +281,43 @@ SOC_DAPM_SINGLE("Aux Playback Switch", WM8980_MIXR, 5, 1, 0),
 };
 
 /* Left AUX Input boost vol */
-static const snd_kcontrol_new_t wm8980_laux_boost_controls =
+static const struct snd_kcontrol_new wm8980_laux_boost_controls =
 SOC_DAPM_SINGLE("Left Aux Volume", WM8980_ADCBOOSTL, 0, 3, 0);
 
 /* Right AUX Input boost vol */
-static const snd_kcontrol_new_t wm8980_raux_boost_controls =
+static const struct snd_kcontrol_new wm8980_raux_boost_controls =
 SOC_DAPM_SINGLE("Right Aux Volume", WM8980_ADCBOOSTR, 0, 3, 0);
 
 /* Left Input boost vol */
-static const snd_kcontrol_new_t wm8980_lmic_boost_controls =
+static const struct snd_kcontrol_new wm8980_lmic_boost_controls =
 SOC_DAPM_SINGLE("Left Input Volume", WM8980_ADCBOOSTL, 4, 3, 0);
 
 /* Right Input boost vol */
-static const snd_kcontrol_new_t wm8980_rmic_boost_controls =
+static const struct snd_kcontrol_new wm8980_rmic_boost_controls =
 SOC_DAPM_SINGLE("Right Input Volume", WM8980_ADCBOOSTR, 4, 3, 0);
 
 /* Left Aux In to PGA */
-static const snd_kcontrol_new_t wm8980_laux_capture_boost_controls =
+static const struct snd_kcontrol_new wm8980_laux_capture_boost_controls =
 SOC_DAPM_SINGLE("Left Capture Switch", WM8980_ADCBOOSTL,  8, 1, 0);
 
 /* Right  Aux In to PGA */
-static const snd_kcontrol_new_t wm8980_raux_capture_boost_controls =
+static const struct snd_kcontrol_new wm8980_raux_capture_boost_controls =
 SOC_DAPM_SINGLE("Right Capture Switch", WM8980_ADCBOOSTR,  8, 1, 0);
 
 /* Left Input P In to PGA */
-static const snd_kcontrol_new_t wm8980_lmicp_capture_boost_controls =
+static const struct snd_kcontrol_new wm8980_lmicp_capture_boost_controls =
 SOC_DAPM_SINGLE("Left Input P Capture Boost Switch", WM8980_INPUT,  0, 1, 0);
 
 /* Right Input P In to PGA */
-static const snd_kcontrol_new_t wm8980_rmicp_capture_boost_controls =
+static const struct snd_kcontrol_new wm8980_rmicp_capture_boost_controls =
 SOC_DAPM_SINGLE("Right Input P Capture Boost Switch", WM8980_INPUT,  4, 1, 0);
 
 /* Left Input N In to PGA */
-static const snd_kcontrol_new_t wm8980_lmicn_capture_boost_controls =
+static const struct snd_kcontrol_new wm8980_lmicn_capture_boost_controls =
 SOC_DAPM_SINGLE("Left Input N Capture Boost Switch", WM8980_INPUT,  1, 1, 0);
 
 /* Right Input N In to PGA */
-static const snd_kcontrol_new_t wm8980_rmicn_capture_boost_controls =
+static const struct snd_kcontrol_new wm8980_rmicn_capture_boost_controls =
 SOC_DAPM_SINGLE("Right Input N Capture Boost Switch", WM8980_INPUT,  5, 1, 0);
 
 // TODO Widgets

@@ -144,7 +144,7 @@ static int wm8711_add_controls(struct snd_soc_codec *codec)
 }
 
 /* Output Mixer */
-static const snd_kcontrol_new_t wm8711_output_mixer_controls[] = {
+static const struct snd_kcontrol_new wm8711_output_mixer_controls[] = {
 SOC_DAPM_SINGLE("Line Bypass Switch", WM8711_APANA, 3, 1, 0),
 SOC_DAPM_SINGLE("HiFi Playback Switch", WM8711_APANA, 4, 1, 0),
 };
