@@ -214,9 +214,8 @@ static int smdk2440_wm8956_init(struct snd_soc_codec *codec)
 
 
 	/* Add smdk2440 specific widgets */
-	for(i = 0; i < ARRAY_SIZE(smdk2440_dapm_widgets); i++) {
-		snd_soc_dapm_new_control(codec, &smdk2440_dapm_widgets[i]);
-	}
+	snd_soc_dapm_new_controls(codec, &smdk2440_dapm_widgets,
+				 ARRAY_SIZE(smdk2440_dapm_widgets));
 
 	/* Set up smdk2440 specific audio path audio_mapnects */
 	for(i = 0; audio_map[i][0] != NULL; i++) {

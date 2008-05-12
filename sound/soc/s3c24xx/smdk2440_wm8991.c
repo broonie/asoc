@@ -213,8 +213,8 @@ static int smdk2440_wm8991_init(struct snd_soc_codec *codec)
 	snd_soc_dapm_set_endpoint(codec, "Internal ADC Source", 1);
 
 	/* Add smdk2440 specific widgets */
-	for(i = 0; i < ARRAY_SIZE(wm8976_dapm_widgets); i++)
-		snd_soc_dapm_new_control(codec, &wm8976_dapm_widgets[i]);
+	snd_soc_dapm_new_controls(codec, &wm8976_dapm_widgets,
+				  ARRAY_SIZE(wm8976_dapm_widgets));
 
 	/* set up smdk2440 specific audio path audio_map connects */
 	for(i = 0; audio_map[i][0] != NULL; i++) {
