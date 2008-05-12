@@ -712,11 +712,7 @@ struct snd_soc_cpu_dai s3c2412_i2s_dai = {
 	.id	= 0,
 	.type	= SND_SOC_DAI_I2S,
 	.probe	= s3c2412_i2s_probe,
-<<<<<<< HEAD:sound/soc/s3c24xx/s3c2412-i2s.c
-	.suspend= s3c2412_i2s_suspend,
-=======
 	.suspend = s3c2412_i2s_suspend,
->>>>>>> origin/master:sound/soc/s3c24xx/s3c2412-i2s.c
 	.resume = s3c2412_i2s_resume,
 	.playback = {
 		.channels_min	= 2,
