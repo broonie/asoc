@@ -57,15 +57,15 @@ static const u16 wm8960_reg[WM8960_CACHEREGNUM] = {
 	0x0097, 0x0097, 0x0000, 0x0000,
 	0x0000, 0x0008, 0x0000, 0x000a,
 	0x01c0, 0x0000, 0x00ff, 0x00ff,
-	0x0000, 0x0000, 0x0000, 0x0000, //r15
+	0x0000, 0x0000, 0x0000, 0x0000,
 	0x0000, 0x007b, 0x0100, 0x0032,
 	0x0000, 0x00c3, 0x00c3, 0x01c0,
 	0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000, //r31
+	0x0000, 0x0000, 0x0000, 0x0000,
 	0x0100, 0x0100, 0x0050, 0x0050,
 	0x0050, 0x0050, 0x0000, 0x0000,
 	0x0000, 0x0000, 0x0040, 0x0000,
-	0x0000, 0x0050, 0x0050, 0x0000, //47
+	0x0000, 0x0050, 0x0050, 0x0000,
 	0x0002, 0x0037, 0x004d, 0x0080,
 	0x0008, 0x0031, 0x0026, 0x00e9,
 };
@@ -111,7 +111,7 @@ static int wm8960_write(struct snd_soc_codec *codec, unsigned int reg,
 	data[0] = (reg << 1) | ((value >> 8) & 0x0001);
 	data[1] = value & 0x00ff;
 
-	wm8960_write_reg_cache (codec, reg, value);
+	wm8960_write_reg_cache(codec, reg, value);
 	if (codec->hw_write(codec->control_data, data, 2) == 2)
 		return 0;
 	else
@@ -188,8 +188,10 @@ static int wm8960_add_controls(struct snd_soc_codec *codec)
 	int err, i;
 
 	for (i = 0; i < ARRAY_SIZE(wm8960_snd_controls); i++) {
-		if ((err = snd_ctl_add(codec->card,
-				snd_soc_cnew(&wm8960_snd_controls[i],codec, NULL))) < 0)
+		err = snd_ctl_add(codec->card,
+				  snd_soc_cnew(&wm8960_snd_controls[i],
+					       codec, NULL));
+		if (err < 0)
 			return err;
 	}
 
@@ -217,8 +219,6 @@ SND_SOC_DAPM_MIXER("Right Mixer", SND_SOC_NOPM, 0, 0,
 
 static int wm8960_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
-
 	snd_soc_dapm_new_controls(codec, wm8960_dapm_widgets,
 				  ARRAY_SIZE(wm8960_dapm_widgets));
 
@@ -341,7 +341,7 @@ static int wm8960_dapm_event(struct snd_soc_codec *codec, int event)
 		break;
 	}
 #endif
-	// tmp
+
 	wm8960_write(codec, WM8960_POWER1, 0xfffe);
 	wm8960_write(codec, WM8960_POWER2, 0xffff);
 	wm8960_write(codec, WM8960_POWER3, 0xffff);
@@ -573,9 +573,9 @@ static int wm8960_init(struct snd_soc_device *socdev)
 	wm8960_add_widgets(codec);
 	ret = snd_soc_register_card(socdev);
 	if (ret < 0) {
-      	printk(KERN_ERR "wm8960: failed to register card\n");
+		printk(KERN_ERR "wm8960: failed to register card\n");
 		goto card_err;
-    }
+	}
 	return ret;
 
 card_err:
@@ -588,7 +588,7 @@ pcm_err:
 
 static struct snd_soc_device *wm8960_socdev;
 
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 
 /*
  * WM8960 2 wire address is 0x1a
@@ -647,7 +647,7 @@ err:
 
 static int wm8960_i2c_detach(struct i2c_client *client)
 {
-	struct snd_soc_codec* codec = i2c_get_clientdata(client);
+	struct snd_soc_codec *codec = i2c_get_clientdata(client);
 	i2c_detach_client(client);
 	kfree(codec->reg_cache);
 	kfree(client);
@@ -659,16 +659,12 @@ static int wm8960_i2c_attach(struct i2c_adapter *adap)
 	return i2c_probe(adap, &addr_data, wm8960_codec_probe);
 }
 
-// tmp
-#define I2C_DRIVERID_WM8960 0xfefe
-
 /* corgi i2c codec control layer */
 static struct i2c_driver wm8960_i2c_driver = {
 	.driver = {
 		.name = "WM8960 I2C Codec",
 		.owner = THIS_MODULE,
 	},
-	.id =             I2C_DRIVERID_WM8960,
 	.attach_adapter = wm8960_i2c_attach,
 	.detach_client =  wm8960_i2c_detach,
 	.command =        NULL,
@@ -700,7 +696,7 @@ static int wm8960_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&codec->dapm_paths);
 
 	wm8960_socdev = socdev;
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	if (setup->i2c_address) {
 		normal_i2c[0] = setup->i2c_address;
 		codec->hw_write = (hw_write_t)i2c_master_send;
@@ -725,7 +721,7 @@ static int wm8960_remove(struct platform_device *pdev)
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	i2c_del_driver(&wm8960_i2c_driver);
 #endif
 	kfree(codec);
@@ -739,7 +735,6 @@ struct snd_soc_codec_device soc_codec_dev_wm8960 = {
 	.suspend = 	wm8960_suspend,
 	.resume =	wm8960_resume,
 };
-
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8960);
 
 MODULE_DESCRIPTION("ASoC WM8960 driver");
