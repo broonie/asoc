@@ -96,6 +96,12 @@ static inline void wm8960_write_reg_cache(struct snd_soc_codec *codec,
 	cache[reg] = value;
 }
 
+static inline unsigned int wm8960_read(struct snd_soc_codec *codec,
+	unsigned int reg)
+{
+	return wm8960_read_reg_cache(codec, reg);
+}
+
 /*
  * write to the WM8960 register space
  */
@@ -291,7 +297,7 @@ static int wm8960_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
 	struct snd_soc_codec *codec = socdev->codec;
-	u16 iface = wm8960_read_reg_cache(codec, WM8960_IFACE1) & 0xfff3;
+	u16 iface = wm8960_read(codec, WM8960_IFACE1) & 0xfff3;
 
 	/* bit size */
 	switch (params_format(params)) {
@@ -313,7 +319,7 @@ static int wm8960_hw_params(struct snd_pcm_substream *substream,
 static int wm8960_mute(struct snd_soc_codec_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
-	u16 mute_reg = wm8960_read_reg_cache(codec, WM8960_DACCTL1) & 0xfff7;
+	u16 mute_reg = wm8960_read(codec, WM8960_DACCTL1) & 0xfff7;
 
 	if (mute)
 		wm8960_write(codec, WM8960_DACCTL1, mute_reg | 0x8);
@@ -434,27 +440,27 @@ static int wm8960_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 
 	switch (div_id) {
 	case WM8960_SYSCLKSEL:
-		reg = wm8960_read_reg_cache(codec, WM8960_CLOCK1) & 0x1fe;
+		reg = wm8960_read(codec, WM8960_CLOCK1) & 0x1fe;
 		wm8960_write(codec, WM8960_CLOCK1, reg | div);
 		break;
 	case WM8960_SYSCLKDIV:
-		reg = wm8960_read_reg_cache(codec, WM8960_CLOCK1) & 0x1f9;
+		reg = wm8960_read(codec, WM8960_CLOCK1) & 0x1f9;
 		wm8960_write(codec, WM8960_CLOCK1, reg | div);
 		break;
 	case WM8960_DACDIV:
-		reg = wm8960_read_reg_cache(codec, WM8960_CLOCK1) & 0x1c7;
+		reg = wm8960_read(codec, WM8960_CLOCK1) & 0x1c7;
 		wm8960_write(codec, WM8960_CLOCK1, reg | div);
 		break;
 	case WM8960_OPCLKDIV:
-		reg = wm8960_read_reg_cache(codec, WM8960_PLLN) & 0x03f;
+		reg = wm8960_read(codec, WM8960_PLLN) & 0x03f;
 		wm8960_write(codec, WM8960_PLLN, reg | div);
 		break;
 	case WM8960_DCLKDIV:
-		reg = wm8960_read_reg_cache(codec, WM8960_CLOCK2) & 0x03f;
+		reg = wm8960_read(codec, WM8960_CLOCK2) & 0x03f;
 		wm8960_write(codec, WM8960_CLOCK2, reg | div);
 		break;
 	case WM8960_TOCLKSEL:
-		reg = wm8960_read_reg_cache(codec, WM8960_ADDCTL1) & 0x1fd;
+		reg = wm8960_read(codec, WM8960_ADDCTL1) & 0x1fd;
 		wm8960_write(codec, WM8960_ADDCTL1, reg | div);
 		break;
 	default:
@@ -540,7 +546,7 @@ static int wm8960_init(struct snd_soc_device *socdev)
 
 	codec->name = "WM8960";
 	codec->owner = THIS_MODULE;
-	codec->read = wm8960_read_reg_cache;
+	codec->read = wm8960_read;
 	codec->write = wm8960_write;
 	codec->dapm_event = wm8960_dapm_event;
 	codec->dai = &wm8960_dai;
@@ -564,9 +570,9 @@ static int wm8960_init(struct snd_soc_device *socdev)
 	wm8960_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
 
 	/*  set the update bits */
-	reg = wm8960_read_reg_cache(codec, WM8960_LOUT1);
+	reg = wm8960_read(codec, WM8960_LOUT1);
 	wm8960_write(codec, WM8960_LOUT1, reg | 0x0100);
-	reg = wm8960_read_reg_cache(codec, WM8960_ROUT1);
+	reg = wm8960_read(codec, WM8960_ROUT1);
 	wm8960_write(codec, WM8960_ROUT1, reg | 0x0100);
 
 	wm8960_add_controls(codec);
