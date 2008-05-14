@@ -330,26 +330,36 @@ static int wm8960_mute(struct snd_soc_codec_dai *dai, int mute)
 
 static int wm8960_dapm_event(struct snd_soc_codec *codec, int event)
 {
-#if 0
+	u16 power1 = wm8960_read(codec, WM8960_POWER1);
+	u16 power2 = wm8960_read(codec, WM8960_POWER2);
+
 	switch (event) {
 	case SNDRV_CTL_POWER_D0: /* full On */
-		/* vref/mid, osc on, dac unmute */
-
+		power1 &= ~0x180;
+		power1 |= 0xc0;
 		break;
 	case SNDRV_CTL_POWER_D1: /* partial On */
 	case SNDRV_CTL_POWER_D2: /* partial On */
 		break;
 	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
 		/* everything off except vref/vmid, */
+		power1 &= ~0x180;
+		power1 |= 0x140;
+		wm8960_write(codec, WM8960_ADDCTL1,
+			     wm8960_read(codec, WM8960_ADDCTL1) | 1);
 		break;
 	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
 		/* everything off, dac mute, inactive */
-		break;
+		wm8960_write(codec, WM8960_APOP1, 0x94);
+		wm8960_write(codec, WM8960_POWER1, power1 & ~0x1c0);
+		mdelay(600);  /* Ensure HP output has discharged */
+		wm8960_write(codec, WM8960_ADDCTL1,
+			     wm8960_read(codec, WM8960_ADDCTL1) & ~1);
+		return 0;
 	}
-#endif
 
-	wm8960_write(codec, WM8960_POWER1, 0xfffe);
-	wm8960_write(codec, WM8960_POWER2, 0xffff);
+	wm8960_write(codec, WM8960_POWER1, power1 | 0x03e);
+	wm8960_write(codec, WM8960_POWER2, power2 | 0x1fe);
 	wm8960_write(codec, WM8960_POWER3, 0xffff);
 	codec->dapm_state = event;
 	return 0;
@@ -591,7 +601,17 @@ static int wm8960_init(struct snd_soc_device *socdev)
 		goto pcm_err;
 	}
 
-	/* power on device */
+	/* Initial power on sequence */
+	wm8960_write(codec, WM8960_APOP1, 0x94);
+	wm8960_write(codec, WM8960_APOP2, 0x40);
+	msleep(400);   /* HP output discharge */
+	wm8960_write(codec, WM8960_POWER2, 0x60);
+	wm8960_write(codec, WM8960_APOP2, 0);
+	wm8960_write(codec, WM8960_POWER1, 0x80);
+	msleep(400);   /* VMID initial charge */
+	wm8960_write(codec, WM8960_POWER1, 0x140);
+	wm8960_write(codec, WM8960_APOP1, 0);
+
 	wm8960_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
 
 	/*  set the update bits */
