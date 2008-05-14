@@ -362,30 +362,35 @@ struct _pll_div {
 	u32 k:24;
 };
 
-static struct _pll_div pll_div;
-
 /* The size in bits of the pll divide multiplied by 10
  * to allow rounding later */
 #define FIXED_PLL_SIZE ((1 << 24) * 10)
 
-static void pll_factors(unsigned int target, unsigned int source)
+static int pll_factors(unsigned int source, unsigned int target,
+		       struct _pll_div *pll_div)
 {
 	unsigned long long Kpart;
 	unsigned int K, Ndiv, Nmod;
 
+	pr_debug("WM8960 PLL: setting %dHz->%dHz\n", source, target);
+
+	/* Scale up target to PLL operating frequency */
+	target *= 4;
+
 	Ndiv = target / source;
 	if (Ndiv < 6) {
 		source >>= 1;
-		pll_div.pre_div = 1;
+		pll_div->pre_div = 1;
 		Ndiv = target / source;
 	} else
-		pll_div.pre_div = 0;
+		pll_div->pre_div = 0;
 
-	if ((Ndiv < 6) || (Ndiv > 12))
-		printk(KERN_WARNING
-			"WM8960 N value outwith recommended range! N = %d\n",Ndiv);
+	if ((Ndiv < 6) || (Ndiv > 12)) {
+		pr_err("WM8960 PLL: Unsupported N=%d\n", Ndiv);
+		return -EINVAL;
+	}
 
-	pll_div.n = Ndiv;
+	pll_div->n = Ndiv;
 	Nmod = target % source;
 	Kpart = FIXED_PLL_SIZE * (long long)Nmod;
 
@@ -400,7 +405,12 @@ static void pll_factors(unsigned int target, unsigned int source)
 	/* Move down to proper range now rounding is done */
 	K /= 10;
 
-	pll_div.k = K;
+	pll_div->k = K;
+
+	pr_debug("WM8960 PLL: N=%x K=%x pre_div=%d\n",
+		 pll_div->n, pll_div->k, pll_div->pre_div);
+
+	return 0;
 }
 
 static int wm8960_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
@@ -408,26 +418,41 @@ static int wm8960_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	u16 reg;
-	int found = 0;
-#if 0
-	if (freq_in == 0 || freq_out == 0) {
-		/* disable the pll */
-		/* turn PLL power off */
+	static struct _pll_div pll_div;
+	int ret;
+
+	if (freq_out) {
+		ret = pll_factors(freq_in, freq_out, &pll_div);
+		if (ret != 0)
+			return ret;
 	}
-#endif
 
-	pll_factors(freq_out * 8, freq_in);
+	/* Disable the PLL: even if we are changing the frequency the
+	 * PLL needs to be disabled while we do so. */
+	wm8960_write(codec, WM8960_CLOCK1,
+		     wm8960_read(codec, WM8960_CLOCK1) & ~1);
+	wm8960_write(codec, WM8960_POWER2,
+		     wm8960_read(codec, WM8960_POWER2) & ~1);
 
-	if (!found)
-		return -EINVAL;
+	reg = wm8960_read(codec, WM8960_PLL1) & ~0x3f;
+	reg |= pll_div.pre_div << 4;
+	reg |= pll_div.n;
 
-	reg = wm8960_read_reg_cache(codec, WM8960_PLLN) & 0x1e0;
-	wm8960_write(codec, WM8960_PLLN, reg | (1<<5) | (pll_div.pre_div << 4)
-		| pll_div.n);
-	wm8960_write(codec, WM8960_PLLK1, pll_div.k >> 16 );
-	wm8960_write(codec, WM8960_PLLK2, (pll_div.k >> 8) & 0xff);
-	wm8960_write(codec, WM8960_PLLK3, pll_div.k &0xff);
-	wm8960_write(codec, WM8960_CLOCK1, 4);
+	if (pll_div.k) {
+		reg |= 0x20;
+
+		wm8960_write(codec, WM8960_PLL2, (pll_div.k >> 16) & 0x7f);
+		wm8960_write(codec, WM8960_PLL3, (pll_div.k >> 8) & 0xff);
+		wm8960_write(codec, WM8960_PLL4, pll_div.k & 0xff);
+	}
+	wm8960_write(codec, WM8960_PLL1, reg);
+
+	/* Turn it on */
+	wm8960_write(codec, WM8960_POWER2,
+		     wm8960_read(codec, WM8960_POWER2) | 1);
+	msleep(250);
+	wm8960_write(codec, WM8960_CLOCK1,
+		     wm8960_read(codec, WM8960_CLOCK1) | 1);
 
 	return 0;
 }
@@ -452,8 +477,8 @@ static int wm8960_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 		wm8960_write(codec, WM8960_CLOCK1, reg | div);
 		break;
 	case WM8960_OPCLKDIV:
-		reg = wm8960_read(codec, WM8960_PLLN) & 0x03f;
-		wm8960_write(codec, WM8960_PLLN, reg | div);
+		reg = wm8960_read(codec, WM8960_PLL1) & 0x03f;
+		wm8960_write(codec, WM8960_PLL1, reg | div);
 		break;
 	case WM8960_DCLKDIV:
 		reg = wm8960_read(codec, WM8960_CLOCK2) & 0x03f;
