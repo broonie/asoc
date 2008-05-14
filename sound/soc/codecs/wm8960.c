@@ -576,7 +576,7 @@ static int wm8960_init(struct snd_soc_device *socdev)
 	codec->dapm_event = wm8960_dapm_event;
 	codec->dai = &wm8960_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(wm8960_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8960_reg);
 	codec->reg_cache = kmemdup(wm8960_reg, sizeof(wm8960_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)
