@@ -25,7 +25,7 @@
 #include "wm8960.h"
 
 #define AUDIO_NAME "wm8960"
-#define WM8960_VERSION "0.1"
+#define WM8960_VERSION "0.2"
 
 /*
  * Debug
