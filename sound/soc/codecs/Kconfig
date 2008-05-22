@@ -2,6 +2,14 @@ config SND_SOC_AC97_CODEC
 	tristate
 	depends on SND_SOC
 
+config SND_SOC_AD1939
+	tristate
+	depends on SND_SOC
+
+config SND_SOC_AD1980
+	tristate
+	depends on SND_SOC
+
 config SND_SOC_AK4535
 	tristate
 	depends on SND_SOC
@@ -83,6 +91,10 @@ config SND_SOC_WM8978
 	depends on SND_SOC
 
 config SND_SOC_WM8980
+	tristate
+	depends on SND_SOC
+
+config SND_SOC_WM8990
 	tristate
 	depends on SND_SOC
 
