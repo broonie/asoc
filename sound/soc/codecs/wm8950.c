@@ -264,12 +264,12 @@ SND_SOC_DAPM_INPUT("MICP"),
 SND_SOC_DAPM_INPUT("AUX"),
 };
 
-static const char *audio_map[][3] = {
+static const struct snd_soc_dapm_route audio_map[] = {
 	/* Boost Mixer */
 	{"Boost Mixer", NULL, "ADC"},
-    {"Capture Boost Switch", "Aux Capture Boost Switch", "AUX"},
+	{"Capture Boost Switch", "Aux Capture Boost Switch", "AUX"},
 	{"Aux Boost", "Aux Volume", "Boost Mixer"},
-    {"Capture Boost", "Capture Switch", "Boost Mixer"},
+	{"Capture Boost", "Capture Switch", "Boost Mixer"},
 	{"Mic Boost", "Mic Volume", "Boost Mixer"},
 
 	/* Inputs */
@@ -277,24 +277,14 @@ static const char *audio_map[][3] = {
 	{"MICN", NULL, "Mic PGA"},
 	{"Mic PGA", NULL, "Capture Boost"},
 	{"AUX", NULL, "Aux Input"},
-
-	/* terminator */
-	{NULL, NULL, NULL},
 };
 
 static int wm8950_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
+	snd_soc_dapm_new_controls(codec, wm8950_dapm_widgets,
+				  ARRAY_SIZE(wm8950_dapm_widgets));
 
-	for(i = 0; i < ARRAY_SIZE(wm8950_dapm_widgets); i++) {
-		snd_soc_dapm_new_control(codec, &wm8950_dapm_widgets[i]);
-	}
-
-	/* set up audio path audio_mapnects */
-	for(i = 0; audio_map[i][0] != NULL; i++) {
-		snd_soc_dapm_connect_input(codec, audio_map[i][0],
-			audio_map[i][1], audio_map[i][2]);
-	}
+	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;

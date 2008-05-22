@@ -403,7 +403,7 @@ static const struct snd_soc_dapm_widget uda1380_dapm_widgets[] = {
 	SND_SOC_DAPM_PGA("HeadPhone Driver", UDA1380_PM, 13, 0, NULL, 0),
 };
 
-static const char *audio_map[][3] = {
+static const struct snd_soc_dapm_route audio_map[] = {
 
 	/* output mux */
 	{"HeadPhone Driver", NULL, "Output Mux"},
@@ -438,22 +438,14 @@ static const char *audio_map[][3] = {
 	{"Mic LNA", NULL, "VINM"},
 	{"Left PGA", NULL, "VINL"},
 	{"Right PGA", NULL, "VINR"},
-
-	/* terminator */
-	{NULL, NULL, NULL},
 };
 
 static int uda1380_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
+	snd_soc_dapm_new_controls(codec, uda1380_dapm_widgets,
+				  ARRAY_SIZE(uda1380_dapm_widgets));
 
-	for (i = 0; i < ARRAY_SIZE(uda1380_dapm_widgets); i++)
-		snd_soc_dapm_new_control(codec, &uda1380_dapm_widgets[i]);
-
-	/* set up audio path interconnects */
-	for (i = 0; audio_map[i][0] != NULL; i++)
-		snd_soc_dapm_connect_input(codec, audio_map[i][0],
-			audio_map[i][1], audio_map[i][2]);
+	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;

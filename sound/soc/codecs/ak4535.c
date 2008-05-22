@@ -269,7 +269,7 @@ static const struct snd_soc_dapm_widget ak4535_dapm_widgets[] = {
 	SND_SOC_DAPM_INPUT("AIN"),
 };
 
-static const char *audio_map[][3] = {
+static const struct snd_soc_dapm_route audio_map[] = {
 	/*stereo mixer */
 	{"Stereo Mixer", "Playback Switch", "DAC"},
 	{"Stereo Mixer", "Mic Sidetone Switch", "Mic"},
@@ -324,22 +324,14 @@ static const char *audio_map[][3] = {
 	{"ADC", NULL, "Input Mixer"},
 	{"Input Mixer", "Mic Capture Switch", "Mic"},
 	{"Input Mixer", "Aux Capture Switch", "Aux In"},
-
-	/* terminator */
-	{NULL, NULL, NULL},
 };
 
 static int ak4535_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
+	snd_soc_dapm_new_controls(codec, ak4535_dapm_widgets,
+				  ARRAY_SIZE(ak4535_dapm_widgets));
 
-	for (i = 0; i < ARRAY_SIZE(ak4535_dapm_widgets); i++)
-		snd_soc_dapm_new_control(codec, &ak4535_dapm_widgets[i]);
-
-	/* set up audio path audio_map interconnects */
-	for (i = 0; audio_map[i][0] != NULL; i++)
-		snd_soc_dapm_connect_input(codec, audio_map[i][0],
-			audio_map[i][1], audio_map[i][2]);
+	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;
