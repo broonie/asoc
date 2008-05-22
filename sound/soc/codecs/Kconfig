@@ -32,15 +32,15 @@ config SND_SOC_WM8711
 
 config SND_SOC_WM8731
 	tristate
-	depends on SND_SOC
+	depends on SND_SOC && I2C
 
 config SND_SOC_WM8750
 	tristate
-	depends on SND_SOC
+	depends on SND_SOC && I2C
 
 config SND_SOC_WM8753
 	tristate
-	depends on SND_SOC
+	depends on SND_SOC && I2C
 
 config SND_SOC_WM8772
 	tristate
