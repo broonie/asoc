@@ -23,6 +23,7 @@ config SND_SOC_AU1XPSC_AC97
 ##
 config SND_SOC_EXM1200_AC97
 	tristate "MSC EXM32-Au1200 AC97 support"
+	depends on SND_SOC_AU1XPSC
 	select SND_SOC_AU1XPSC_AC97
 	select SND_SOC_AC97_CODEC
 	help
@@ -30,6 +31,7 @@ config SND_SOC_EXM1200_AC97
 
 config SND_SOC_EXM1200_SSI
 	tristate "MSC EXM32-Au1200 I2S support"
+	depends on SND_SOC_AU1XPSC
 	depends on I2C!=n
 	select SND_SOC_AU1XPSC_I2S
 	select SND_SOC_CS4251X
