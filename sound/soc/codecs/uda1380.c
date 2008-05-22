@@ -201,7 +201,7 @@ static const struct soc_enum uda1380_os_enum =
  *
  * Returns 0 for success.
  */
-int snd_soc_info_volsw_s8(struct snd_kcontrol *kcontrol,
+static int snd_soc_info_volsw_s8(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_info *uinfo)
 {
 	int max = (signed char)((kcontrol->private_value >> 16) & 0xff);
@@ -223,7 +223,7 @@ int snd_soc_info_volsw_s8(struct snd_kcontrol *kcontrol,
  *
  * Returns 0 for success.
  */
-int snd_soc_get_volsw_s8(struct snd_kcontrol *kcontrol,
+static int snd_soc_get_volsw_s8(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
@@ -247,7 +247,7 @@ int snd_soc_get_volsw_s8(struct snd_kcontrol *kcontrol,
  *
  * Returns 0 for success.
  */
-int snd_soc_put_volsw_s8(struct snd_kcontrol *kcontrol,
+static int snd_soc_put_volsw_s8(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
@@ -264,7 +264,7 @@ int snd_soc_put_volsw_s8(struct snd_kcontrol *kcontrol,
 /*
  * from -48 dB in 1.5 dB steps (mute instead of -49.5 dB)
  */
-DECLARE_TLV_DB_SCALE(amix_tlv, -4950, 150, 1);
+static DECLARE_TLV_DB_SCALE(amix_tlv, -4950, 150, 1);
 
 /*
  * from -78 dB in 1 dB steps (3 dB steps, really. LSB are ignored),
@@ -292,15 +292,21 @@ static const unsigned int vc_tlv[] = {
 	44, 228, TLV_DB_SCALE_ITEM(-4600, 25, 0),
 };
 
-DECLARE_TLV_DB_SCALE(tr_tlv, 0, 200, 0);  /* from 0 to 6 dB in 2 dB steps
-					     if SPF mode != flat */
-DECLARE_TLV_DB_SCALE(bb_tlv, 0, 200, 0);  /* from 0 to 24 dB in 2 dB steps,
-					     if SPF mode == maximum, otherwise
-					     cuts off at 18 dB max) */
-DECLARE_TLV_DB_SCALE(dec_tlv, -6400, 50, 1); /* from -63 to 24 dB in 0.5 dB
-						steps (-128...48) */
-DECLARE_TLV_DB_SCALE(pga_tlv, 0, 300, 0); /* from 0 to 24 dB in 3 dB steps */
-DECLARE_TLV_DB_SCALE(vga_tlv, 0, 200, 0); /* from 0 to 30 dB in 2 dB steps */
+/* from 0 to 6 dB in 2 dB steps if SPF mode != flat */
+static DECLARE_TLV_DB_SCALE(tr_tlv, 0, 200, 0);
+
+/* from 0 to 24 dB in 2 dB steps, if SPF mode == maximum, otherwise cuts
+ * off at 18 dB max) */
+static DECLARE_TLV_DB_SCALE(bb_tlv, 0, 200, 0);
+
+/* from -63 to 24 dB in 0.5 dB steps (-128...48) */
+static DECLARE_TLV_DB_SCALE(dec_tlv, -6400, 50, 1);
+
+/* from 0 to 24 dB in 3 dB steps */
+static DECLARE_TLV_DB_SCALE(pga_tlv, 0, 300, 0);
+
+/* from 0 to 30 dB in 2 dB steps */
+DECLARE_TLV_DB_SCALE(vga_tlv, 0, 200, 0);
 
 #define SOC_DOUBLE_S8_TLV(xname, reg, min, max, tlv_array) \
 {	.iface  = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname), \
