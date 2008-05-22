@@ -549,31 +549,27 @@ static int wm8510_mute(struct snd_soc_codec_dai *dai, int mute)
 }
 
 /* liam need to make this lower power with dapm */
-static int wm8510_dapm_event(struct snd_soc_codec *codec, int event)
+static int wm8510_set_bias_level(struct snd_soc_codec *codec,
+	enum snd_soc_bias_level level)
 {
 
-	switch (event) {
-	case SNDRV_CTL_POWER_D0: /* full On */
-		/* vref/mid, clk and osc on, dac unmute, active */
+	switch (level) {
+	case SND_SOC_BIAS_ON:
 		wm8510_write(codec, WM8510_POWER1, 0x1ff);
 		wm8510_write(codec, WM8510_POWER2, 0x1ff);
 		wm8510_write(codec, WM8510_POWER3, 0x1ff);
 		break;
-	case SNDRV_CTL_POWER_D1: /* partial On */
-	case SNDRV_CTL_POWER_D2: /* partial On */
+	case SND_SOC_BIAS_PREPARE:
+	case SND_SOC_BIAS_STANDBY:
 		break;
-	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
-		/* everything off except vref/vmid, dac mute, inactive */
-
-		break;
-	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
+	case SND_SOC_BIAS_OFF:
 		/* everything off, dac mute, inactive */
 		wm8510_write(codec, WM8510_POWER1, 0x0);
 		wm8510_write(codec, WM8510_POWER2, 0x0);
 		wm8510_write(codec, WM8510_POWER3, 0x0);
 		break;
 	}
-	codec->dapm_state = event;
+	codec->bias_level = level;
 	return 0;
 }
 
@@ -615,7 +611,7 @@ static int wm8510_suspend(struct platform_device *pdev, pm_message_t state)
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->codec;
 
-	wm8510_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+	wm8510_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
 }
 
@@ -633,8 +629,8 @@ static int wm8510_resume(struct platform_device *pdev)
 		data[1] = cache[i] & 0x00ff;
 		codec->hw_write(codec->control_data, data, 2);
 	}
-	wm8510_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
-	wm8510_dapm_event(codec, codec->suspend_dapm_state);
+	wm8510_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	wm8510_set_bias_level(codec, codec->suspend_bias_level);
 	return 0;
 }
 
@@ -651,7 +647,7 @@ static int wm8510_init(struct snd_soc_device *socdev)
 	codec->owner = THIS_MODULE;
 	codec->read = wm8510_read_reg_cache;
 	codec->write = wm8510_write;
-	codec->dapm_event = wm8510_dapm_event;
+	codec->set_bias_level = wm8510_set_bias_level;
 	codec->dai = &wm8510_dai;
 	codec->num_dai = 1;
 	codec->reg_cache_size = sizeof(wm8510_reg);
@@ -670,7 +666,7 @@ static int wm8510_init(struct snd_soc_device *socdev)
 	}
 
 	/* power on device */
-	wm8510_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	wm8510_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	wm8510_add_controls(codec);
 	wm8510_add_widgets(codec);
 	ret = snd_soc_register_card(socdev);
@@ -822,7 +818,7 @@ static int wm8510_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		wm8510_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		wm8510_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);

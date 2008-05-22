@@ -596,27 +596,24 @@ static int uda1380_mute(struct snd_soc_codec_dai *codec_dai, int mute)
 	return 0;
 }
 
-static int uda1380_dapm_event(struct snd_soc_codec *codec, int event)
+static int uda1380_set_bias_level(struct snd_soc_codec *codec,
+	enum snd_soc_bias_level level)
 {
 	int pm = uda1380_read_reg_cache(codec, UDA1380_PM);
 
-	switch (event) {
-	case SNDRV_CTL_POWER_D0: /* full On */
-	case SNDRV_CTL_POWER_D1: /* partial On */
-	case SNDRV_CTL_POWER_D2: /* partial On */
-		/* enable internal bias */
+	switch (level) {
+	case SND_SOC_BIAS_ON:
+	case SND_SOC_BIAS_PREPARE:
 		uda1380_write(codec, UDA1380_PM, R02_PON_BIAS | pm);
 		break;
-	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
-		/* everything off except internal bias */
+	case SND_SOC_BIAS_STANDBY:
 		uda1380_write(codec, UDA1380_PM, R02_PON_BIAS);
 		break;
-	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
-		/* everything off, inactive */
+	case SND_SOC_BIAS_OFF:
 		uda1380_write(codec, UDA1380_PM, 0x0);
 		break;
 	}
-	codec->dapm_state = event;
+	codec->bias_level = level;
 	return 0;
 }
 
@@ -694,7 +691,7 @@ static int uda1380_suspend(struct platform_device *pdev, pm_message_t state)
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->codec;
 
-	uda1380_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+	uda1380_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
 }
 
@@ -712,8 +709,8 @@ static int uda1380_resume(struct platform_device *pdev)
 		data[1] = cache[i] & 0x00ff;
 		codec->hw_write(codec->control_data, data, 2);
 	}
-	uda1380_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
-	uda1380_dapm_event(codec, codec->suspend_dapm_state);
+	uda1380_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	uda1380_set_bias_level(codec, codec->suspend_bias_level);
 	return 0;
 }
 
@@ -730,7 +727,7 @@ static int uda1380_init(struct snd_soc_device *socdev, int dac_clk)
 	codec->owner = THIS_MODULE;
 	codec->read = uda1380_read_reg_cache;
 	codec->write = uda1380_write;
-	codec->dapm_event = uda1380_dapm_event;
+	codec->set_bias_level = uda1380_set_bias_level;
 	codec->dai = uda1380_dai;
 	codec->num_dai = ARRAY_SIZE(uda1380_dai);
 	codec->reg_cache = kmemdup(uda1380_reg, sizeof(uda1380_reg), GFP_KERNEL);
@@ -748,7 +745,7 @@ static int uda1380_init(struct snd_soc_device *socdev, int dac_clk)
 	}
 
 	/* power on device */
-	uda1380_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	uda1380_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	/* set clock input */
 	switch (dac_clk) {
 	case UDA1380_DAC_CLK_SYSCLK:
@@ -908,7 +905,7 @@ static int uda1380_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		uda1380_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		uda1380_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
