@@ -763,9 +763,9 @@ static int wm8971_init(struct snd_soc_device *socdev)
 	wm8971_add_widgets(codec);
 	ret = snd_soc_register_card(socdev);
 	if (ret < 0) {
-      	printk(KERN_ERR "wm8971: failed to register card\n");
+		printk(KERN_ERR "wm8971: failed to register card\n");
 		goto card_err;
-    }
+	}
 	return ret;
 
 card_err:
