@@ -491,7 +491,7 @@ static int wm8976_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 	}
 
 	wm8976_write(codec, WM8976_IFACE, iface);
-	wm8796_write(codec, WM8976_CLOCK, clk);
+	wm8976_write(codec, WM8976_CLOCK, clk);
 
 	return 0;
 }
