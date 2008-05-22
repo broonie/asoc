@@ -612,7 +612,6 @@ static struct i2c_driver wm8951_i2c_driver = {
 		.name = "WM8951 I2C Codec",
 		.owner = THIS_MODULE,
 	},
-	.id =             I2C_DRIVERID_WM8951,
 	.attach_adapter = wm8951_i2c_attach,
 	.detach_client =  wm8951_i2c_detach,
 	.command =        NULL,
