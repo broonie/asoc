@@ -185,7 +185,7 @@ SOC_SINGLE("Speaker Playback Volume", WM8510_SPKVOL,  0, 63, 0),
 SOC_SINGLE("Speaker Boost", WM8510_OUTPUT, 2, 1, 0),
 
 SOC_SINGLE("Capture Boost(+20dB)", WM8510_ADCBOOST,  8, 1, 0),
-SOC_SINGLE("Mono Playback Switch", WM8510_MONOMIX, 6, 1, 0),
+SOC_SINGLE("Mono Playback Switch", WM8510_MONOMIX, 6, 1, 1),
 };
 
 /* add non dapm controls */
@@ -208,14 +208,14 @@ static int wm8510_add_controls(struct snd_soc_codec *codec)
 static const struct snd_kcontrol_new wm8510_speaker_mixer_controls[] = {
 SOC_DAPM_SINGLE("Line Bypass Switch", WM8510_SPKMIX, 1, 1, 0),
 SOC_DAPM_SINGLE("Aux Playback Switch", WM8510_SPKMIX, 5, 1, 0),
-SOC_DAPM_SINGLE("PCM Playback Switch", WM8510_SPKMIX, 0, 1, 1),
+SOC_DAPM_SINGLE("PCM Playback Switch", WM8510_SPKMIX, 0, 1, 0),
 };
 
 /* Mono Output Mixer */
 static const struct snd_kcontrol_new wm8510_mono_mixer_controls[] = {
 SOC_DAPM_SINGLE("Line Bypass Switch", WM8510_MONOMIX, 1, 1, 0),
 SOC_DAPM_SINGLE("Aux Playback Switch", WM8510_MONOMIX, 2, 1, 0),
-SOC_DAPM_SINGLE("PCM Playback Switch", WM8510_MONOMIX, 0, 1, 1),
+SOC_DAPM_SINGLE("PCM Playback Switch", WM8510_MONOMIX, 0, 1, 0),
 };
 
 /* AUX Input boost vol */
@@ -250,7 +250,7 @@ SND_SOC_DAPM_MIXER("Mono Mixer", WM8510_POWER3, 3, 0,
 	&wm8510_mono_mixer_controls[0],
 	ARRAY_SIZE(wm8510_mono_mixer_controls)),
 SND_SOC_DAPM_DAC("DAC", "HiFi Playback", WM8510_POWER3, 0, 0),
-SND_SOC_DAPM_ADC("ADC", "HiFi Capture", WM8510_POWER3, 0, 0),
+SND_SOC_DAPM_ADC("ADC", "HiFi Capture", WM8510_POWER2, 0, 0),
 SND_SOC_DAPM_PGA("Aux Input", WM8510_POWER1, 6, 0, NULL, 0),
 SND_SOC_DAPM_PGA("SpkN Out", WM8510_POWER3, 5, 0, NULL, 0),
 SND_SOC_DAPM_PGA("SpkP Out", WM8510_POWER3, 6, 0, NULL, 0),
@@ -384,8 +384,8 @@ static int wm8510_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 
 	wm8510_write(codec, WM8510_PLLN, (pll_div.pre_div << 4) | pll_div.n);
 	wm8510_write(codec, WM8510_PLLK1, pll_div.k >> 18);
-	wm8510_write(codec, WM8510_PLLK1, (pll_div.k >> 9) && 0x1ff);
-	wm8510_write(codec, WM8510_PLLK1, pll_div.k && 0x1ff);
+	wm8510_write(codec, WM8510_PLLK2, (pll_div.k >> 9) & 0x1ff);
+	wm8510_write(codec, WM8510_PLLK3, pll_div.k & 0x1ff);
 	reg = wm8510_read_reg_cache(codec, WM8510_POWER1);
 	wm8510_write(codec, WM8510_POWER1, reg | 0x020);
 	return 0;
@@ -403,23 +403,23 @@ static int wm8510_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 
 	switch (div_id) {
 	case WM8510_OPCLKDIV:
-		reg = wm8510_read_reg_cache(codec, WM8510_GPIO & 0x1cf);
+		reg = wm8510_read_reg_cache(codec, WM8510_GPIO) & 0x1cf;
 		wm8510_write(codec, WM8510_GPIO, reg | div);
 		break;
 	case WM8510_MCLKDIV:
-		reg = wm8510_read_reg_cache(codec, WM8510_CLOCK & 0x1f);
+		reg = wm8510_read_reg_cache(codec, WM8510_CLOCK) & 0x1f;
 		wm8510_write(codec, WM8510_CLOCK, reg | div);
 		break;
 	case WM8510_ADCCLK:
-		reg = wm8510_read_reg_cache(codec, WM8510_ADC & 0x1f7);
+		reg = wm8510_read_reg_cache(codec, WM8510_ADC) & 0x1f7;
 		wm8510_write(codec, WM8510_ADC, reg | div);
 		break;
 	case WM8510_DACCLK:
-		reg = wm8510_read_reg_cache(codec, WM8510_DAC & 0x1f7);
+		reg = wm8510_read_reg_cache(codec, WM8510_DAC) & 0x1f7;
 		wm8510_write(codec, WM8510_DAC, reg | div);
 		break;
 	case WM8510_BCLKDIV:
-		reg = wm8510_read_reg_cache(codec, WM8510_CLOCK & 0x1e3);
+		reg = wm8510_read_reg_cache(codec, WM8510_CLOCK) & 0x1e3;
 		wm8510_write(codec, WM8510_CLOCK, reg | div);
 		break;
 	default:
