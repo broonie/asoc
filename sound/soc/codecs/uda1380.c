@@ -306,7 +306,7 @@ static DECLARE_TLV_DB_SCALE(dec_tlv, -6400, 50, 1);
 static DECLARE_TLV_DB_SCALE(pga_tlv, 0, 300, 0);
 
 /* from 0 to 30 dB in 2 dB steps */
-DECLARE_TLV_DB_SCALE(vga_tlv, 0, 200, 0);
+static DECLARE_TLV_DB_SCALE(vga_tlv, 0, 200, 0);
 
 #define SOC_DOUBLE_S8_TLV(xname, reg, min, max, tlv_array) \
 {	.iface  = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname), \
