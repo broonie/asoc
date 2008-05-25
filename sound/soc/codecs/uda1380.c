@@ -192,75 +192,6 @@ static const struct soc_enum uda1380_sdet_enum =
 static const struct soc_enum uda1380_os_enum =
 	SOC_ENUM_SINGLE(UDA1380_MIXER, 0, 3, uda1380_os_setting);	/* OS */
 
-/**
- * snd_soc_info_volsw - single mixer info callback
- * @kcontrol: mixer control
- * @uinfo: control element information
- *
- * Callback to provide information about a single mixer control.
- *
- * Returns 0 for success.
- */
-static int snd_soc_info_volsw_s8(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_info *uinfo)
-{
-	int max = (signed char)((kcontrol->private_value >> 16) & 0xff);
-	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
-
-	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
-	uinfo->count = 2;
-	uinfo->value.integer.min = 0;
-	uinfo->value.integer.max = max-min;
-	return 0;
-}
-
-/**
- * snd_soc_get_volsw_sgn - single mixer get callback
- * @kcontrol: mixer control
- * @uinfo: control element information
- *
- * Callback to get the value of a single mixer control.
- *
- * Returns 0 for success.
- */
-static int snd_soc_get_volsw_s8(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	int reg = kcontrol->private_value & 0xff;
-	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
-	int val = snd_soc_read(codec, reg);
-
-	ucontrol->value.integer.value[0] =
-		((signed char)(val & 0xff))-min;
-	ucontrol->value.integer.value[1] =
-		((signed char)((val >> 8) & 0xff))-min;
-	return 0;
-}
-
-/**
- * snd_soc_put_volsw_sgn - single mixer put callback
- * @kcontrol: mixer control
- * @uinfo: control element information
- *
- * Callback to set the value of a single mixer control.
- *
- * Returns 0 for success.
- */
-static int snd_soc_put_volsw_s8(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	int reg = kcontrol->private_value & 0xff;
-	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
-	unsigned short val;
-
-	val = (ucontrol->value.integer.value[0]+min) & 0xff;
-	val |= ((ucontrol->value.integer.value[1]+min) & 0xff) << 8;
-
-	return snd_soc_update_bits(codec, reg, 0xffff, val);
-}
-
 /*
  * from -48 dB in 1.5 dB steps (mute instead of -49.5 dB)
  */
@@ -307,16 +238,6 @@ static DECLARE_TLV_DB_SCALE(pga_tlv, 0, 300, 0);
 
 /* from 0 to 30 dB in 2 dB steps */
 static DECLARE_TLV_DB_SCALE(vga_tlv, 0, 200, 0);
-
-#define SOC_DOUBLE_S8_TLV(xname, reg, min, max, tlv_array) \
-{	.iface  = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname), \
-	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ | \
-		  SNDRV_CTL_ELEM_ACCESS_READWRITE, \
-	.tlv.p  = (tlv_array), \
-	.info   = snd_soc_info_volsw_s8, .get = snd_soc_get_volsw_s8, \
-	.put    = snd_soc_put_volsw_s8, \
-	.private_value = (reg) | (((signed char)max) << 16) | \
-			 (((signed char)min) << 24) }
 
 static const struct snd_kcontrol_new uda1380_snd_controls[] = {
 	SOC_DOUBLE_TLV("Analog Mixer Volume", UDA1380_AMIX, 0, 8, 44, 1, amix_tlv),	/* AVCR, AVCL */
