@@ -377,8 +377,8 @@ static int uda1380_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	int iface;
-	/* set up DAI based upon fmt */
 
+	/* set up DAI based upon fmt */
 	iface = uda1380_read_reg_cache(codec, UDA1380_IFACE);
 	iface &= ~(R01_SFORI_MASK | R01_SIM | R01_SFORO_MASK);
 
@@ -651,7 +651,8 @@ static int uda1380_init(struct snd_soc_device *socdev, int dac_clk)
 	codec->set_bias_level = uda1380_set_bias_level;
 	codec->dai = uda1380_dai;
 	codec->num_dai = ARRAY_SIZE(uda1380_dai);
-	codec->reg_cache = kmemdup(uda1380_reg, sizeof(uda1380_reg), GFP_KERNEL);
+	codec->reg_cache = kmemdup(uda1380_reg, sizeof(uda1380_reg),
+				   GFP_KERNEL);
 	if (codec->reg_cache == NULL)
 		return -ENOMEM;
 	codec->reg_cache_size = sizeof(uda1380_reg);
@@ -698,7 +699,7 @@ pcm_err:
 
 static struct snd_soc_device *uda1380_socdev;
 
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 
 #define I2C_DRIVERID_UDA1380 0xfefe /* liam -  need a proper id */
 
@@ -728,7 +729,7 @@ static int uda1380_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 	client_template.addr = addr;
 
 	i2c = kmemdup(&client_template, sizeof(client_template), GFP_KERNEL);
-	if (i2c == NULL){
+	if (i2c == NULL) {
 		kfree(codec);
 		return -ENOMEM;
 	}
@@ -805,7 +806,7 @@ static int uda1380_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&codec->dapm_paths);
 
 	uda1380_socdev = socdev;
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	if (setup->i2c_address) {
 		normal_i2c[0] = setup->i2c_address;
 		codec->hw_write = (hw_write_t)i2c_master_send;
