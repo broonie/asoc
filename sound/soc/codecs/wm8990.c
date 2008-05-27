@@ -553,8 +553,10 @@ SOC_DAPM_SINGLE_TLV("Record Left Volume", WM8990_INPUT_MIXER3,
 	WM8990_LDBVOL_SHIFT, WM8990_LDBVOL_MASK, 0, in_mix_tlv),
 SOC_DAPM_SINGLE_TLV("LIN2 Volume", WM8990_INPUT_MIXER5, WM8990_LI2BVOL_SHIFT,
 	7, 0, in_mix_tlv),
-SOC_DAPM_SINGLE("LINPGA12 Switch", WM8990_INPUT_MIXER3, WM8990_L12MNB_BIT, 1, 0),
-SOC_DAPM_SINGLE("LINPGA34 Switch", WM8990_INPUT_MIXER3, WM8990_L34MNB_BIT, 1, 0),
+SOC_DAPM_SINGLE("LINPGA12 Switch", WM8990_INPUT_MIXER3, WM8990_L12MNB_BIT,
+	1, 0),
+SOC_DAPM_SINGLE("LINPGA34 Switch", WM8990_INPUT_MIXER3, WM8990_L34MNB_BIT,
+	1, 0),
 };
 
 /* INMIXR */
@@ -1212,8 +1214,10 @@ static int wm8990_hw_params(struct snd_pcm_substream *substream,
 static int wm8990_mute(struct snd_soc_codec_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
-	u16 val = wm8990_read_reg_cache(codec, WM8990_DAC_CTRL) & ~WM8990_DAC_MUTE;
-	
+	u16 val;
+
+	val  = wm8990_read_reg_cache(codec, WM8990_DAC_CTRL) & ~WM8990_DAC_MUTE;
+
 	if (mute)
 		wm8990_write(codec, WM8990_DAC_CTRL, val | WM8990_DAC_MUTE);
 	else
@@ -1226,7 +1230,7 @@ static int wm8990_set_bias_level(struct snd_soc_codec *codec,
 	enum snd_soc_bias_level level)
 {
 	u16 val;
-	
+
 	switch (level) {
 	case SND_SOC_BIAS_ON:
 		break;
@@ -1239,32 +1243,31 @@ static int wm8990_set_bias_level(struct snd_soc_codec *codec,
 				WM8990_DIS_RLINE | WM8990_DIS_OUT3 |
 				WM8990_DIS_OUT4 | WM8990_DIS_LOUT |
 				WM8990_DIS_ROUT);
-				
+
 			/* Enable POBCTRL, SOFT_ST and BUFDCOPEN */
 			wm8990_write(codec, WM8990_ANTIPOP2, WM8990_SOFTST |
 				WM8990_BUFDCOPEN | WM8990_POBCTRL);
-				
+
 			/* Delay 250ms to allow output caps to discharge */
 			schedule_timeout_interruptible(msecs_to_jiffies(250));
-			
+
 			/* disable all output discharge bits */
 			wm8990_write(codec, WM8990_ANTIPOP1, 0);
-			
+
 			/* Enable VMID SEL = 2x50K Ohm Divider */
 			wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x2);
-			
+
 			/* Delay 100ms to allow VMID to initially charge */
 			schedule_timeout_interruptible(msecs_to_jiffies(250));
-			
+
 			/* Enable VREF (VMID SEL = 2x50K Ohm Divider */
 			wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x3);
-			
+
 			/* disable POBCTRL, SOFT_ST and BUFDCOPEN */
 			wm8990_write(codec, WM8990_ANTIPOP2, 0x0);
-			
 		} else {
 			/* ON -> standby */
-			
+
 		}
 		break;
 
@@ -1272,23 +1275,23 @@ static int wm8990_set_bias_level(struct snd_soc_codec *codec,
 		/* Enable POBCTRL, SOFT_ST and BUFDCOPEN */
 		wm8990_write(codec, WM8990_ANTIPOP2, WM8990_SOFTST |
 			WM8990_BUFDCOPEN | WM8990_POBCTRL);
-			
+
 		/* mute DAC */
 		val = wm8990_read_reg_cache(codec, WM8990_DAC_CTRL);
 		wm8990_write(codec, WM8990_DAC_CTRL, val | WM8990_DAC_MUTE);
-		
+
 		/* Disable VMID SEL = 2x50K Ohm Divider */
 		wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x1);
-		
+
 		/* Enable all output discharge bits */
 		wm8990_write(codec, WM8990_ANTIPOP1, WM8990_DIS_LLINE |
 			WM8990_DIS_RLINE | WM8990_DIS_OUT3 |
 			WM8990_DIS_OUT4 | WM8990_DIS_LOUT |
 			WM8990_DIS_ROUT);
-			
+
 		/* Disable VREF (VMID SEL = 2x50K Ohm Divider */
 		wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x0);
-		
+
 		/* disable POBCTRL, SOFT_ST and BUFDCOPEN */
 		wm8990_write(codec, WM8990_ANTIPOP2, 0x0);
 		break;
