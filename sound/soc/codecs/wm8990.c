@@ -1244,7 +1244,7 @@ static int wm8990_set_bias_level(struct snd_soc_codec *codec,
 	SNDRV_PCM_RATE_48000)
 
 #define WM8990_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
-	SNDRV_PCM_FMTBIT_S24_LE)
+	SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
 
 /*
  * The WM8990 supports 2 different and mutually exclusive DAI
