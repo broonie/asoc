@@ -89,7 +89,7 @@
 /*
  * R0 (0x00) - Reset
  */
-#define WM8990_SW_RESET_CHIP_ID_MASK            0xFFFF  /* SW_RESET_CHIP_ID - [15:0] */
+#define WM8990_SW_RESET_CHIP_ID_MASK            0xFFFF  /* SW_RESET_CHIP_ID */
 
 /*
  * R1 (0x01) - Power Management (1)
@@ -189,7 +189,7 @@
 #define WM8990_DACR_SRC                         0x4000  /* DACR_SRC */
 #define WM8990_AIFDAC_TDM                       0x2000  /* AIFDAC_TDM */
 #define WM8990_AIFDAC_TDM_CHAN                  0x1000  /* AIFDAC_TDM_CHAN */
-#define WM8990_DAC_BOOST_MASK                   0x0C00  /* DAC_BOOST - [11:10] */
+#define WM8990_DAC_BOOST_MASK                   0x0C00  /* DAC_BOOST */
 #define WM8990_DAC_COMP                         0x0010  /* DAC_COMP */
 #define WM8990_DAC_COMPMODE                     0x0008  /* DAC_COMPMODE */
 #define WM8990_ADC_COMP                         0x0004  /* ADC_COMP */
@@ -228,25 +228,25 @@
 #define WM8990_SYSCLK_SRC                       0x4000  /* SYSCLK_SRC */
 #define WM8990_CLK_FORCE                        0x2000  /* CLK_FORCE */
 #define WM8990_MCLK_DIV_MASK                    0x1800  /* MCLK_DIV - [12:11] */
-#define WM8990_MCLK_DIV_1			( 0 << 11)
-#define WM8990_MCLK_DIV_2			( 2 << 11)
+#define WM8990_MCLK_DIV_1			(0 << 11)
+#define WM8990_MCLK_DIV_2			(2 << 11)
 #define WM8990_MCLK_INV                         0x0400  /* MCLK_INV */
-#define WM8990_ADC_CLKDIV_MASK                  0x00E0  /* ADC_CLKDIV - [7:5] */
-#define WM8990_ADC_CLKDIV_1			( 0 << 5)
-#define WM8990_ADC_CLKDIV_1_5			( 1 << 5)
-#define WM8990_ADC_CLKDIV_2			( 2 << 5)
-#define WM8990_ADC_CLKDIV_3			( 3 << 5)
-#define WM8990_ADC_CLKDIV_4			( 4 << 5)
-#define WM8990_ADC_CLKDIV_5_5			( 5 << 5)
-#define WM8990_ADC_CLKDIV_6			( 6 << 5)
+#define WM8990_ADC_CLKDIV_MASK                  0x00E0  /* ADC_CLKDIV */
+#define WM8990_ADC_CLKDIV_1			(0 << 5)
+#define WM8990_ADC_CLKDIV_1_5			(1 << 5)
+#define WM8990_ADC_CLKDIV_2			(2 << 5)
+#define WM8990_ADC_CLKDIV_3			(3 << 5)
+#define WM8990_ADC_CLKDIV_4			(4 << 5)
+#define WM8990_ADC_CLKDIV_5_5			(5 << 5)
+#define WM8990_ADC_CLKDIV_6			(6 << 5)
 #define WM8990_DAC_CLKDIV_MASK                  0x001C  /* DAC_CLKDIV - [4:2] */
-#define WM8990_DAC_CLKDIV_1			( 0 << 2)
-#define WM8990_DAC_CLKDIV_1_5			( 1 << 2)
-#define WM8990_DAC_CLKDIV_2			( 2 << 2)
-#define WM8990_DAC_CLKDIV_3			( 3 << 2)
-#define WM8990_DAC_CLKDIV_4			( 4 << 2)
-#define WM8990_DAC_CLKDIV_5_5			( 5 << 2)
-#define WM8990_DAC_CLKDIV_6			( 6 << 2)
+#define WM8990_DAC_CLKDIV_1			(0 << 2)
+#define WM8990_DAC_CLKDIV_1_5			(1 << 2)
+#define WM8990_DAC_CLKDIV_2			(2 << 2)
+#define WM8990_DAC_CLKDIV_3			(3 << 2)
+#define WM8990_DAC_CLKDIV_4			(4 << 2)
+#define WM8990_DAC_CLKDIV_5_5			(5 << 2)
+#define WM8990_DAC_CLKDIV_6			(6 << 2)
 
 /*
  * R8 (0x08) - Audio Interface (3)
@@ -255,7 +255,7 @@
 #define WM8990_AIF_MSTR2                        0x4000  /* AIF_MSTR2 */
 #define WM8990_AIF_SEL                          0x2000  /* AIF_SEL */
 #define WM8990_ADCLRC_DIR                       0x0800  /* ADCLRC_DIR */
-#define WM8990_ADCLRC_RATE_MASK                 0x07FF  /* ADCLRC_RATE - [10:0] */
+#define WM8990_ADCLRC_RATE_MASK                 0x07FF  /* ADCLRC_RATE */
 
 /*
  * R9 (0x09) - Audio Interface (4)
@@ -264,7 +264,7 @@
 #define WM8990_ALRCBGPIO6                       0x4000  /* ALRCBGPIO6 */
 #define WM8990_AIF_TRIS                         0x2000  /* AIF_TRIS */
 #define WM8990_DACLRC_DIR                       0x0800  /* DACLRC_DIR */
-#define WM8990_DACLRC_RATE_MASK                 0x07FF  /* DACLRC_RATE - [10:0] */
+#define WM8990_DACLRC_RATE_MASK                 0x07FF  /* DACLRC_RATE */
 
 /*
  * R10 (0x0A) - DAC CTRL
@@ -294,9 +294,9 @@
 /*
  * R13 (0x0D) - Digital Side Tone
  */
-#define WM8990_ADCL_DAC_SVOL_MASK               0x0F  /* ADCL_DAC_SVOL - [12:9] */
+#define WM8990_ADCL_DAC_SVOL_MASK               0x0F  /* ADCL_DAC_SVOL */
 #define WM8990_ADCL_DAC_SVOL_SHIFT		9
-#define WM8990_ADCR_DAC_SVOL_MASK               0x0F  /* ADCR_DAC_SVOL - [8:5] */
+#define WM8990_ADCR_DAC_SVOL_MASK               0x0F  /* ADCR_DAC_SVOL */
 #define WM8990_ADCR_DAC_SVOL_SHIFT		5
 #define WM8990_ADC_TO_DACL_MASK                 0x03  /* ADC_TO_DACL - [3:2] */
 #define WM8990_ADC_TO_DACL_SHIFT		2
@@ -555,8 +555,8 @@
 /*
  * R40 (0x28) - Input Mixer2
  */
-#define WM8990_LMP4								0x0080	/* LMP4 */
-#define WM8990_LMP4_BIT                         7		/* LMP4 */
+#define WM8990_LMP4				0x0080	/* LMP4 */
+#define WM8990_LMP4_BIT                         7	/* LMP4 */
 #define WM8990_LMN3                             0x0040  /* LMN3 */
 #define WM8990_LMN3_BIT                         6       /* LMN3 */
 #define WM8990_LMP2                             0x0020  /* LMP2 */

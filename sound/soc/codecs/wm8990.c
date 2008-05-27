@@ -105,7 +105,7 @@ static int wm8990_write(struct snd_soc_codec *codec, unsigned int reg,
 	data[1] = (value >> 8) & 0xFF;
 	data[2] = value & 0xFF;
 
-	wm8990_write_reg_cache (codec, reg, value);
+	wm8990_write_reg_cache(codec, reg, value);
 	if (codec->hw_write(codec->control_data, data, 3) == 2)
 		return 0;
 	else
@@ -131,25 +131,27 @@ static const DECLARE_TLV_DB_LINEAR(in_adc_tlv, -7163, 1763);
 static const DECLARE_TLV_DB_LINEAR(out_sidetone_tlv, -3600, 0);
 
 static int wm899x_outpga_put_volsw_vu(struct snd_kcontrol *kcontrol,
-        struct snd_ctl_elem_value *ucontrol)
+	struct snd_ctl_elem_value *ucontrol)
 {
-        struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-        int reg = kcontrol->private_value & 0xff;
-        int ret;
-        u16 val;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	int reg = kcontrol->private_value & 0xff;
+	int ret;
+	u16 val;
 
-        ret = snd_soc_put_volsw(kcontrol, ucontrol);
-        if (ret < 0)
-                return ret;
+	ret = snd_soc_put_volsw(kcontrol, ucontrol);
+	if (ret < 0)
+		return ret;
 
-        /* now hit the volume update bits (always bit 8) */
-        val = wm8990_read_reg_cache(codec, reg);
-        return wm8990_write(codec, reg, val | 0x0100);
+	/* now hit the volume update bits (always bit 8) */
+	val = wm8990_read_reg_cache(codec, reg);
+	return wm8990_write(codec, reg, val | 0x0100);
 }
 
-#define SOC_WM899X_OUTPGA_SINGLE_R_TLV(xname, reg, shift, max, invert, tlv_array) \
-{	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname), \
-	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ | SNDRV_CTL_ELEM_ACCESS_READWRITE,\
+#define SOC_WM899X_OUTPGA_SINGLE_R_TLV(xname, reg, shift, max, invert,\
+	 tlv_array) {\
+	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname), \
+	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |\
+		  SNDRV_CTL_ELEM_ACCESS_READWRITE,\
 	.tlv.p = (tlv_array), \
 	.info = snd_soc_info_volsw, \
 	.get = snd_soc_get_volsw, .put = wm899x_outpga_put_volsw_vu, \
@@ -375,7 +377,7 @@ static int wm8990_add_controls(struct snd_soc_codec *codec)
 
 	for (i = 0; i < ARRAY_SIZE(wm8990_snd_controls); i++) {
 		err = snd_ctl_add(codec->card,
-				snd_soc_cnew(&wm8990_snd_controls[i],codec,
+				snd_soc_cnew(&wm8990_snd_controls[i], codec,
 					NULL));
 		if (err < 0)
 			return err;
@@ -387,7 +389,7 @@ static int wm8990_add_controls(struct snd_soc_codec *codec)
  * _DAPM_ Controls
  */
 
-static int inmixer_event (struct snd_soc_dapm_widget *w,
+static int inmixer_event(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
 	u16 reg, fakepower;
@@ -413,8 +415,8 @@ static int inmixer_event (struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
-static int outmixer_event (struct snd_soc_dapm_widget *w,
-	struct snd_kcontrol * kcontrol, int event)
+static int outmixer_event(struct snd_soc_dapm_widget *w,
+	struct snd_kcontrol *kcontrol, int event)
 {
 	u32 reg_shift = kcontrol->private_value & 0xfff;
 	int ret = 0;
@@ -461,7 +463,7 @@ static int outmixer_event (struct snd_soc_dapm_widget *w,
 /* INMIX dB values */
 static const unsigned int in_mix_tlv[] = {
 	TLV_DB_RANGE_HEAD(1),
-	0,7, TLV_DB_LINEAR_ITEM(-1200, 600),
+	0, 7, TLV_DB_LINEAR_ITEM(-1200, 600),
 };
 
 /* Left In PGA Connections */
@@ -513,7 +515,7 @@ static const char *wm8990_ainlmux[] =
 	{"INMIXL Mix", "RXVOICE Mix", "DIFFINL Mix"};
 
 static const struct soc_enum wm8990_ainlmux_enum =
-SOC_ENUM_SINGLE( WM8990_INPUT_MIXER1, WM8990_AINLMODE_SHIFT,
+SOC_ENUM_SINGLE(WM8990_INPUT_MIXER1, WM8990_AINLMODE_SHIFT,
 	ARRAY_SIZE(wm8990_ainlmux), wm8990_ainlmux);
 
 static const struct snd_kcontrol_new wm8990_dapm_ainlmux_controls =
@@ -526,7 +528,7 @@ static const char *wm8990_ainrmux[] =
 	{"INMIXR Mix", "RXVOICE Mix", "DIFFINR Mix"};
 
 static const struct soc_enum wm8990_ainrmux_enum =
-SOC_ENUM_SINGLE( WM8990_INPUT_MIXER1, WM8990_AINRMODE_SHIFT,
+SOC_ENUM_SINGLE(WM8990_INPUT_MIXER1, WM8990_AINRMODE_SHIFT,
 	ARRAY_SIZE(wm8990_ainrmux), wm8990_ainrmux);
 
 static const struct snd_kcontrol_new wm8990_dapm_ainrmux_controls =
@@ -961,7 +963,7 @@ static void pll_factors(struct _pll_div *pll_div, unsigned int target,
 
 	if ((Ndiv < 6) || (Ndiv > 12))
 		printk(KERN_WARNING
-		"WM8990 N value outwith recommended range! N = %d\n",Ndiv);
+		"WM8990 N value outwith recommended range! N = %d\n", Ndiv);
 
 	pll_div->n = Ndiv;
 	Nmod = target % source;
@@ -1211,7 +1213,7 @@ static int wm8990_suspend(struct platform_device *pdev, pm_message_t state)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	/* we only need to suspend if we are a valid card */
-	if(!codec->card)
+	if (!codec->card)
 		return 0;
 
 	wm8990_set_bias_level(codec, SND_SOC_BIAS_OFF);
@@ -1316,7 +1318,7 @@ pcm_err:
    around */
 static struct snd_soc_device *wm8990_socdev;
 
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 
 /*
  * WM891 2 wire address is determined by GPIO5
@@ -1347,7 +1349,7 @@ static int wm8990_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 	client_template.addr = addr;
 
 	i2c =  kmemdup(&client_template, sizeof(client_template), GFP_KERNEL);
-	if (i2c == NULL){
+	if (i2c == NULL) {
 		kfree(codec);
 		return -ENOMEM;
 	}
@@ -1431,7 +1433,7 @@ static int wm8990_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&codec->dapm_paths);
 	wm8990_socdev = socdev;
 
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	if (setup->i2c_address) {
 		normal_i2c[0] = setup->i2c_address;
 		codec->hw_write = (hw_write_t)i2c_master_send;
@@ -1455,7 +1457,7 @@ static int wm8990_remove(struct platform_device *pdev)
 		wm8990_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	i2c_del_driver(&wm8990_i2c_driver);
 #endif
 	kfree(codec->private_data);
@@ -1470,7 +1472,6 @@ struct snd_soc_codec_device soc_codec_dev_wm8990 = {
 	.suspend =	wm8990_suspend,
 	.resume =	wm8990_resume,
 };
-
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8990);
 
 MODULE_DESCRIPTION("ASoC WM8990 driver");
