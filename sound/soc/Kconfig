@@ -25,6 +25,7 @@ config SND_SOC
 	  will be called snd-soc-core.
 
 # All the supported Soc's
+source "sound/soc/at32/Kconfig"
 source "sound/soc/at91/Kconfig"
 source "sound/soc/pxa/Kconfig"
 source "sound/soc/s3c24xx/Kconfig"
