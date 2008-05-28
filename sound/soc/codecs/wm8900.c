@@ -83,13 +83,19 @@
 
 #define WM8900_MAXREG		0x80
 
-#define WM8900_REG_ADDCTL_TEMP_SD  0x2
+#define WM8900_REG_ADDCTL_OUT1_DIS    0x80
+#define WM8900_REG_ADDCTL_OUT2_DIS    0x40
+#define WM8900_REG_ADDCTL_VMID_DIS    0x20
+#define WM8900_REG_ADDCTL_BIAS_SRC    0x10
+#define WM8900_REG_ADDCTL_VMID_SOFTST 0x04
+#define WM8900_REG_ADDCTL_TEMP_SD     0x02
 
 #define WM8900_REG_GPIO_TEMP_ENA   0x2
 
-#define WM8900_REG_POWER1_BIAS_ENA     0x0008
-#define WM8900_REG_POWER1_VMID_BUF_ENA 0x0004
-#define WM8900_REG_POWER1_FLL_ENA      0x0040
+#define WM8900_REG_POWER1_STARTUP_BIAS_ENA 0x0100
+#define WM8900_REG_POWER1_BIAS_ENA         0x0008
+#define WM8900_REG_POWER1_VMID_BUF_ENA     0x0004
+#define WM8900_REG_POWER1_FLL_ENA          0x0040
 
 #define WM8900_REG_POWER2_SYSCLK_ENA  0x8000
 #define WM8900_REG_POWER2_ADCL_ENA    0x0002
@@ -120,6 +126,10 @@
 #define WM8900_REG_FLLCTL1_OSC_ENA    0x100
 
 #define WM8900_REG_FLLCTL6_FLL_SLOW_LOCK_REF 0x100
+
+#define WM8900_REG_HPCTL_HP_CLAMP_IP   0x20
+#define WM8900_REG_HPCTL_HP_CLAMP_OP   0x10
+#define WM8900_REG_HPCTL_HP_SHORT      0x08
 
 #define WM8900_LRC_MASK 0xfc00
 
@@ -1081,6 +1091,35 @@ static int wm8900_set_bias_level(struct snd_soc_codec *codec,
 		break;
 
 	case SND_SOC_BIAS_STANDBY:
+		/* Charge capacitors if initial power up */
+		if (codec->bias_level == SND_SOC_BIAS_OFF) {
+			/* STARTUP_BIAS_ENA on */
+			wm8900_write(codec, WM8900_REG_POWER1,
+				     WM8900_REG_POWER1_STARTUP_BIAS_ENA);
+
+			/* Startup bias mode */
+			wm8900_write(codec, WM8900_REG_ADDCTL,
+				     WM8900_REG_ADDCTL_BIAS_SRC |
+				     WM8900_REG_ADDCTL_VMID_SOFTST);
+
+			/* VMID 2x50k */
+			wm8900_write(codec, WM8900_REG_POWER1,
+				     WM8900_REG_POWER1_STARTUP_BIAS_ENA | 0x1);
+
+			/* Allow capacitors to charge */
+			schedule_timeout_interruptible(msecs_to_jiffies(400));
+
+			/* Enable bias */
+			wm8900_write(codec, WM8900_REG_POWER1,
+				     WM8900_REG_POWER1_STARTUP_BIAS_ENA |
+				     WM8900_REG_POWER1_BIAS_ENA | 0x1);
+
+			wm8900_write(codec, WM8900_REG_ADDCTL, 0);
+
+			wm8900_write(codec, WM8900_REG_POWER1,
+				     WM8900_REG_POWER1_BIAS_ENA | 0x1);
+		}
+
 		reg = wm8900_read(codec, WM8900_REG_POWER1);
 		wm8900_write(codec, WM8900_REG_POWER1,
 			     (reg & WM8900_REG_POWER1_FLL_ENA) |
@@ -1091,6 +1130,29 @@ static int wm8900_set_bias_level(struct snd_soc_codec *codec,
 		break;
 
 	case SND_SOC_BIAS_OFF:
+		/* Clamp headphone outputs */
+		wm8900_write(codec, WM8900_REG_HPCTL1,
+			     WM8900_REG_HPCTL_HP_CLAMP_IP |
+			     WM8900_REG_HPCTL_HP_CLAMP_OP);
+
+		/* Startup bias enable */
+		reg = wm8900_read(codec, WM8900_REG_POWER1);
+		wm8900_write(codec, WM8900_REG_POWER1,
+			     reg & WM8900_REG_POWER1_STARTUP_BIAS_ENA);
+		wm8900_write(codec, WM8900_REG_ADDCTL,
+			     WM8900_REG_ADDCTL_BIAS_SRC |
+			     WM8900_REG_ADDCTL_VMID_SOFTST);
+
+		/* Discharge caps */
+		wm8900_write(codec, WM8900_REG_POWER1,
+			     WM8900_REG_POWER1_STARTUP_BIAS_ENA);
+		schedule_timeout_interruptible(msecs_to_jiffies(500));
+
+		/* Remove clamp */
+		wm8900_write(codec, WM8900_REG_HPCTL1, 0);
+
+		/* Power down */
+		wm8900_write(codec, WM8900_REG_ADDCTL, 0);
 		wm8900_write(codec, WM8900_REG_POWER1, 0);
 		wm8900_write(codec, WM8900_REG_POWER2, 0);
 		wm8900_write(codec, WM8900_REG_POWER3, 0);
@@ -1248,6 +1310,7 @@ static int wm8900_init(struct snd_soc_device *socdev)
 	}
 
 	/* Turn the chip on */
+	codec->bias_level = SND_SOC_BIAS_OFF;
 	wm8900_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	wm8900_add_controls(codec);
