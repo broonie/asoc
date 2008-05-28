@@ -648,8 +648,6 @@ static const struct snd_soc_dapm_route audio_map[] = {
 
 static int wm8900_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
-
 	snd_soc_dapm_new_controls(codec, wm8900_dapm_widgets,
 				  ARRAY_SIZE(wm8900_dapm_widgets));
 
