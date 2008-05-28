@@ -375,6 +375,11 @@ static int wm8510_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 	u16 reg;
 
 	if (freq_in == 0 || freq_out == 0) {
+		/* Clock CODEC directly from MCLK */
+		reg = wm8510_read_reg_cache(codec, WM8510_CLOCK);
+		wm8510_write(codec, WM8510_CLOCK, reg & 0x0ff);
+
+                /* Turn off PLL */
 		reg = wm8510_read_reg_cache(codec, WM8510_POWER1);
 		wm8510_write(codec, WM8510_POWER1, reg & 0x1df);
 		return 0;
@@ -388,8 +393,12 @@ static int wm8510_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 	wm8510_write(codec, WM8510_PLLK3, pll_div.k & 0x1ff);
 	reg = wm8510_read_reg_cache(codec, WM8510_POWER1);
 	wm8510_write(codec, WM8510_POWER1, reg | 0x020);
-	return 0;
 
+	/* Run CODEC from PLL instead of MCLK */
+	reg = wm8510_read_reg_cache(codec, WM8510_CLOCK);
+	wm8510_write(codec, WM8510_CLOCK, reg | 0x100);
+
+	return 0;
 }
 
 /*
