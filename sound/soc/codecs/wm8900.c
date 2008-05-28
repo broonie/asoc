@@ -1061,12 +1061,13 @@ struct snd_soc_codec_dai wm8900_dai = {
 };
 EXPORT_SYMBOL_GPL(wm8900_dai);
 
-static int wm8900_dapm_event(struct snd_soc_codec *codec, int event)
+static int wm8900_set_bias_level(struct snd_soc_codec *codec,
+				 enum snd_soc_bias_level level)
 {
 	u16 reg;
 
-	switch (event) {
-	case SNDRV_CTL_POWER_D0: /* full On */
+	switch (level) {
+	case SND_SOC_BIAS_ON:
 		/* Enable thermal shutdown */
 		reg = wm8900_read(codec, WM8900_REG_GPIO);
 		wm8900_write(codec, WM8900_REG_GPIO,
@@ -1076,11 +1077,10 @@ static int wm8900_dapm_event(struct snd_soc_codec *codec, int event)
 			     reg | WM8900_REG_ADDCTL_TEMP_SD);
 		break;
 
-	case SNDRV_CTL_POWER_D1: /* partial On */
-	case SNDRV_CTL_POWER_D2: /* partial On */
+	case SND_SOC_BIAS_PREPARE:
 		break;
 
-	case SNDRV_CTL_POWER_D3hot: /* Off except Vref and Vmid */
+	case SND_SOC_BIAS_STANDBY:
 		reg = wm8900_read(codec, WM8900_REG_POWER1);
 		wm8900_write(codec, WM8900_REG_POWER1,
 			     (reg & WM8900_REG_POWER1_FLL_ENA) |
@@ -1090,7 +1090,7 @@ static int wm8900_dapm_event(struct snd_soc_codec *codec, int event)
 		wm8900_write(codec, WM8900_REG_POWER3, 0);
 		break;
 
-	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
+	case SND_SOC_BIAS_OFF:
 		wm8900_write(codec, WM8900_REG_POWER1, 0);
 		wm8900_write(codec, WM8900_REG_POWER2, 0);
 		wm8900_write(codec, WM8900_REG_POWER3, 0);
@@ -1103,7 +1103,7 @@ static int wm8900_dapm_event(struct snd_soc_codec *codec, int event)
 			     WM8900_REG_POWER2_SYSCLK_ENA);
 		break;
 	}
-	codec->dapm_state = event;
+	codec->bias_level = level;
 	return 0;
 }
 
@@ -1126,7 +1126,7 @@ static int wm8900_suspend(struct platform_device *pdev, pm_message_t state)
 	wm8900->fll_out = fll_out;
 	wm8900->fll_in = fll_in;
 
-	wm8900_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+	wm8900_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	return 0;
 }
@@ -1143,7 +1143,7 @@ static int wm8900_resume(struct platform_device *pdev)
 			GFP_KERNEL);
 
 	wm8900_reset(codec);
-	wm8900_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	wm8900_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	/* Restart the FLL? */
 	if (wm8900->fll_out) {
@@ -1153,7 +1153,7 @@ static int wm8900_resume(struct platform_device *pdev)
 		wm8900->fll_in = 0;
 		wm8900->fll_out = 0;
 
-		wm8900_set_fll(codec, 0, fll_in, fll_out);
+		ret = wm8900_set_fll(codec, 0, fll_in, fll_out);
 		if (ret != 0) {
 			dev_err(&pdev->dev, "Failed to restart FLL\n");
 			return ret;
@@ -1248,7 +1248,7 @@ static int wm8900_init(struct snd_soc_device *socdev)
 	}
 
 	/* Turn the chip on */
-	wm8900_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	wm8900_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	wm8900_add_controls(codec);
 	wm8900_add_widgets(codec);
@@ -1379,7 +1379,7 @@ static int wm8900_probe(struct platform_device *pdev)
 
 	socdev->codec = codec;
 
-	codec->dapm_event = wm8900_dapm_event;
+	codec->set_bias_level = wm8900_set_bias_level;
 
 	wm8900_socdev = socdev;
 #if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
@@ -1403,7 +1403,7 @@ static int wm8900_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		wm8900_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		wm8900_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
