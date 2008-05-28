@@ -37,6 +37,7 @@ obj-$(CONFIG_SND_SOC_WM8731)	+= snd-soc-wm8731.o
 obj-$(CONFIG_SND_SOC_WM8750)	+= snd-soc-wm8750.o
 obj-$(CONFIG_SND_SOC_WM8753)	+= snd-soc-wm8753.o
 obj-$(CONFIG_SND_SOC_WM8772)	+= snd-soc-wm8772.o
+obj-$(CONFIG_SND_SOC_WM8900)	+= snd-soc-wm8900.o
 obj-$(CONFIG_SND_SOC_WM8950)	+= snd-soc-wm8950.o
 obj-$(CONFIG_SND_SOC_WM8951)	+= snd-soc-wm8951.o
 obj-$(CONFIG_SND_SOC_WM8956)	+= snd-soc-wm8956.o
