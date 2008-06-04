@@ -1290,9 +1290,9 @@ static int wm8990_set_bias_level(struct snd_soc_codec *codec,
 		}
 		break;
 
-	case SND_SOC_BIAS_OFF:	
-               /* Enable POBCTRL and SOFT_ST */
-               wm8990_write(codec, WM8990_ANTIPOP2, WM8990_SOFTST |
+	case SND_SOC_BIAS_OFF:
+		/* Enable POBCTRL and SOFT_ST */
+		wm8990_write(codec, WM8990_ANTIPOP2, WM8990_SOFTST |
 			WM8990_POBCTRL | WM8990_BUFIOEN);
 
 		/* Enable POBCTRL, SOFT_ST and BUFDCOPEN */
