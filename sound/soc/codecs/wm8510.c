@@ -218,29 +218,17 @@ SOC_DAPM_SINGLE("Aux Playback Switch", WM8510_MONOMIX, 2, 1, 0),
 SOC_DAPM_SINGLE("PCM Playback Switch", WM8510_MONOMIX, 0, 1, 0),
 };
 
-/* AUX Input boost vol */
-static const struct snd_kcontrol_new wm8510_aux_boost_controls =
-SOC_DAPM_SINGLE("Aux Volume", WM8510_ADCBOOST, 0, 7, 0);
+static const struct snd_kcontrol_new wm8510_boost_controls[] = {
+SOC_DAPM_SINGLE("Mic PGA Switch", WM8510_INPPGA,  6, 1, 0),
+SOC_DAPM_SINGLE("Aux Volume", WM8510_ADCBOOST, 0, 7, 0),
+SOC_DAPM_SINGLE("Mic Volume", WM8510_ADCBOOST, 4, 7, 0),
+};
 
-/* Mic Input boost vol */
-static const struct snd_kcontrol_new wm8510_mic_boost_controls =
-SOC_DAPM_SINGLE("Mic Volume", WM8510_ADCBOOST, 4, 7, 0);
-
-/* Capture boost switch */
-static const struct snd_kcontrol_new wm8510_capture_boost_controls =
-SOC_DAPM_SINGLE("Capture Boost Switch", WM8510_INPPGA,  6, 1, 0);
-
-/* Aux In to PGA */
-static const struct snd_kcontrol_new wm8510_aux_capture_boost_controls =
-SOC_DAPM_SINGLE("Aux Capture Boost Switch", WM8510_INPPGA,  2, 1, 0);
-
-/* Mic P In to PGA */
-static const struct snd_kcontrol_new wm8510_micp_capture_boost_controls =
-SOC_DAPM_SINGLE("Mic P Capture Boost Switch", WM8510_INPPGA,  0, 1, 0);
-
-/* Mic N In to PGA */
-static const struct snd_kcontrol_new wm8510_micn_capture_boost_controls =
-SOC_DAPM_SINGLE("Mic N Capture Boost Switch", WM8510_INPPGA,  1, 1, 0);
+static const struct snd_kcontrol_new wm8510_micpga_controls[] = {
+SOC_DAPM_SINGLE("MICP Switch", WM8510_INPUT, 0, 1, 0),
+SOC_DAPM_SINGLE("MICN Switch", WM8510_INPUT, 1, 1, 0),
+SOC_DAPM_SINGLE("AUX Switch", WM8510_INPUT, 2, 1, 0),
+};
 
 static const struct snd_soc_dapm_widget wm8510_dapm_widgets[] = {
 SND_SOC_DAPM_MIXER("Speaker Mixer", WM8510_POWER3, 2, 0,
@@ -255,16 +243,13 @@ SND_SOC_DAPM_PGA("Aux Input", WM8510_POWER1, 6, 0, NULL, 0),
 SND_SOC_DAPM_PGA("SpkN Out", WM8510_POWER3, 5, 0, NULL, 0),
 SND_SOC_DAPM_PGA("SpkP Out", WM8510_POWER3, 6, 0, NULL, 0),
 SND_SOC_DAPM_PGA("Mono Out", WM8510_POWER3, 7, 0, NULL, 0),
-SND_SOC_DAPM_PGA("Mic PGA", WM8510_POWER2, 2, 0, NULL, 0),
 
-SND_SOC_DAPM_PGA("Aux Boost", SND_SOC_NOPM, 0, 0,
-	&wm8510_aux_boost_controls, 1),
-SND_SOC_DAPM_PGA("Mic Boost", SND_SOC_NOPM, 0, 0,
-	&wm8510_mic_boost_controls, 1),
-SND_SOC_DAPM_SWITCH("Capture Boost", SND_SOC_NOPM, 0, 0,
-	&wm8510_capture_boost_controls),
-
-SND_SOC_DAPM_MIXER("Boost Mixer", WM8510_POWER2, 4, 0, NULL, 0),
+SND_SOC_DAPM_PGA("Mic PGA", WM8510_POWER2, 2, 0,
+		 &wm8510_micpga_controls[0],
+		 ARRAY_SIZE(wm8510_micpga_controls)),
+SND_SOC_DAPM_MIXER("Boost Mixer", WM8510_POWER2, 4, 0,
+	&wm8510_boost_controls[0],
+	ARRAY_SIZE(wm8510_boost_controls)),
 
 SND_SOC_DAPM_MICBIAS("Mic Bias", WM8510_POWER1, 4, 0),
 
@@ -295,18 +280,17 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"SPKOUTN", NULL, "SpkN Out"},
 	{"SPKOUTP", NULL, "SpkP Out"},
 
-	/* Boost Mixer */
-	{"Boost Mixer", NULL, "ADC"},
-	{"Capture Boost Switch", "Aux Capture Boost Switch", "AUX"},
-	{"Aux Boost", "Aux Volume", "Boost Mixer"},
-	{"Capture Boost", "Capture Switch", "Boost Mixer"},
-	{"Mic Boost", "Mic Volume", "Boost Mixer"},
+	/* Microphone PGA */
+	{"Mic PGA", "MICN Switch", "MICN"},
+	{"Mic PGA", "MICP Switch", "MICP"},
+	{ "Mic PGA", "AUX Switch", "Aux Input" },
 
-	/* Inputs */
-	{"MICP", NULL, "Mic Boost"},
-	{"MICN", NULL, "Mic PGA"},
-	{"Mic PGA", NULL, "Capture Boost"},
-	{"AUX", NULL, "Aux Input"},
+	/* Boost Mixer */
+	{"Boost Mixer", "Mic PGA Switch", "Mic PGA"},
+	{"Boost Mixer", "Mic Volume", "MICP"},
+	{"Boost Mixer", "Aux Volume", "Aux Input"},
+
+	{"ADC", NULL, "Boost Mixer"},
 };
 
 static int wm8510_add_widgets(struct snd_soc_codec *codec)
