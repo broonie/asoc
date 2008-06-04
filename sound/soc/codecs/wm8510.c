@@ -125,9 +125,9 @@ static int wm8510_write(struct snd_soc_codec *codec, unsigned int reg,
 
 #define wm8510_reset(c)	wm8510_write(c, WM8510_RESET, 0)
 
-static const char *wm8510_companding[] = {"Off", "NC", "u-law", "A-law" };
-static const char *wm8510_deemp[] = {"None", "32kHz", "44.1kHz", "48kHz" };
-static const char *wm8510_alc[] = {"ALC", "Limiter" };
+static const char *wm8510_companding[] = { "Off", "NC", "u-law", "A-law" };
+static const char *wm8510_deemp[] = { "None", "32kHz", "44.1kHz", "48kHz" };
+static const char *wm8510_alc[] = { "ALC", "Limiter" };
 
 static const struct soc_enum wm8510_enum[] = {
 	SOC_ENUM_SINGLE(WM8510_COMP, 1, 4, wm8510_companding), /* adc */
@@ -521,6 +521,7 @@ static int wm8510_pcm_hw_params(struct snd_pcm_substream *substream,
 		adn |= 0x1 << 1;
 		break;
 	case SNDRV_PCM_RATE_44100:
+	case SNDRV_PCM_RATE_48000:
 		break;
 	}
 
@@ -571,7 +572,7 @@ static int wm8510_set_bias_level(struct snd_soc_codec *codec,
 		SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_48000)
 
 #define WM8510_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
-	SNDRV_PCM_FMTBIT_S24_LE)
+	SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
 
 struct snd_soc_codec_dai wm8510_dai = {
 	.name = "WM8510 HiFi",
