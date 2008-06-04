@@ -20,6 +20,7 @@
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/clk.h>
+#include <linux/io.h>
 #include <linux/atmel_pdc.h>
 #include <linux/atmel-ssc.h>
 
@@ -29,8 +30,6 @@
 #include <sound/pcm_params.h>
 #include <sound/initval.h>
 #include <sound/soc.h>
-
-#include <asm/io.h>
 
 #include "at32-pcm.h"
 #include "at32-ssc.h"
@@ -376,11 +375,10 @@ static int at32_ssc_set_dai_clkdiv(struct snd_soc_cpu_dai *cpu_dai,
 		 * transmit and receive, so if a value has already
 		 * been set, it must match this value
 		 */
-		if (ssc_p->cmr_div == 0) {
+		if (ssc_p->cmr_div == 0)
 			ssc_p->cmr_div = div;
-		} else if (div != ssc_p->cmr_div) {
+		else if (div != ssc_p->cmr_div)
 			return -EBUSY;
-		}
 		break;
 
 	case AT32_SSC_TCMR_PERIOD:

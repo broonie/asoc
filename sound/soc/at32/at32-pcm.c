@@ -108,7 +108,7 @@ static void at32_pcm_dma_irq(u32 ssc_sr, struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *rtd = substream->runtime;
 	struct at32_runtime_data *prtd = rtd->private_data;
 	struct at32_pcm_dma_params *params = prtd->params;
-	static int count = 0;
+	static int count;
 
 	count++;
 	if (ssc_sr & params->mask->ssc_endbuf) {
