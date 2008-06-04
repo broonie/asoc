@@ -24,7 +24,6 @@
 #include <linux/atmel_pdc.h>
 #include <linux/atmel-ssc.h>
 
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
