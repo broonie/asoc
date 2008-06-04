@@ -1244,44 +1244,73 @@ static int wm8990_set_bias_level(struct snd_soc_codec *codec,
 				WM8990_DIS_OUT4 | WM8990_DIS_LOUT |
 				WM8990_DIS_ROUT);
 
-			/* Enable POBCTRL, SOFT_ST and BUFDCOPEN */
+			/* Enable POBCTRL, SOFT_ST, VMIDTOG and BUFDCOPEN */
 			wm8990_write(codec, WM8990_ANTIPOP2, WM8990_SOFTST |
-				WM8990_BUFDCOPEN | WM8990_POBCTRL);
+				     WM8990_BUFDCOPEN | WM8990_POBCTRL |
+				     WM8990_VMIDTOG);
 
-			/* Delay 250ms to allow output caps to discharge */
-			schedule_timeout_interruptible(msecs_to_jiffies(250));
+			/* Delay to allow output caps to discharge */
+			schedule_timeout_interruptible(msecs_to_jiffies(300));
+
+			/* Disable VMIDTOG */
+			wm8990_write(codec, WM8990_ANTIPOP2, WM8990_SOFTST |
+				     WM8990_BUFDCOPEN | WM8990_POBCTRL);
 
 			/* disable all output discharge bits */
 			wm8990_write(codec, WM8990_ANTIPOP1, 0);
 
-			/* Enable VMID SEL = 2x50K Ohm Divider */
-			wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x2);
+			/* Enable outputs */
+			wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x1b00);
 
-			/* Delay 100ms to allow VMID to initially charge */
-			schedule_timeout_interruptible(msecs_to_jiffies(250));
+			schedule_timeout_interruptible(msecs_to_jiffies(50));
 
-			/* Enable VREF (VMID SEL = 2x50K Ohm Divider */
+			/* Enable VMID at 2x50k */
+			wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x1f02);
+
+			schedule_timeout_interruptible(msecs_to_jiffies(100));
+
+			/* Enable VREF */
+			wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x1f03);
+
+			schedule_timeout_interruptible(msecs_to_jiffies(600));
+
+			/* Enable BUFIOEN */
+			wm8990_write(codec, WM8990_ANTIPOP2, WM8990_SOFTST |
+				     WM8990_BUFDCOPEN | WM8990_POBCTRL |
+				     WM8990_BUFIOEN);
+
+			/* Disable outputs */
 			wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x3);
 
 			/* disable POBCTRL, SOFT_ST and BUFDCOPEN */
-			wm8990_write(codec, WM8990_ANTIPOP2, 0x0);
+			wm8990_write(codec, WM8990_ANTIPOP2, WM8990_BUFIOEN);
 		} else {
 			/* ON -> standby */
 
 		}
 		break;
 
-	case SND_SOC_BIAS_OFF:
+	case SND_SOC_BIAS_OFF:	
+               /* Enable POBCTRL and SOFT_ST */
+               wm8990_write(codec, WM8990_ANTIPOP2, WM8990_SOFTST |
+			WM8990_POBCTRL | WM8990_BUFIOEN);
+
 		/* Enable POBCTRL, SOFT_ST and BUFDCOPEN */
 		wm8990_write(codec, WM8990_ANTIPOP2, WM8990_SOFTST |
-			WM8990_BUFDCOPEN | WM8990_POBCTRL);
+			WM8990_BUFDCOPEN | WM8990_POBCTRL |
+			WM8990_BUFIOEN);
 
 		/* mute DAC */
 		val = wm8990_read_reg_cache(codec, WM8990_DAC_CTRL);
 		wm8990_write(codec, WM8990_DAC_CTRL, val | WM8990_DAC_MUTE);
 
-		/* Disable VMID SEL = 2x50K Ohm Divider */
-		wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x1);
+		/* Enable any disabled outputs */
+		wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x1f03);
+
+		/* Disable VMID */
+		wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x1f01);
+
+		schedule_timeout_interruptible(msecs_to_jiffies(300));
 
 		/* Enable all output discharge bits */
 		wm8990_write(codec, WM8990_ANTIPOP1, WM8990_DIS_LLINE |
@@ -1289,7 +1318,7 @@ static int wm8990_set_bias_level(struct snd_soc_codec *codec,
 			WM8990_DIS_OUT4 | WM8990_DIS_LOUT |
 			WM8990_DIS_ROUT);
 
-		/* Disable VREF (VMID SEL = 2x50K Ohm Divider */
+		/* Disable VREF */
 		wm8990_write(codec, WM8990_POWER_MANAGEMENT_1, 0x0);
 
 		/* disable POBCTRL, SOFT_ST and BUFDCOPEN */
