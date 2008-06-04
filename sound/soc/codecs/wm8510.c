@@ -363,7 +363,7 @@ static int wm8510_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 		reg = wm8510_read_reg_cache(codec, WM8510_CLOCK);
 		wm8510_write(codec, WM8510_CLOCK, reg & 0x0ff);
 
-                /* Turn off PLL */
+		/* Turn off PLL */
 		reg = wm8510_read_reg_cache(codec, WM8510_POWER1);
 		wm8510_write(codec, WM8510_POWER1, reg & 0x1df);
 		return 0;
