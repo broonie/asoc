@@ -643,7 +643,7 @@ static int wm8510_init(struct snd_soc_device *socdev)
 	codec->set_bias_level = wm8510_set_bias_level;
 	codec->dai = &wm8510_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(wm8510_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8510_reg);
 	codec->reg_cache = kmemdup(wm8510_reg, sizeof(wm8510_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)
