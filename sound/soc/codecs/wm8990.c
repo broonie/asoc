@@ -63,69 +63,69 @@ struct wm8990_priv {
  * cache.
  */
 static const u16 wm8990_reg[] = {
-    /*0x8990,*/     /* R0  - Reset */
-    0x0000,     /* R1  - Power Management (1) */
-    0x6000,     /* R2  - Power Management (2) */
-    0x0000,     /* R3  - Power Management (3) */
-    0x4050,     /* R4  - Audio Interface (1) */
-    0x4000,     /* R5  - Audio Interface (2) */
-    0x01C8,     /* R6  - Clocking (1) */
-    0x0000,     /* R7  - Clocking (2) */
-    0x0040,     /* R8  - Audio Interface (3) */
-    0x0040,     /* R9  - Audio Interface (4) */
-    0x0004,     /* R10 - DAC CTRL */
-    0x00C0,     /* R11 - Left DAC Digital Volume */
-    0x00C0,     /* R12 - Right DAC Digital Volume */
-    0x0000,     /* R13 - Digital Side Tone */
-    0x0100,     /* R14 - ADC CTRL */
-    0x00C0,     /* R15 - Left ADC Digital Volume */
-    0x00C0,     /* R16 - Right ADC Digital Volume */
-    0x0000,     /* R17 */
-    0x0000,     /* R18 - GPIO CTRL 1 */
-    0x1000,     /* R19 - GPIO1 & GPIO2 */
-    0x1010,     /* R20 - GPIO3 & GPIO4 */
-    0x1010,     /* R21 - GPIO5 & GPIO6 */
-    0x8000,     /* R22 - GPIOCTRL 2 */
-    0x0800,     /* R23 - GPIO_POL */
-    0x008B,     /* R24 - Left Line Input 1&2 Volume */
-    0x008B,     /* R25 - Left Line Input 3&4 Volume */
-    0x008B,     /* R26 - Right Line Input 1&2 Volume */
-    0x008B,     /* R27 - Right Line Input 3&4 Volume */
-    0x0000,     /* R28 - Left Output Volume */
-    0x0000,     /* R29 - Right Output Volume */
-    0x0066,     /* R30 - Line Outputs Volume */
-    0x0022,     /* R31 - Out3/4 Volume */
-    0x0079,     /* R32 - Left OPGA Volume */
-    0x0079,     /* R33 - Right OPGA Volume */
-    0x0003,     /* R34 - Speaker Volume */
-    0x0003,     /* R35 - ClassD1 */
-    0x0000,     /* R36 */
-    0x0100,     /* R37 - ClassD3 */
-    0x0000,     /* R38 */
-    0x0000,     /* R39 - Input Mixer1 */
-    0x0000,     /* R40 - Input Mixer2 */
-    0x0000,     /* R41 - Input Mixer3 */
-    0x0000,     /* R42 - Input Mixer4 */
-    0x0000,     /* R43 - Input Mixer5 */
-    0x0000,     /* R44 - Input Mixer6 */
-    0x0000,     /* R45 - Output Mixer1 */
-    0x0000,     /* R46 - Output Mixer2 */
-    0x0000,     /* R47 - Output Mixer3 */
-    0x0000,     /* R48 - Output Mixer4 */
-    0x0000,     /* R49 - Output Mixer5 */
-    0x0000,     /* R50 - Output Mixer6 */
-    0x0180,     /* R51 - Out3/4 Mixer */
-    0x0000,     /* R52 - Line Mixer1 */
-    0x0000,     /* R53 - Line Mixer2 */
-    0x0000,     /* R54 - Speaker Mixer */
-    0x0000,     /* R55 - Additional Control */
-    0x0000,     /* R56 - AntiPOP1 */
-    0x0000,     /* R57 - AntiPOP2 */
-    0x0000,     /* R58 - MICBIAS */
-    0x0000,     /* R59 */
-    0x0008,     /* R60 - PLL1 */
-    0x0031,     /* R61 - PLL2 */
-    0x0026,     /* R62 - PLL3 */
+	0x8990,     /* R0  - Reset */
+	0x0000,     /* R1  - Power Management (1) */
+	0x6000,     /* R2  - Power Management (2) */
+	0x0000,     /* R3  - Power Management (3) */
+	0x4050,     /* R4  - Audio Interface (1) */
+	0x4000,     /* R5  - Audio Interface (2) */
+	0x01C8,     /* R6  - Clocking (1) */
+	0x0000,     /* R7  - Clocking (2) */
+	0x0040,     /* R8  - Audio Interface (3) */
+	0x0040,     /* R9  - Audio Interface (4) */
+	0x0004,     /* R10 - DAC CTRL */
+	0x00C0,     /* R11 - Left DAC Digital Volume */
+	0x00C0,     /* R12 - Right DAC Digital Volume */
+	0x0000,     /* R13 - Digital Side Tone */
+	0x0100,     /* R14 - ADC CTRL */
+	0x00C0,     /* R15 - Left ADC Digital Volume */
+	0x00C0,     /* R16 - Right ADC Digital Volume */
+	0x0000,     /* R17 */
+	0x0000,     /* R18 - GPIO CTRL 1 */
+	0x1000,     /* R19 - GPIO1 & GPIO2 */
+	0x1010,     /* R20 - GPIO3 & GPIO4 */
+	0x1010,     /* R21 - GPIO5 & GPIO6 */
+	0x8000,     /* R22 - GPIOCTRL 2 */
+	0x0800,     /* R23 - GPIO_POL */
+	0x008B,     /* R24 - Left Line Input 1&2 Volume */
+	0x008B,     /* R25 - Left Line Input 3&4 Volume */
+	0x008B,     /* R26 - Right Line Input 1&2 Volume */
+	0x008B,     /* R27 - Right Line Input 3&4 Volume */
+	0x0000,     /* R28 - Left Output Volume */
+	0x0000,     /* R29 - Right Output Volume */
+	0x0066,     /* R30 - Line Outputs Volume */
+	0x0022,     /* R31 - Out3/4 Volume */
+	0x0079,     /* R32 - Left OPGA Volume */
+	0x0079,     /* R33 - Right OPGA Volume */
+	0x0003,     /* R34 - Speaker Volume */
+	0x0003,     /* R35 - ClassD1 */
+	0x0000,     /* R36 */
+	0x0100,     /* R37 - ClassD3 */
+	0x0000,     /* R38 */
+	0x0000,     /* R39 - Input Mixer1 */
+	0x0000,     /* R40 - Input Mixer2 */
+	0x0000,     /* R41 - Input Mixer3 */
+	0x0000,     /* R42 - Input Mixer4 */
+	0x0000,     /* R43 - Input Mixer5 */
+	0x0000,     /* R44 - Input Mixer6 */
+	0x0000,     /* R45 - Output Mixer1 */
+	0x0000,     /* R46 - Output Mixer2 */
+	0x0000,     /* R47 - Output Mixer3 */
+	0x0000,     /* R48 - Output Mixer4 */
+	0x0000,     /* R49 - Output Mixer5 */
+	0x0000,     /* R50 - Output Mixer6 */
+	0x0180,     /* R51 - Out3/4 Mixer */
+	0x0000,     /* R52 - Line Mixer1 */
+	0x0000,     /* R53 - Line Mixer2 */
+	0x0000,     /* R54 - Speaker Mixer */
+	0x0000,     /* R55 - Additional Control */
+	0x0000,     /* R56 - AntiPOP1 */
+	0x0000,     /* R57 - AntiPOP2 */
+	0x0000,     /* R58 - MICBIAS */
+	0x0000,     /* R59 */
+	0x0008,     /* R60 - PLL1 */
+	0x0031,     /* R61 - PLL2 */
+	0x0026,     /* R62 - PLL3 */
 };
 
 /*
@@ -135,8 +135,8 @@ static inline unsigned int wm8990_read_reg_cache(struct snd_soc_codec *codec,
 	unsigned int reg)
 {
 	u16 *cache = codec->reg_cache;
-	BUG_ON(reg < 1 || reg > (ARRAY_SIZE(wm8990_reg) + 1));
-	return cache[reg - 1];
+	BUG_ON(reg > (ARRAY_SIZE(wm8990_reg)) - 1);
+	return cache[reg];
 }
 
 /*
@@ -146,8 +146,13 @@ static inline void wm8990_write_reg_cache(struct snd_soc_codec *codec,
 	unsigned int reg, unsigned int value)
 {
 	u16 *cache = codec->reg_cache;
-	BUG_ON(reg < 1 || reg > (ARRAY_SIZE(wm8990_reg) + 1));
-	cache[reg - 1] = value;
+	BUG_ON(reg > (ARRAY_SIZE(wm8990_reg)) - 1);
+
+	/* Reset register is uncached */
+	if (reg == 0)
+		return;
+
+	cache[reg] = value;
 }
 
 /*
@@ -162,8 +167,8 @@ static int wm8990_write(struct snd_soc_codec *codec, unsigned int reg,
 	data[1] = (value >> 8) & 0xFF;
 	data[2] = value & 0xFF;
 
-	if (reg != 0)
-		wm8990_write_reg_cache(codec, reg, value);
+	wm8990_write_reg_cache(codec, reg, value);
+
 	if (codec->hw_write(codec->control_data, data, 3) == 2)
 		return 0;
 	else
@@ -1426,7 +1431,7 @@ static int wm8990_init(struct snd_soc_device *socdev)
 	codec->set_bias_level = wm8990_set_bias_level;
 	codec->dai = &wm8990_dai;
 	codec->num_dai = 2;
-	codec->reg_cache_size = sizeof(wm8990_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8990_reg);
 	codec->reg_cache = kmemdup(wm8990_reg, sizeof(wm8990_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)
