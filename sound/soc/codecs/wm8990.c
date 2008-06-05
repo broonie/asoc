@@ -31,7 +31,7 @@
 #include "wm8990.h"
 
 #define AUDIO_NAME "wm8990"
-#define WM8990_VERSION "0.1"
+#define WM8990_VERSION "0.2"
 
 /*
  * Debug
