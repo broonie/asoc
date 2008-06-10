@@ -568,7 +568,7 @@ static int wm8950_init(struct snd_soc_device *socdev)
 	codec->set_bias_level = wm8950_set_bias_level;
 	codec->dai = &wm8950_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(wm8950_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8950_reg);
 	codec->reg_cache = kmemdup(wm8950_reg, sizeof(wm8950_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)

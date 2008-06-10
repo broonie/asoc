@@ -493,7 +493,7 @@ static int wm8956_init(struct snd_soc_device *socdev)
 	codec->set_bias_level = wm8956_set_bias_level;
 	codec->dai = &wm8956_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(wm8956_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8956_reg);
 	codec->reg_cache = kmemdup(wm8956_reg, sizeof(wm8956_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)

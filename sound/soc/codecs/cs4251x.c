@@ -536,7 +536,7 @@ static int cs_init(struct snd_soc_device *socdev)
 	codec->dapm_event = cs_dapm_event;
 	codec->dai = &cs4251x_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(cs4251x_regcache);
+	codec->reg_cache_size = ARRAY_SIZE(cs4251x_regcache);
 	codec->reg_cache = kzalloc(sizeof(cs4251x_regcache), GFP_KERNEL);
 	if (!codec->reg_cache)
 		return -ENOMEM;

@@ -659,7 +659,7 @@ static int wm8974_init(struct snd_soc_device *socdev)
 	codec->set_bias_level = wm8974_set_bias_level;
 	codec->dai = &wm8974_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(wm8974_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8974_reg);
 	codec->reg_cache = kmemdup(wm8974_reg, sizeof(wm8974_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)

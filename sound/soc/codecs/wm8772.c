@@ -478,7 +478,7 @@ static int wm8772_init(struct snd_soc_device *socdev)
 	codec->set_bias_level = wm8772_set_bias_level;
 	codec->dai = wm8772_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(wm8772_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8772_reg);
 	codec->reg_cache = kmemdup(wm8772_reg, sizeof(wm8772_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)

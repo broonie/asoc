@@ -505,7 +505,7 @@ static int ak4535_init(struct snd_soc_device *socdev)
 	codec->set_bias_level = ak4535_set_bias_level;
 	codec->dai = &ak4535_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(ak4535_reg);
+	codec->reg_cache_size = ARRAY_SIZE(ak4535_reg);
 	codec->reg_cache = kmemdup(ak4535_reg, sizeof(ak4535_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)
