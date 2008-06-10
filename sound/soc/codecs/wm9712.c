@@ -663,8 +663,8 @@ static int wm9712_soc_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto cache_err;
 	}
-	codec->reg_cache_size = sizeof(wm9712_reg);
-	codec->reg_cache_step = 2;
+	codec->reg_cache_size = ARRAY_SIZE(wm9712_reg);
+	codec->reg_cache_step = 1;
 
 	codec->name = "WM9712";
 	codec->owner = THIS_MODULE;

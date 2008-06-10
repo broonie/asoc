@@ -1191,8 +1191,8 @@ static int wm9713_soc_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto cache_err;
 	}
-	codec->reg_cache_size = sizeof(wm9713_reg);
-	codec->reg_cache_step = 2;
+	codec->reg_cache_size = ARRAY_SIZE(wm9713_reg);
+	codec->reg_cache_step = 1;
 
 	codec->private_data = kzalloc(sizeof(struct wm9713_priv), GFP_KERNEL);
 	if (codec->private_data == NULL) {
