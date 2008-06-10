@@ -2,6 +2,7 @@ config SND_SOC_ALL_CODECS
 	tristate "Build all ASoC codec drivers"
 	depends on SND_SOC && EXPERIMENTAL
 	select I2C
+	select SND_AC97_CODEC
 	select SND_SOC_AC97_CODEC
 	select SND_SOC_AD1939
 	select SND_SOC_AD1980
