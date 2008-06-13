@@ -378,28 +378,25 @@ static int wm8772_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int wm8772_dapm_event(struct snd_soc_codec *codec, int event)
+static int wm8772_set_bias_level(struct snd_soc_codec *codec,
+	enum snd_soc_bias_level level)
 {
 	u16 master = wm8772_read_reg_cache(codec, WM8772_DACRATE) & 0xffe0;
 
-	switch (event) {
-		case SNDRV_CTL_POWER_D0: /* full On */
-			/* vref/mid, clk and osc on, dac unmute, active */
-			wm8772_write(codec, WM8772_DACRATE, master);
-			break;
-		case SNDRV_CTL_POWER_D1: /* partial On */
-		case SNDRV_CTL_POWER_D2: /* partial On */
-			break;
-		case SNDRV_CTL_POWER_D3hot: /* Off, with power */
-			/* everything off except vref/vmid, dac mute, inactive */
-			wm8772_write(codec, WM8772_DACRATE, master | 0x0f);
-			break;
-		case SNDRV_CTL_POWER_D3cold: /* Off, without power */
-			/* everything off, dac mute, inactive */
-			wm8772_write(codec, WM8772_DACRATE, master | 0x1f);
-			break;
+	switch (level) {
+	case SND_SOC_BIAS_ON:
+		wm8772_write(codec, WM8772_DACRATE, master);
+		break;
+	case SND_SOC_BIAS_PREPARE:
+		break;
+	case SND_SOC_BIAS_STANDBY:
+		wm8772_write(codec, WM8772_DACRATE, master | 0x0f);
+		break;
+	case SND_SOC_BIAS_OFF:
+		wm8772_write(codec, WM8772_DACRATE, master | 0x1f);
+		break;
 	}
-	codec->dapm_state = event;
+	codec->bias_level = level;
 	return 0;
 }
 
@@ -442,7 +439,7 @@ static int wm8772_suspend(struct platform_device *pdev, pm_message_t state)
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->codec;
 
-	wm8772_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+	wm8772_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
 }
 
@@ -460,8 +457,8 @@ static int wm8772_resume(struct platform_device *pdev)
 		data[1] = cache[i] & 0x00ff;
 		codec->hw_write(codec->control_data, data, 2);
 	}
-	wm8772_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
-	wm8772_dapm_event(codec, codec->suspend_dapm_state);
+	wm8772_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	wm8772_set_bias_level(codec, codec->suspend_bias_level);
 	return 0;
 }
 
@@ -478,10 +475,10 @@ static int wm8772_init(struct snd_soc_device *socdev)
 	codec->owner = THIS_MODULE;
 	codec->read = wm8772_read_reg_cache;
 	codec->write = wm8772_write;
-	codec->dapm_event = wm8772_dapm_event;
+	codec->set_bias_level = wm8772_set_bias_level;
 	codec->dai = wm8772_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(wm8772_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8772_reg);
 	codec->reg_cache = kmemdup(wm8772_reg, sizeof(wm8772_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)
@@ -497,7 +494,7 @@ static int wm8772_init(struct snd_soc_device *socdev)
 	}
 
 	/* power on device */
-	wm8772_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	wm8772_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	/* set the update bits */
 	reg = wm8772_read_reg_cache(codec, WM8772_MDACVOL);
@@ -575,7 +572,7 @@ static int wm8772_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		wm8772_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		wm8772_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	snd_soc_free_pcms(socdev);
 	kfree(codec->private_data);

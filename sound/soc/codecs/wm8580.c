@@ -767,22 +767,21 @@ static int wm8580_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int wm8580_dapm_event(struct snd_soc_codec *codec, int event)
+static int wm8580_set_bias_level(struct snd_soc_codec *codec,
+	enum snd_soc_bias_level level)
 {
 	u16 reg;
-	switch (event) {
-	case SNDRV_CTL_POWER_D0: /* full On */
-	case SNDRV_CTL_POWER_D1: /* partial On */
-	case SNDRV_CTL_POWER_D2: /* partial On */
+	switch (level) {
+	case SND_SOC_BIAS_ON:
+	case SND_SOC_BIAS_PREPARE:
+	case SND_SOC_BIAS_STANDBY:
 		break;
-	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
-		break;
-	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
+	case SND_SOC_BIAS_OFF:
 		reg = wm8580_read(codec, WM8580_PWRDN1);
 		wm8580_write(codec, WM8580_PWRDN1, reg | WM8580_PWRDN1_PWDN);
 		break;
 	}
-	codec->dapm_state = event;
+	codec->bias_level = level;
 	return 0;
 }
 
@@ -839,13 +838,12 @@ static int wm8580_init(struct snd_soc_device *socdev)
 {
 	struct snd_soc_codec *codec = socdev->codec;
 	int ret = 0;
-	int i;
 
 	codec->name = "WM8580";
 	codec->owner = THIS_MODULE;
 	codec->read = wm8580_read_reg_cache;
 	codec->write = wm8580_write;
-	codec->dapm_event = wm8580_dapm_event;
+	codec->set_bias_level = wm8580_set_bias_level;
 	codec->dai = wm8580_dai;
 	codec->num_dai = ARRAY_SIZE(wm8580_dai);
 	codec->reg_cache_size = ARRAY_SIZE(wm8580_reg);
@@ -974,7 +972,6 @@ static struct i2c_driver wm8580_i2c_driver = {
 		.name = "WM8580 I2C Codec",
 		.owner = THIS_MODULE,
 	},
-	.id =             I2C_DRIVERID_WM8580,
 	.attach_adapter = wm8580_i2c_attach,
 	.detach_client =  wm8580_i2c_detach,
 	.command =        NULL,
@@ -1035,7 +1032,7 @@ static int wm8580_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		wm8580_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		wm8580_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
 #if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)

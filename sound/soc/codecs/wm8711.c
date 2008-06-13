@@ -383,29 +383,26 @@ static int wm8711_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 }
 
 
-static int wm8711_dapm_event(struct snd_soc_codec *codec, int event)
+static int wm8711_set_bias_level(struct snd_soc_codec *codec,
+	enum snd_soc_bias_level level)
 {
 	u16 reg = wm8711_read_reg_cache(codec, WM8711_PWR) & 0xff7f;
 
-	switch (event) {
-	case SNDRV_CTL_POWER_D0: /* full On */
-		/* vref/mid, osc on, dac unmute */
+	switch (level) {
+	case SND_SOC_BIAS_ON:
 		wm8711_write(codec, WM8711_PWR, reg);
 		break;
-	case SNDRV_CTL_POWER_D1: /* partial On */
-	case SNDRV_CTL_POWER_D2: /* partial On */
+	case SND_SOC_BIAS_PREPARE:
 		break;
-	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
-		/* everything off except vref/vmid, */
+	case SND_SOC_BIAS_STANDBY:
 		wm8711_write(codec, WM8711_PWR, reg | 0x0040);
 		break;
-	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
-		/* everything off, dac mute, inactive */
+	case SND_SOC_BIAS_OFF:
 		wm8711_write(codec, WM8711_ACTIVE, 0x0);
 		wm8711_write(codec, WM8711_PWR, 0xffff);
 		break;
 	}
-	codec->dapm_state = event;
+	codec->bias_level = level;
 	return 0;
 }
 
@@ -445,7 +442,7 @@ static int wm8711_suspend(struct platform_device *pdev, pm_message_t state)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	wm8711_write(codec, WM8711_ACTIVE, 0x0);
-	wm8711_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+	wm8711_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
 }
 
@@ -463,8 +460,8 @@ static int wm8711_resume(struct platform_device *pdev)
 		data[1] = cache[i] & 0x00ff;
 		codec->hw_write(codec->control_data, data, 2);
 	}
-	wm8711_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
-	wm8711_dapm_event(codec, codec->suspend_dapm_state);
+	wm8711_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	wm8711_set_bias_level(codec, codec->suspend_bias_level);
 	return 0;
 }
 
@@ -481,10 +478,10 @@ static int wm8711_init(struct snd_soc_device *socdev)
 	codec->owner = THIS_MODULE;
 	codec->read = wm8711_read_reg_cache;
 	codec->write = wm8711_write;
-	codec->dapm_event = wm8711_dapm_event;
+	codec->set_bias_level = wm8711_set_bias_level;
 	codec->dai = &wm8711_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(wm8711_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8711_reg);
 	codec->reg_cache = kmemdup(wm8711_reg, sizeof(wm8711_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)
@@ -500,7 +497,7 @@ static int wm8711_init(struct snd_soc_device *socdev)
 	}
 
 	/* power on device */
-	wm8711_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	wm8711_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	/* set the update bits */
 	reg = wm8711_read_reg_cache(codec, WM8711_LOUT1V);
@@ -673,7 +670,7 @@ static int wm8711_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		wm8711_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		wm8711_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);

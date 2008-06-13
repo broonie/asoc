@@ -12,11 +12,6 @@
  *  under  the terms of  the GNU General  Public License as published by the
  *  Free Software Foundation;  either version 2 of the  License, or (at your
  *  option) any later version.
- *
- *
- *  Revision history
- *    11th Dec 2006   Merged with Simtec driver
- *    10th Nov 2006   Initial version.
  */
 
 #include <linux/init.h>
@@ -382,7 +377,8 @@ u32 s3c24xx_i2s_get_clockrate(void)
 }
 EXPORT_SYMBOL_GPL(s3c24xx_i2s_get_clockrate);
 
-static int s3c24xx_i2s_probe(struct platform_device *pdev)
+static int s3c24xx_i2s_probe(struct platform_device *pdev,
+			     struct snd_soc_cpu_dai *dai)
 {
 	DBG("Entered %s\n", __func__);
 

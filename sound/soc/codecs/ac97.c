@@ -10,9 +10,6 @@
  *  Free Software Foundation;  either version 2 of the  License, or (at your
  *  option) any later version.
  *
- *  Revision history
- *    17th Oct 2005   Initial version.
- *
  * Generic AC97 support.
  */
 
@@ -24,6 +21,7 @@
 #include <sound/ac97_codec.h>
 #include <sound/initval.h>
 #include <sound/soc.h>
+#include "ac97.h"
 
 #define AC97_VERSION "0.6"
 

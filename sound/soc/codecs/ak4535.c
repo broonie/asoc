@@ -19,7 +19,6 @@
 #include <linux/pm.h>
 #include <linux/i2c.h>
 #include <linux/platform_device.h>
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -270,7 +269,7 @@ static const struct snd_soc_dapm_widget ak4535_dapm_widgets[] = {
 	SND_SOC_DAPM_INPUT("AIN"),
 };
 
-static const char *audio_map[][3] = {
+static const struct snd_soc_dapm_route audio_map[] = {
 	/*stereo mixer */
 	{"Stereo Mixer", "Playback Switch", "DAC"},
 	{"Stereo Mixer", "Mic Sidetone Switch", "Mic"},
@@ -325,22 +324,14 @@ static const char *audio_map[][3] = {
 	{"ADC", NULL, "Input Mixer"},
 	{"Input Mixer", "Mic Capture Switch", "Mic"},
 	{"Input Mixer", "Aux Capture Switch", "Aux In"},
-
-	/* terminator */
-	{NULL, NULL, NULL},
 };
 
 static int ak4535_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
+	snd_soc_dapm_new_controls(codec, ak4535_dapm_widgets,
+				  ARRAY_SIZE(ak4535_dapm_widgets));
 
-	for (i = 0; i < ARRAY_SIZE(ak4535_dapm_widgets); i++)
-		snd_soc_dapm_new_control(codec, &ak4535_dapm_widgets[i]);
-
-	/* set up audio path audio_map interconnects */
-	for (i = 0; audio_map[i][0] != NULL; i++)
-		snd_soc_dapm_connect_input(codec, audio_map[i][0],
-			audio_map[i][1], audio_map[i][2]);
+	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;
@@ -422,32 +413,30 @@ static int ak4535_mute(struct snd_soc_codec_dai *dai, int mute)
 	return 0;
 }
 
-static int ak4535_dapm_event(struct snd_soc_codec *codec, int event)
+static int ak4535_set_bias_level(struct snd_soc_codec *codec,
+	enum snd_soc_bias_level level)
 {
 	u16 i;
 
-	switch (event) {
-	case SNDRV_CTL_POWER_D0: /* full On */
+	switch (level) {
+	case SND_SOC_BIAS_ON:
 		ak4535_mute(codec->dai, 0);
-	/* vref/mid, clk and osc on, dac unmute, active */
-	case SNDRV_CTL_POWER_D1: /* partial On */
-	case SNDRV_CTL_POWER_D2: /* partial On */
+		break;
+	case SND_SOC_BIAS_PREPARE:
 		ak4535_mute(codec->dai, 1);
 		break;
-	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
-		/* everything off except vref/vmid, dac mute, inactive */
+	case SND_SOC_BIAS_STANDBY:
 		i = ak4535_read_reg_cache(codec, AK4535_PM1);
 		ak4535_write(codec, AK4535_PM1, i|0x80);
 		i = ak4535_read_reg_cache(codec, AK4535_PM2);
 		ak4535_write(codec, AK4535_PM2, i & (~0x80));
 		break;
-	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
-		/* everything off, inactive */
+	case SND_SOC_BIAS_OFF:
 		i = ak4535_read_reg_cache(codec, AK4535_PM1);
 		ak4535_write(codec, AK4535_PM1, i & (~0x80));
 		break;
 	}
-	codec->dapm_state = event;
+	codec->bias_level = level;
 	ak4535dbg_dump(codec);
 	return 0;
 }
@@ -486,7 +475,7 @@ static int ak4535_suspend(struct platform_device *pdev, pm_message_t state)
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->codec;
 
-	ak4535_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+	ak4535_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
 }
 
@@ -495,8 +484,8 @@ static int ak4535_resume(struct platform_device *pdev)
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->codec;
 	ak4535_sync(codec);
-	ak4535_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
-	ak4535_dapm_event(codec, codec->suspend_dapm_state);
+	ak4535_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	ak4535_set_bias_level(codec, codec->suspend_bias_level);
 	return 0;
 }
 
@@ -513,10 +502,10 @@ static int ak4535_init(struct snd_soc_device *socdev)
 	codec->owner = THIS_MODULE;
 	codec->read = ak4535_read_reg_cache;
 	codec->write = ak4535_write;
-	codec->dapm_event = ak4535_dapm_event;
+	codec->set_bias_level = ak4535_set_bias_level;
 	codec->dai = &ak4535_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(ak4535_reg);
+	codec->reg_cache_size = ARRAY_SIZE(ak4535_reg);
 	codec->reg_cache = kmemdup(ak4535_reg, sizeof(ak4535_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)
@@ -530,7 +519,7 @@ static int ak4535_init(struct snd_soc_device *socdev)
 	}
 
 	/* power on device */
-	ak4535_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	ak4535_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	ak4535_add_controls(codec);
 	ak4535_add_widgets(codec);
@@ -690,7 +679,7 @@ static int ak4535_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		ak4535_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		ak4535_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);

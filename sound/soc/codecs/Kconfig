@@ -1,4 +1,50 @@
+config SND_SOC_ALL_CODECS
+	tristate "Build all ASoC codec drivers"
+	depends on SND_SOC && EXPERIMENTAL
+	select I2C
+	select SND_AC97_CODEC
+	select SND_SOC_AC97_CODEC
+	select SND_SOC_AD1939
+	select SND_SOC_AD1980
+	select SND_SOC_AK4535
+	select SND_SOC_CS4270
+	select SND_SOC_TLV320AICX
+	select SND_SOC_UDA1380
+	select SND_SOC_WM8510
+	select SND_SOC_WM8580
+	select SND_SOC_WM8711
+	select SND_SOC_WM8750
+	select SND_SOC_WM8753
+	select SND_SOC_WM8772
+	select SND_SOC_WM8900
+	select SND_SOC_WM8950
+	select SND_SOC_WM8951
+	select SND_SOC_WM8956
+	select SND_SOC_WM8971
+	select SND_SOC_WM8974
+	select SND_SOC_WM8976
+	select SND_SOC_WM8980
+	select SND_SOC_WM8990
+	select SND_SOC_WM8991
+	select SND_SOC_WM9712
+	select SND_SOC_WM9713
+	help
+	  Normally ASoC codec drivers are only built if a machine driver which
+          uses them is also built since they are only usable with a machine
+          driver.  Selecting this option will allow these drivers to be built
+	  anyway for test and development purposes.
+
+          If unsure select "N".
+
 config SND_SOC_AC97_CODEC
+	tristate
+	depends on SND_SOC
+
+config SND_SOC_AD1939
+	tristate
+	depends on SND_SOC
+
+config SND_SOC_AD1980
 	tristate
 	depends on SND_SOC
 
@@ -32,15 +78,15 @@ config SND_SOC_WM8711
 
 config SND_SOC_WM8731
 	tristate
-	depends on SND_SOC
+	depends on SND_SOC && I2C
 
 config SND_SOC_WM8750
 	tristate
-	depends on SND_SOC
+	depends on SND_SOC && I2C
 
 config SND_SOC_WM8753
 	tristate
-	depends on SND_SOC
+	depends on SND_SOC && I2C
 
 config SND_SOC_WM8772
 	tristate
@@ -83,6 +129,10 @@ config SND_SOC_WM8978
 	depends on SND_SOC
 
 config SND_SOC_WM8980
+	tristate
+	depends on SND_SOC
+
+config SND_SOC_WM8990
 	tristate
 	depends on SND_SOC
 

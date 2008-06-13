@@ -62,10 +62,10 @@
 #define WM8960_CLASSD1		0x31
 
 #define WM8960_CLASSD3		0x33
-#define WM8960_PLLN		0x34
-#define WM8960_PLLK1		0x35
-#define WM8960_PLLK2		0x36
-#define WM8960_PLLK3		0x37
+#define WM8960_PLL1		0x34
+#define WM8960_PLL2		0x35
+#define WM8960_PLL3		0x36
+#define WM8960_PLL4		0x37
 
 
 /*

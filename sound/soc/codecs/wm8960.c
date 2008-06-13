@@ -25,7 +25,7 @@
 #include "wm8960.h"
 
 #define AUDIO_NAME "wm8960"
-#define WM8960_VERSION "0.1"
+#define WM8960_VERSION "0.2"
 
 /*
  * Debug
@@ -94,6 +94,12 @@ static inline void wm8960_write_reg_cache(struct snd_soc_codec *codec,
 	if (reg >= WM8960_CACHEREGNUM)
 		return;
 	cache[reg] = value;
+}
+
+static inline unsigned int wm8960_read(struct snd_soc_codec *codec,
+	unsigned int reg)
+{
+	return wm8960_read_reg_cache(codec, reg);
 }
 
 /*
@@ -291,7 +297,7 @@ static int wm8960_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
 	struct snd_soc_codec *codec = socdev->codec;
-	u16 iface = wm8960_read_reg_cache(codec, WM8960_IFACE1) & 0xfff3;
+	u16 iface = wm8960_read(codec, WM8960_IFACE1) & 0xfff3;
 
 	/* bit size */
 	switch (params_format(params)) {
@@ -313,7 +319,7 @@ static int wm8960_hw_params(struct snd_pcm_substream *substream,
 static int wm8960_mute(struct snd_soc_codec_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
-	u16 mute_reg = wm8960_read_reg_cache(codec, WM8960_DACCTL1) & 0xfff7;
+	u16 mute_reg = wm8960_read(codec, WM8960_DACCTL1) & 0xfff7;
 
 	if (mute)
 		wm8960_write(codec, WM8960_DACCTL1, mute_reg | 0x8);
@@ -324,26 +330,36 @@ static int wm8960_mute(struct snd_soc_codec_dai *dai, int mute)
 
 static int wm8960_dapm_event(struct snd_soc_codec *codec, int event)
 {
-#if 0
+	u16 power1 = wm8960_read(codec, WM8960_POWER1);
+	u16 power2 = wm8960_read(codec, WM8960_POWER2);
+
 	switch (event) {
 	case SNDRV_CTL_POWER_D0: /* full On */
-		/* vref/mid, osc on, dac unmute */
-
+		power1 &= ~0x180;
+		power1 |= 0xc0;
 		break;
 	case SNDRV_CTL_POWER_D1: /* partial On */
 	case SNDRV_CTL_POWER_D2: /* partial On */
 		break;
 	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
 		/* everything off except vref/vmid, */
+		power1 &= ~0x180;
+		power1 |= 0x140;
+		wm8960_write(codec, WM8960_ADDCTL1,
+			     wm8960_read(codec, WM8960_ADDCTL1) | 1);
 		break;
 	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
 		/* everything off, dac mute, inactive */
-		break;
+		wm8960_write(codec, WM8960_APOP1, 0x94);
+		wm8960_write(codec, WM8960_POWER1, power1 & ~0x1c0);
+		mdelay(600);  /* Ensure HP output has discharged */
+		wm8960_write(codec, WM8960_ADDCTL1,
+			     wm8960_read(codec, WM8960_ADDCTL1) & ~1);
+		return 0;
 	}
-#endif
 
-	wm8960_write(codec, WM8960_POWER1, 0xfffe);
-	wm8960_write(codec, WM8960_POWER2, 0xffff);
+	wm8960_write(codec, WM8960_POWER1, power1 | 0x03e);
+	wm8960_write(codec, WM8960_POWER2, power2 | 0x1fe);
 	wm8960_write(codec, WM8960_POWER3, 0xffff);
 	codec->dapm_state = event;
 	return 0;
@@ -356,30 +372,35 @@ struct _pll_div {
 	u32 k:24;
 };
 
-static struct _pll_div pll_div;
-
 /* The size in bits of the pll divide multiplied by 10
  * to allow rounding later */
 #define FIXED_PLL_SIZE ((1 << 24) * 10)
 
-static void pll_factors(unsigned int target, unsigned int source)
+static int pll_factors(unsigned int source, unsigned int target,
+		       struct _pll_div *pll_div)
 {
 	unsigned long long Kpart;
 	unsigned int K, Ndiv, Nmod;
 
+	pr_debug("WM8960 PLL: setting %dHz->%dHz\n", source, target);
+
+	/* Scale up target to PLL operating frequency */
+	target *= 4;
+
 	Ndiv = target / source;
 	if (Ndiv < 6) {
 		source >>= 1;
-		pll_div.pre_div = 1;
+		pll_div->pre_div = 1;
 		Ndiv = target / source;
 	} else
-		pll_div.pre_div = 0;
+		pll_div->pre_div = 0;
 
-	if ((Ndiv < 6) || (Ndiv > 12))
-		printk(KERN_WARNING
-			"WM8960 N value outwith recommended range! N = %d\n",Ndiv);
+	if ((Ndiv < 6) || (Ndiv > 12)) {
+		pr_err("WM8960 PLL: Unsupported N=%d\n", Ndiv);
+		return -EINVAL;
+	}
 
-	pll_div.n = Ndiv;
+	pll_div->n = Ndiv;
 	Nmod = target % source;
 	Kpart = FIXED_PLL_SIZE * (long long)Nmod;
 
@@ -394,7 +415,12 @@ static void pll_factors(unsigned int target, unsigned int source)
 	/* Move down to proper range now rounding is done */
 	K /= 10;
 
-	pll_div.k = K;
+	pll_div->k = K;
+
+	pr_debug("WM8960 PLL: N=%x K=%x pre_div=%d\n",
+		 pll_div->n, pll_div->k, pll_div->pre_div);
+
+	return 0;
 }
 
 static int wm8960_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
@@ -402,26 +428,41 @@ static int wm8960_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	u16 reg;
-	int found = 0;
-#if 0
-	if (freq_in == 0 || freq_out == 0) {
-		/* disable the pll */
-		/* turn PLL power off */
+	static struct _pll_div pll_div;
+	int ret;
+
+	if (freq_out) {
+		ret = pll_factors(freq_in, freq_out, &pll_div);
+		if (ret != 0)
+			return ret;
 	}
-#endif
 
-	pll_factors(freq_out * 8, freq_in);
+	/* Disable the PLL: even if we are changing the frequency the
+	 * PLL needs to be disabled while we do so. */
+	wm8960_write(codec, WM8960_CLOCK1,
+		     wm8960_read(codec, WM8960_CLOCK1) & ~1);
+	wm8960_write(codec, WM8960_POWER2,
+		     wm8960_read(codec, WM8960_POWER2) & ~1);
 
-	if (!found)
-		return -EINVAL;
+	reg = wm8960_read(codec, WM8960_PLL1) & ~0x3f;
+	reg |= pll_div.pre_div << 4;
+	reg |= pll_div.n;
 
-	reg = wm8960_read_reg_cache(codec, WM8960_PLLN) & 0x1e0;
-	wm8960_write(codec, WM8960_PLLN, reg | (1<<5) | (pll_div.pre_div << 4)
-		| pll_div.n);
-	wm8960_write(codec, WM8960_PLLK1, pll_div.k >> 16 );
-	wm8960_write(codec, WM8960_PLLK2, (pll_div.k >> 8) & 0xff);
-	wm8960_write(codec, WM8960_PLLK3, pll_div.k &0xff);
-	wm8960_write(codec, WM8960_CLOCK1, 4);
+	if (pll_div.k) {
+		reg |= 0x20;
+
+		wm8960_write(codec, WM8960_PLL2, (pll_div.k >> 16) & 0x7f);
+		wm8960_write(codec, WM8960_PLL3, (pll_div.k >> 8) & 0xff);
+		wm8960_write(codec, WM8960_PLL4, pll_div.k & 0xff);
+	}
+	wm8960_write(codec, WM8960_PLL1, reg);
+
+	/* Turn it on */
+	wm8960_write(codec, WM8960_POWER2,
+		     wm8960_read(codec, WM8960_POWER2) | 1);
+	msleep(250);
+	wm8960_write(codec, WM8960_CLOCK1,
+		     wm8960_read(codec, WM8960_CLOCK1) | 1);
 
 	return 0;
 }
@@ -434,27 +475,27 @@ static int wm8960_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 
 	switch (div_id) {
 	case WM8960_SYSCLKSEL:
-		reg = wm8960_read_reg_cache(codec, WM8960_CLOCK1) & 0x1fe;
+		reg = wm8960_read(codec, WM8960_CLOCK1) & 0x1fe;
 		wm8960_write(codec, WM8960_CLOCK1, reg | div);
 		break;
 	case WM8960_SYSCLKDIV:
-		reg = wm8960_read_reg_cache(codec, WM8960_CLOCK1) & 0x1f9;
+		reg = wm8960_read(codec, WM8960_CLOCK1) & 0x1f9;
 		wm8960_write(codec, WM8960_CLOCK1, reg | div);
 		break;
 	case WM8960_DACDIV:
-		reg = wm8960_read_reg_cache(codec, WM8960_CLOCK1) & 0x1c7;
+		reg = wm8960_read(codec, WM8960_CLOCK1) & 0x1c7;
 		wm8960_write(codec, WM8960_CLOCK1, reg | div);
 		break;
 	case WM8960_OPCLKDIV:
-		reg = wm8960_read_reg_cache(codec, WM8960_PLLN) & 0x03f;
-		wm8960_write(codec, WM8960_PLLN, reg | div);
+		reg = wm8960_read(codec, WM8960_PLL1) & 0x03f;
+		wm8960_write(codec, WM8960_PLL1, reg | div);
 		break;
 	case WM8960_DCLKDIV:
-		reg = wm8960_read_reg_cache(codec, WM8960_CLOCK2) & 0x03f;
+		reg = wm8960_read(codec, WM8960_CLOCK2) & 0x03f;
 		wm8960_write(codec, WM8960_CLOCK2, reg | div);
 		break;
 	case WM8960_TOCLKSEL:
-		reg = wm8960_read_reg_cache(codec, WM8960_ADDCTL1) & 0x1fd;
+		reg = wm8960_read(codec, WM8960_ADDCTL1) & 0x1fd;
 		wm8960_write(codec, WM8960_ADDCTL1, reg | div);
 		break;
 	default:
@@ -467,7 +508,7 @@ static int wm8960_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 #define WM8960_RATES \
 	(SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 | SNDRV_PCM_RATE_16000 | \
 	SNDRV_PCM_RATE_22050 | SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 | \
-	SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_88200 | SNDRV_PCM_RATE_96000)
+	SNDRV_PCM_RATE_48000)
 
 #define WM8960_FORMATS \
 	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE | \
@@ -540,12 +581,12 @@ static int wm8960_init(struct snd_soc_device *socdev)
 
 	codec->name = "WM8960";
 	codec->owner = THIS_MODULE;
-	codec->read = wm8960_read_reg_cache;
+	codec->read = wm8960_read;
 	codec->write = wm8960_write;
 	codec->dapm_event = wm8960_dapm_event;
 	codec->dai = &wm8960_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(wm8960_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8960_reg);
 	codec->reg_cache = kmemdup(wm8960_reg, sizeof(wm8960_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)
@@ -560,13 +601,23 @@ static int wm8960_init(struct snd_soc_device *socdev)
 		goto pcm_err;
 	}
 
-	/* power on device */
+	/* Initial power on sequence */
+	wm8960_write(codec, WM8960_APOP1, 0x94);
+	wm8960_write(codec, WM8960_APOP2, 0x40);
+	msleep(400);   /* HP output discharge */
+	wm8960_write(codec, WM8960_POWER2, 0x60);
+	wm8960_write(codec, WM8960_APOP2, 0);
+	wm8960_write(codec, WM8960_POWER1, 0x80);
+	msleep(400);   /* VMID initial charge */
+	wm8960_write(codec, WM8960_POWER1, 0x140);
+	wm8960_write(codec, WM8960_APOP1, 0);
+
 	wm8960_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
 
 	/*  set the update bits */
-	reg = wm8960_read_reg_cache(codec, WM8960_LOUT1);
+	reg = wm8960_read(codec, WM8960_LOUT1);
 	wm8960_write(codec, WM8960_LOUT1, reg | 0x0100);
-	reg = wm8960_read_reg_cache(codec, WM8960_ROUT1);
+	reg = wm8960_read(codec, WM8960_ROUT1);
 	wm8960_write(codec, WM8960_ROUT1, reg | 0x0100);
 
 	wm8960_add_controls(codec);

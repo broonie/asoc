@@ -391,29 +391,26 @@ static int wm8951_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int wm8951_dapm_event(struct snd_soc_codec *codec, int event)
+static int wm8951_set_bias_level(struct snd_soc_codec *codec,
+	enum snd_soc_bias_level level)
 {
 	u16 reg = wm8951_read_reg_cache(codec, WM8951_PWR) & 0xff7f;
 
-	switch (event) {
-	case SNDRV_CTL_POWER_D0: /* full On */
-		/* vref/mid, osc on, dac unmute */
+	switch (level) {
+	case SND_SOC_BIAS_ON:
 		wm8951_write(codec, WM8951_PWR, reg);
 		break;
-	case SNDRV_CTL_POWER_D1: /* partial On */
-	case SNDRV_CTL_POWER_D2: /* partial On */
+	case SND_SOC_BIAS_PREPARE:
 		break;
-	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
-		/* everything off except vref/vmid, */
+	case SND_SOC_BIAS_STANDBY:
 		wm8951_write(codec, WM8951_PWR, reg | 0x0040);
 		break;
-	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
-		/* everything off, dac mute, inactive */
+	case SND_SOC_BIAS_OFF:
 		wm8951_write(codec, WM8951_ACTIVE, 0x0);
 		wm8951_write(codec, WM8951_PWR, 0xffff);
 		break;
 	}
-	codec->dapm_state = event;
+	codec->suspend_bias_level = level;
 	return 0;
 }
 
@@ -453,7 +450,7 @@ static int wm8951_suspend(struct platform_device *pdev, pm_message_t state)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	wm8951_write(codec, WM8951_ACTIVE, 0x0);
-	wm8951_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+	wm8951_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
 }
 
@@ -471,8 +468,8 @@ static int wm8951_resume(struct platform_device *pdev)
 		data[1] = cache[i] & 0x00ff;
 		codec->hw_write(codec->control_data, data, 2);
 	}
-	wm8951_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
-	wm8951_dapm_event(codec, codec->suspend_dapm_state);
+	wm8951_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	wm8951_set_bias_level(codec, codec->suspend_bias_level);
 	return 0;
 }
 
@@ -489,10 +486,10 @@ static int wm8951_init(struct snd_soc_device *socdev)
 	codec->owner = THIS_MODULE;
 	codec->read = wm8951_read_reg_cache;
 	codec->write = wm8951_write;
-	codec->dapm_event = wm8951_dapm_event;
+	codec->set_bias_level = wm8951_set_bias_level;
 	codec->dai = &wm8951_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(wm8951_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8951_reg);
 	codec->reg_cache = kmemdup(wm8951_reg, sizeof(wm8951_reg), GFP_KERNEL);
 	if (codec->reg_cache == NULL)
 		return -ENOMEM;
@@ -507,7 +504,7 @@ static int wm8951_init(struct snd_soc_device *socdev)
 	}
 
 	/* power on device */
-	wm8951_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	wm8951_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	/* set the update bits */
 	reg = wm8951_read_reg_cache(codec, WM8951_LINVOL);
@@ -615,7 +612,6 @@ static struct i2c_driver wm8951_i2c_driver = {
 		.name = "WM8951 I2C Codec",
 		.owner = THIS_MODULE,
 	},
-	.id =             I2C_DRIVERID_WM8951,
 	.attach_adapter = wm8951_i2c_attach,
 	.detach_client =  wm8951_i2c_detach,
 	.command =        NULL,
@@ -676,7 +672,7 @@ static int wm8951_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		wm8951_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		wm8951_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);

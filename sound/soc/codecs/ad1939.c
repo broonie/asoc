@@ -32,7 +32,6 @@
 #include <linux/i2c.h>
 #include <linux/platform_device.h>
 #include <linux/workqueue.h>
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -475,7 +474,7 @@ static int ad1939_init(struct snd_soc_device *socdev)
 	codec->dapm_event = ad1939_dapm_event;
 	codec->dai = &ad1939_dai;
 	codec->num_dai = 1;
-	codec->reg_cache_size = sizeof(ad1939_regcache);
+	codec->reg_cache_size = ARRAY_SIZE(ad1939_regcache);
 	codec->reg_cache = kzalloc(sizeof(ad1939_regcache), GFP_KERNEL);
 	if (!codec->reg_cache)
 		return -ENOMEM;

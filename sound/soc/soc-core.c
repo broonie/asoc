@@ -14,10 +14,6 @@
  *  Free Software Foundation;  either version 2 of the  License, or (at your
  *  option) any later version.
  *
- *  Revision history
- *    12th Aug 2005   Initial version.
- *    25th Oct 2005   Working Codec, Interface and Platform registration.
- *
  *  TODO:
  *   o Add hw rules to enforce rates, etc.
  *   o More testing with other codecs/machines.
@@ -287,12 +283,12 @@ static void close_delayed_work(struct work_struct *work)
 		/* are we waiting on this codec DAI stream */
 		if (codec_dai->pop_wait == 1) {
 
-			/* power down the codec to D1 if no longer active */
+			/* Reduce power if no longer active */
 			if (codec->active == 0) {
 				dbg("pop wq D1 %s %s\n", codec->name,
 					codec_dai->playback.stream_name);
-				snd_soc_dapm_device_event(socdev,
-					SNDRV_CTL_POWER_D1);
+				snd_soc_dapm_set_bias_level(socdev,
+					SND_SOC_BIAS_PREPARE);
 			}
 
 			codec_dai->pop_wait = 0;
@@ -300,12 +296,12 @@ static void close_delayed_work(struct work_struct *work)
 				codec_dai->playback.stream_name,
 				SND_SOC_DAPM_STREAM_STOP);
 
-			/* power down the codec power domain if no longer active */
+			/* Fall into standby if no longer active */
 			if (codec->active == 0) {
 				dbg("pop wq D3 %s %s\n", codec->name,
 					codec_dai->playback.stream_name);
-				snd_soc_dapm_device_event(socdev,
-					SNDRV_CTL_POWER_D3hot);
+				snd_soc_dapm_set_bias_level(socdev,
+					SND_SOC_BIAS_STANDBY);
 			}
 		}
 	}
@@ -365,8 +361,8 @@ static int soc_codec_close(struct snd_pcm_substream *substream)
 			SND_SOC_DAPM_STREAM_STOP);
 
 		if (codec->active == 0 && codec_dai->pop_wait == 0)
-			snd_soc_dapm_device_event(socdev,
-						SNDRV_CTL_POWER_D3hot);
+			snd_soc_dapm_set_bias_level(socdev,
+						SND_SOC_BIAS_STANDBY);
 	}
 
 	mutex_unlock(&pcm_mutex);
@@ -439,9 +435,10 @@ static int soc_pcm_prepare(struct snd_pcm_substream *substream)
 		}
 	} else {
 		/* no delayed work - do we need to power up codec */
-		if (codec->dapm_state != SNDRV_CTL_POWER_D0) {
+		if (codec->bias_level != SND_SOC_BIAS_ON) {
 
-			snd_soc_dapm_device_event(socdev,  SNDRV_CTL_POWER_D1);
+			snd_soc_dapm_set_bias_level(socdev,
+						    SND_SOC_BIAS_PREPARE);
 
 			if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 				snd_soc_dapm_stream_event(codec,
@@ -452,7 +449,7 @@ static int soc_pcm_prepare(struct snd_pcm_substream *substream)
 					codec_dai->capture.stream_name,
 					SND_SOC_DAPM_STREAM_START);
 
-			snd_soc_dapm_device_event(socdev, SNDRV_CTL_POWER_D0);
+			snd_soc_dapm_set_bias_level(socdev, SND_SOC_BIAS_ON);
 			if (codec_dai->dai_ops.digital_mute)
 				codec_dai->dai_ops.digital_mute(codec_dai, 0);
 
@@ -662,7 +659,7 @@ static int soc_suspend(struct platform_device *pdev, pm_message_t state)
 
 	/* close any waiting streams and save state */
 	run_delayed_work(&socdev->delayed_work);
-	codec->suspend_dapm_state = codec->dapm_state;
+	codec->suspend_bias_level = codec->bias_level;
 
 	for(i = 0; i < codec->num_dai; i++) {
 		char *stream = codec->dai[i].playback.stream_name;
@@ -760,15 +757,15 @@ static int soc_probe(struct platform_device *pdev)
 
 	if (machine->probe) {
 		ret = machine->probe(pdev);
-		if(ret < 0)
+		if (ret < 0)
 			return ret;
 	}
 
 	for (i = 0; i < machine->num_links; i++) {
 		struct snd_soc_cpu_dai *cpu_dai = machine->dai_link[i].cpu_dai;
 		if (cpu_dai->probe) {
-			ret = cpu_dai->probe(pdev);
-			if(ret < 0)
+			ret = cpu_dai->probe(pdev, cpu_dai);
+			if (ret < 0)
 				goto cpu_dai_err;
 		}
 	}
@@ -797,7 +794,7 @@ cpu_dai_err:
 	for (i--; i >= 0; i--) {
 		struct snd_soc_cpu_dai *cpu_dai = machine->dai_link[i].cpu_dai;
 		if (cpu_dai->remove)
-			cpu_dai->remove(pdev);
+			cpu_dai->remove(pdev, cpu_dai);
 	}
 
 	if (machine->remove)
@@ -826,7 +823,7 @@ static int soc_remove(struct platform_device *pdev)
 	for (i = 0; i < machine->num_links; i++) {
 		struct snd_soc_cpu_dai *cpu_dai = machine->dai_link[i].cpu_dai;
 		if (cpu_dai->remove)
-			cpu_dai->remove(pdev);
+			cpu_dai->remove(pdev, cpu_dai);
 	}
 
 	if (machine->remove)
@@ -1583,6 +1580,78 @@ int snd_soc_put_volsw_2r(struct snd_kcontrol *kcontrol,
 	return err;
 }
 EXPORT_SYMBOL_GPL(snd_soc_put_volsw_2r);
+
+/**
+ * snd_soc_info_volsw_s8 - signed mixer info callback
+ * @kcontrol: mixer control
+ * @uinfo: control element information
+ *
+ * Callback to provide information about a signed mixer control.
+ *
+ * Returns 0 for success.
+ */
+int snd_soc_info_volsw_s8(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_info *uinfo)
+{
+	int max = (signed char)((kcontrol->private_value >> 16) & 0xff);
+	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
+
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 2;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = max-min;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(snd_soc_info_volsw_s8);
+
+/**
+ * snd_soc_get_volsw_s8 - signed mixer get callback
+ * @kcontrol: mixer control
+ * @uinfo: control element information
+ *
+ * Callback to get the value of a signed mixer control.
+ *
+ * Returns 0 for success.
+ */
+int snd_soc_get_volsw_s8(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	int reg = kcontrol->private_value & 0xff;
+	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
+	int val = snd_soc_read(codec, reg);
+
+	ucontrol->value.integer.value[0] =
+		((signed char)(val & 0xff))-min;
+	ucontrol->value.integer.value[1] =
+		((signed char)((val >> 8) & 0xff))-min;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(snd_soc_get_volsw_s8);
+
+/**
+ * snd_soc_put_volsw_sgn - signed mixer put callback
+ * @kcontrol: mixer control
+ * @uinfo: control element information
+ *
+ * Callback to set the value of a signed mixer control.
+ *
+ * Returns 0 for success.
+ */
+int snd_soc_put_volsw_s8(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	int reg = kcontrol->private_value & 0xff;
+	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
+	unsigned short val;
+
+	val = (ucontrol->value.integer.value[0]+min) & 0xff;
+	val |= ((ucontrol->value.integer.value[1]+min) & 0xff) << 8;
+
+	return snd_soc_update_bits(codec, reg, 0xffff, val);
+}
+EXPORT_SYMBOL_GPL(snd_soc_put_volsw_s8);
 
 static int __devinit snd_soc_init(void)
 {

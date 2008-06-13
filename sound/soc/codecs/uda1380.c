@@ -192,79 +192,10 @@ static const struct soc_enum uda1380_sdet_enum =
 static const struct soc_enum uda1380_os_enum =
 	SOC_ENUM_SINGLE(UDA1380_MIXER, 0, 3, uda1380_os_setting);	/* OS */
 
-/**
- * snd_soc_info_volsw - single mixer info callback
- * @kcontrol: mixer control
- * @uinfo: control element information
- *
- * Callback to provide information about a single mixer control.
- *
- * Returns 0 for success.
- */
-int snd_soc_info_volsw_s8(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_info *uinfo)
-{
-	int max = (signed char)((kcontrol->private_value >> 16) & 0xff);
-	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
-
-	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
-	uinfo->count = 2;
-	uinfo->value.integer.min = 0;
-	uinfo->value.integer.max = max-min;
-	return 0;
-}
-
-/**
- * snd_soc_get_volsw_sgn - single mixer get callback
- * @kcontrol: mixer control
- * @uinfo: control element information
- *
- * Callback to get the value of a single mixer control.
- *
- * Returns 0 for success.
- */
-int snd_soc_get_volsw_s8(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	int reg = kcontrol->private_value & 0xff;
-	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
-	int val = snd_soc_read(codec, reg);
-
-	ucontrol->value.integer.value[0] =
-		((signed char)(val & 0xff))-min;
-	ucontrol->value.integer.value[1] =
-		((signed char)((val >> 8) & 0xff))-min;
-	return 0;
-}
-
-/**
- * snd_soc_put_volsw_sgn - single mixer put callback
- * @kcontrol: mixer control
- * @uinfo: control element information
- *
- * Callback to set the value of a single mixer control.
- *
- * Returns 0 for success.
- */
-int snd_soc_put_volsw_s8(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	int reg = kcontrol->private_value & 0xff;
-	int min = (signed char)((kcontrol->private_value >> 24) & 0xff);
-	unsigned short val;
-
-	val = (ucontrol->value.integer.value[0]+min) & 0xff;
-	val |= ((ucontrol->value.integer.value[1]+min) & 0xff) << 8;
-
-	return snd_soc_update_bits(codec, reg, 0xffff, val);
-}
-
 /*
  * from -48 dB in 1.5 dB steps (mute instead of -49.5 dB)
  */
-DECLARE_TLV_DB_SCALE(amix_tlv, -4950, 150, 1);
+static DECLARE_TLV_DB_SCALE(amix_tlv, -4950, 150, 1);
 
 /*
  * from -78 dB in 1 dB steps (3 dB steps, really. LSB are ignored),
@@ -292,25 +223,21 @@ static const unsigned int vc_tlv[] = {
 	44, 228, TLV_DB_SCALE_ITEM(-4600, 25, 0),
 };
 
-DECLARE_TLV_DB_SCALE(tr_tlv, 0, 200, 0);  /* from 0 to 6 dB in 2 dB steps
-					     if SPF mode != flat */
-DECLARE_TLV_DB_SCALE(bb_tlv, 0, 200, 0);  /* from 0 to 24 dB in 2 dB steps,
-					     if SPF mode == maximum, otherwise
-					     cuts off at 18 dB max) */
-DECLARE_TLV_DB_SCALE(dec_tlv, -6400, 50, 1); /* from -63 to 24 dB in 0.5 dB
-						steps (-128...48) */
-DECLARE_TLV_DB_SCALE(pga_tlv, 0, 300, 0); /* from 0 to 24 dB in 3 dB steps */
-DECLARE_TLV_DB_SCALE(vga_tlv, 0, 200, 0); /* from 0 to 30 dB in 2 dB steps */
+/* from 0 to 6 dB in 2 dB steps if SPF mode != flat */
+static DECLARE_TLV_DB_SCALE(tr_tlv, 0, 200, 0);
 
-#define SOC_DOUBLE_S8_TLV(xname, reg, min, max, tlv_array) \
-{	.iface  = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname), \
-	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ | \
-		  SNDRV_CTL_ELEM_ACCESS_READWRITE, \
-	.tlv.p  = (tlv_array), \
-	.info   = snd_soc_info_volsw_s8, .get = snd_soc_get_volsw_s8, \
-	.put    = snd_soc_put_volsw_s8, \
-	.private_value = (reg) | (((signed char)max) << 16) | \
-			 (((signed char)min) << 24) }
+/* from 0 to 24 dB in 2 dB steps, if SPF mode == maximum, otherwise cuts
+ * off at 18 dB max) */
+static DECLARE_TLV_DB_SCALE(bb_tlv, 0, 200, 0);
+
+/* from -63 to 24 dB in 0.5 dB steps (-128...48) */
+static DECLARE_TLV_DB_SCALE(dec_tlv, -6400, 50, 1);
+
+/* from 0 to 24 dB in 3 dB steps */
+static DECLARE_TLV_DB_SCALE(pga_tlv, 0, 300, 0);
+
+/* from 0 to 30 dB in 2 dB steps */
+static DECLARE_TLV_DB_SCALE(vga_tlv, 0, 200, 0);
 
 static const struct snd_kcontrol_new uda1380_snd_controls[] = {
 	SOC_DOUBLE_TLV("Analog Mixer Volume", UDA1380_AMIX, 0, 8, 44, 1, amix_tlv),	/* AVCR, AVCL */
@@ -397,7 +324,7 @@ static const struct snd_soc_dapm_widget uda1380_dapm_widgets[] = {
 	SND_SOC_DAPM_PGA("HeadPhone Driver", UDA1380_PM, 13, 0, NULL, 0),
 };
 
-static const char *audio_map[][3] = {
+static const struct snd_soc_dapm_route audio_map[] = {
 
 	/* output mux */
 	{"HeadPhone Driver", NULL, "Output Mux"},
@@ -432,22 +359,14 @@ static const char *audio_map[][3] = {
 	{"Mic LNA", NULL, "VINM"},
 	{"Left PGA", NULL, "VINL"},
 	{"Right PGA", NULL, "VINR"},
-
-	/* terminator */
-	{NULL, NULL, NULL},
 };
 
 static int uda1380_add_widgets(struct snd_soc_codec *codec)
 {
-	int i;
+	snd_soc_dapm_new_controls(codec, uda1380_dapm_widgets,
+				  ARRAY_SIZE(uda1380_dapm_widgets));
 
-	for (i = 0; i < ARRAY_SIZE(uda1380_dapm_widgets); i++)
-		snd_soc_dapm_new_control(codec, &uda1380_dapm_widgets[i]);
-
-	/* set up audio path interconnects */
-	for (i = 0; audio_map[i][0] != NULL; i++)
-		snd_soc_dapm_connect_input(codec, audio_map[i][0],
-			audio_map[i][1], audio_map[i][2]);
+	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
 
 	snd_soc_dapm_new_widgets(codec);
 	return 0;
@@ -458,8 +377,8 @@ static int uda1380_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	int iface;
-	/* set up DAI based upon fmt */
 
+	/* set up DAI based upon fmt */
 	iface = uda1380_read_reg_cache(codec, UDA1380_IFACE);
 	iface &= ~(R01_SFORI_MASK | R01_SIM | R01_SFORO_MASK);
 
@@ -598,27 +517,24 @@ static int uda1380_mute(struct snd_soc_codec_dai *codec_dai, int mute)
 	return 0;
 }
 
-static int uda1380_dapm_event(struct snd_soc_codec *codec, int event)
+static int uda1380_set_bias_level(struct snd_soc_codec *codec,
+	enum snd_soc_bias_level level)
 {
 	int pm = uda1380_read_reg_cache(codec, UDA1380_PM);
 
-	switch (event) {
-	case SNDRV_CTL_POWER_D0: /* full On */
-	case SNDRV_CTL_POWER_D1: /* partial On */
-	case SNDRV_CTL_POWER_D2: /* partial On */
-		/* enable internal bias */
+	switch (level) {
+	case SND_SOC_BIAS_ON:
+	case SND_SOC_BIAS_PREPARE:
 		uda1380_write(codec, UDA1380_PM, R02_PON_BIAS | pm);
 		break;
-	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
-		/* everything off except internal bias */
+	case SND_SOC_BIAS_STANDBY:
 		uda1380_write(codec, UDA1380_PM, R02_PON_BIAS);
 		break;
-	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
-		/* everything off, inactive */
+	case SND_SOC_BIAS_OFF:
 		uda1380_write(codec, UDA1380_PM, 0x0);
 		break;
 	}
-	codec->dapm_state = event;
+	codec->bias_level = level;
 	return 0;
 }
 
@@ -696,7 +612,7 @@ static int uda1380_suspend(struct platform_device *pdev, pm_message_t state)
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->codec;
 
-	uda1380_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+	uda1380_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
 }
 
@@ -714,8 +630,8 @@ static int uda1380_resume(struct platform_device *pdev)
 		data[1] = cache[i] & 0x00ff;
 		codec->hw_write(codec->control_data, data, 2);
 	}
-	uda1380_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
-	uda1380_dapm_event(codec, codec->suspend_dapm_state);
+	uda1380_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	uda1380_set_bias_level(codec, codec->suspend_bias_level);
 	return 0;
 }
 
@@ -732,14 +648,15 @@ static int uda1380_init(struct snd_soc_device *socdev, int dac_clk)
 	codec->owner = THIS_MODULE;
 	codec->read = uda1380_read_reg_cache;
 	codec->write = uda1380_write;
-	codec->dapm_event = uda1380_dapm_event;
+	codec->set_bias_level = uda1380_set_bias_level;
 	codec->dai = uda1380_dai;
 	codec->num_dai = ARRAY_SIZE(uda1380_dai);
-	codec->reg_cache = kmemdup(uda1380_reg, sizeof(uda1380_reg), GFP_KERNEL);
+	codec->reg_cache = kmemdup(uda1380_reg, sizeof(uda1380_reg),
+				   GFP_KERNEL);
 	if (codec->reg_cache == NULL)
 		return -ENOMEM;
-	codec->reg_cache_size = sizeof(uda1380_reg);
-	codec->reg_cache_step = 2;
+	codec->reg_cache_size = ARRAY_SIZE(uda1380_reg);
+	codec->reg_cache_step = 1;
 	uda1380_reset(codec);
 
 	/* register pcms */
@@ -750,7 +667,7 @@ static int uda1380_init(struct snd_soc_device *socdev, int dac_clk)
 	}
 
 	/* power on device */
-	uda1380_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	uda1380_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	/* set clock input */
 	switch (dac_clk) {
 	case UDA1380_DAC_CLK_SYSCLK:
@@ -782,7 +699,7 @@ pcm_err:
 
 static struct snd_soc_device *uda1380_socdev;
 
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 
 #define I2C_DRIVERID_UDA1380 0xfefe /* liam -  need a proper id */
 
@@ -812,7 +729,7 @@ static int uda1380_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 	client_template.addr = addr;
 
 	i2c = kmemdup(&client_template, sizeof(client_template), GFP_KERNEL);
-	if (i2c == NULL){
+	if (i2c == NULL) {
 		kfree(codec);
 		return -ENOMEM;
 	}
@@ -889,7 +806,7 @@ static int uda1380_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&codec->dapm_paths);
 
 	uda1380_socdev = socdev;
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	if (setup->i2c_address) {
 		normal_i2c[0] = setup->i2c_address;
 		codec->hw_write = (hw_write_t)i2c_master_send;
@@ -910,7 +827,7 @@ static int uda1380_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		uda1380_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		uda1380_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);

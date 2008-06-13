@@ -19,7 +19,6 @@
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/ac97_codec.h>
@@ -221,8 +220,8 @@ static int ad1980_soc_probe(struct platform_device *pdev)
 	}
 	memcpy(codec->reg_cache, ad1980_reg, sizeof(u16) * \
 			ARRAY_SIZE(ad1980_reg));
-	codec->reg_cache_size = sizeof(u16) * ARRAY_SIZE(ad1980_reg);
-	codec->reg_cache_step = 2;
+	codec->reg_cache_size = ARRAY_SIZE(ad1980_reg);
+	codec->reg_cache_step = 1;
 	codec->name = "AD1980";
 	codec->owner = THIS_MODULE;
 	codec->dai = &ad1980_dai;

@@ -600,29 +600,27 @@ static int wm8971_mute(struct snd_soc_codec_dai *dai, int mute)
 	return 0;
 }
 
-static int wm8971_dapm_event(struct snd_soc_codec *codec, int event)
+static int wm8971_set_bias_level(struct snd_soc_codec *codec,
+	enum snd_soc_bias_level level)
 {
 	u16 pwr_reg = wm8971_read_reg_cache(codec, WM8971_PWR1) & 0xfe3e;
 
-	switch (event) {
-	case SNDRV_CTL_POWER_D0: /* full On */
+	switch (level) {
+	case SND_SOC_BIAS_ON:
 		/* set vmid to 50k and unmute dac */
 		wm8971_write(codec, WM8971_PWR1, pwr_reg | 0x00c1);
 		break;
-	case SNDRV_CTL_POWER_D1: /* partial On */
-	case SNDRV_CTL_POWER_D2: /* partial On */
-		/* set vmid to 5k for quick power up */
-		wm8971_write(codec, WM8971_PWR1, pwr_reg | 0x01c0);
+	case SND_SOC_BIAS_PREPARE:
 		break;
-	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
+	case SND_SOC_BIAS_STANDBY:
 		/* mute dac and set vmid to 500k, enable VREF */
 		wm8971_write(codec, WM8971_PWR1, pwr_reg | 0x0140);
 		break;
-	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
+	case SND_SOC_BIAS_OFF:
 		wm8971_write(codec, WM8971_PWR1, 0x0001);
 		break;
 	}
-	codec->dapm_state = event;
+	codec->bias_level = level;
 	return 0;
 }
 
@@ -662,7 +660,7 @@ static void wm8971_work(struct work_struct *work)
 {
 	struct snd_soc_codec *codec =
 		container_of(work, struct snd_soc_codec, delayed_work.work);
-	wm8971_dapm_event(codec, codec->dapm_state);
+	wm8971_set_bias_level(codec, codec->bias_level);
 }
 
 static int wm8971_suspend(struct platform_device *pdev, pm_message_t state)
@@ -670,7 +668,7 @@ static int wm8971_suspend(struct platform_device *pdev, pm_message_t state)
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->codec;
 
-	wm8971_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+	wm8971_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
 }
 
@@ -681,6 +679,7 @@ static int wm8971_resume(struct platform_device *pdev)
 	int i;
 	u8 data[2];
 	u16 *cache = codec->reg_cache;
+	u16 reg;
 
 	/* Sync reg_cache with the hardware */
 	for (i = 0; i < ARRAY_SIZE(wm8971_reg); i++) {
@@ -691,12 +690,13 @@ static int wm8971_resume(struct platform_device *pdev)
 		codec->hw_write(codec->control_data, data, 2);
 	}
 
-	wm8971_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	wm8971_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	/* charge wm8971 caps */
-	if (codec->suspend_dapm_state == SNDRV_CTL_POWER_D0) {
-		wm8971_dapm_event(codec, SNDRV_CTL_POWER_D2);
-		codec->dapm_state = SNDRV_CTL_POWER_D0;
+	if (codec->suspend_bias_level == SND_SOC_BIAS_ON) {
+		reg = wm8971_read_reg_cache(codec, WM8971_PWR1) & 0xfe3e;
+		wm8971_write(codec, WM8971_PWR1, reg | 0x01c0);
+		codec->bias_level = SND_SOC_BIAS_ON;
 		queue_delayed_work(wm8971_workq, &codec->delayed_work,
 			msecs_to_jiffies(1000));
 	}
@@ -713,9 +713,9 @@ static int wm8971_init(struct snd_soc_device *socdev)
 	codec->owner = THIS_MODULE;
 	codec->read = wm8971_read_reg_cache;
 	codec->write = wm8971_write;
-	codec->dapm_event = wm8971_dapm_event;
+	codec->set_bias_level = wm8971_set_bias_level;
 	codec->dai = &wm8971_dai;
-	codec->reg_cache_size = sizeof(wm8971_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8971_reg);
 	codec->num_dai = 1;
 	codec->reg_cache = kmemdup(wm8971_reg, sizeof(wm8971_reg), GFP_KERNEL);
 
@@ -731,9 +731,10 @@ static int wm8971_init(struct snd_soc_device *socdev)
 		goto pcm_err;
 	}
 
-	/* charge output caps */
-	wm8971_dapm_event(codec, SNDRV_CTL_POWER_D2);
-	codec->dapm_state = SNDRV_CTL_POWER_D3hot;
+	/* charge output caps - set vmid to 5k for quick power up */
+	reg = wm8971_read_reg_cache(codec, WM8971_PWR1) & 0xfe3e;
+	wm8971_write(codec, WM8971_PWR1, reg | 0x01c0);
+	codec->bias_level = SND_SOC_BIAS_STANDBY;
 	queue_delayed_work(wm8971_workq, &codec->delayed_work,
 		msecs_to_jiffies(1000));
 
@@ -762,9 +763,9 @@ static int wm8971_init(struct snd_soc_device *socdev)
 	wm8971_add_widgets(codec);
 	ret = snd_soc_register_card(socdev);
 	if (ret < 0) {
-      	printk(KERN_ERR "wm8971: failed to register card\n");
+		printk(KERN_ERR "wm8971: failed to register card\n");
 		goto card_err;
-    }
+	}
 	return ret;
 
 card_err:
@@ -928,7 +929,7 @@ static int wm8971_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		wm8971_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		wm8971_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	if (wm8971_workq)
 		destroy_workqueue(wm8971_workq);
 	snd_soc_free_pcms(socdev);

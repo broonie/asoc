@@ -1184,7 +1184,8 @@ static int wm8991_mute(struct snd_soc_codec_dai *dai, int mute)
 	return 0;
 }
 
-static int wm8991_dapm_event(struct snd_soc_codec *codec, int event)
+static int wm8991_set_bias_level(struct snd_soc_codec *codec,
+	enum snd_soc_bias_level level)
 {
 	// TODO handle DPAM power events
 
@@ -1242,7 +1243,7 @@ static int wm8991_suspend(struct platform_device *pdev, pm_message_t state)
 	if(!codec->card)
 		return 0;
 
-	wm8991_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+	wm8991_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
 }
 
@@ -1267,7 +1268,7 @@ static int wm8991_resume(struct platform_device *pdev)
 		codec->hw_write(codec->control_data, data, 2);
 	}
 
-	wm8991_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	wm8991_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	return 0;
 }
 
@@ -1285,10 +1286,10 @@ static int wm8991_init(struct snd_soc_device *socdev)
 	codec->owner = THIS_MODULE;
 	codec->read = wm8991_read_reg_cache;
 	codec->write = wm8991_write;
-	codec->dapm_event = wm8991_dapm_event;
+	codec->set_bias_level = wm8991_set_bias_level;
 	codec->dai = &wm8991_dai;
 	codec->num_dai = 2;
-	codec->reg_cache_size = sizeof(wm8991_reg);
+	codec->reg_cache_size = ARRAY_SIZE(wm8991_reg);
 	codec->reg_cache = kmemdup(wm8991_reg, sizeof(wm8991_reg), GFP_KERNEL);
 
 	if (codec->reg_cache == NULL)
@@ -1304,8 +1305,8 @@ static int wm8991_init(struct snd_soc_device *socdev)
 	}
 
 	/* charge output caps */
-	wm8991_dapm_event(codec, SNDRV_CTL_POWER_D2);
-	codec->dapm_state = SNDRV_CTL_POWER_D3hot;
+	wm8991_set_bias_level(codec, SNDRV_CTL_POWER_D2);
+	codec->bias_level = SND_SOC_BIAS_STANDBY;
 
 	reg = wm8991_read_reg_cache(codec, WM8991_AUDIO_INTERFACE_4);
 	wm8991_write(codec, WM8991_AUDIO_INTERFACE_4, reg | WM8991_ALRCGPIO1);
@@ -1483,7 +1484,7 @@ static int wm8991_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		wm8991_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		wm8991_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
 #if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
