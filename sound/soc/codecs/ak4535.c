@@ -31,12 +31,6 @@
 #define AUDIO_NAME "ak4535"
 #define AK4535_VERSION "0.3"
 
-#define AK4535_DEBUG 0
-#if AK4535_DEBUG
-#else
-#define ak4535dbg_dump(s) if (0) {}
-#endif
-
 struct snd_soc_codec_device soc_codec_dev_ak4535;
 
 /* codec private data */
@@ -122,8 +116,6 @@ static int ak4535_sync(struct snd_soc_codec *codec)
 
 	for (i = 0; i < AK4535_CACHEREGNUM; i++)
 		r |= ak4535_write(codec, i, cache[i]);
-
-	ak4535dbg_dump(codec);
 
 	return r;
 };
@@ -437,7 +429,6 @@ static int ak4535_set_bias_level(struct snd_soc_codec *codec,
 		break;
 	}
 	codec->bias_level = level;
-	ak4535dbg_dump(codec);
 	return 0;
 }
 
