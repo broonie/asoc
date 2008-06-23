@@ -31,25 +31,6 @@
 #define AUDIO_NAME "wm8711"
 #define WM8711_VERSION "0.3"
 
-/*
- * Debug
- */
-
-#define WM8711_DEBUG 0
-
-#ifdef WM8711_DEBUG
-#define dbg(format, arg...) \
-	printk(KERN_DEBUG AUDIO_NAME ": " format "\n" , ## arg)
-#else
-#define dbg(format, arg...) do {} while (0)
-#endif
-#define err(format, arg...) \
-	printk(KERN_ERR AUDIO_NAME ": " format "\n" , ## arg)
-#define info(format, arg...) \
-	printk(KERN_INFO AUDIO_NAME ": " format "\n" , ## arg)
-#define warn(format, arg...) \
-	printk(KERN_WARNING AUDIO_NAME ": " format "\n" , ## arg)
-
 struct snd_soc_codec_device soc_codec_dev_wm8711;
 
 /* codec private data */
@@ -571,13 +552,13 @@ static int wm8711_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 
 	ret = i2c_attach_client(i2c);
 	if (ret < 0) {
-		err("failed to attach codec at addr %x\n", addr);
+		pr_err("failed to attach codec at addr %x\n", addr);
 		goto err;
 	}
 
 	ret = wm8711_init(socdev);
 	if (ret < 0) {
-		err("failed to initialise WM8711\n");
+		pr_err("failed to initialise WM8711\n");
 		goto err;
 	}
 	return ret;
@@ -629,7 +610,7 @@ static int wm8711_probe(struct platform_device *pdev)
 	struct wm8711_priv *wm8711;
 	int ret = 0;
 
-	info("WM8711 Audio Codec %s", WM8711_VERSION);
+	pr_info("WM8711 Audio Codec %s", WM8711_VERSION);
 
 	setup = socdev->codec_data;
 	codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);

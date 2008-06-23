@@ -31,25 +31,6 @@
 #define AUDIO_NAME "wm8978"
 #define WM8978_VERSION "0.1"
 
-/*
- * Debug
- */
-
-#define WM8978_DEBUG 0
-
-#ifdef WM8978_DEBUG
-#define dbg(format, arg...) \
-	printk(KERN_DEBUG AUDIO_NAME ": " format "\n" , ## arg)
-#else
-#define dbg(format, arg...) do {} while (0)
-#endif
-#define err(format, arg...) \
-	printk(KERN_ERR AUDIO_NAME ": " format "\n" , ## arg)
-#define info(format, arg...) \
-	printk(KERN_INFO AUDIO_NAME ": " format "\n" , ## arg)
-#define warn(format, arg...) \
-	printk(KERN_WARNING AUDIO_NAME ": " format "\n" , ## arg)
-
 struct snd_soc_codec_device soc_codec_dev_wm8978;
 
 /*

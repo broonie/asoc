@@ -27,24 +27,6 @@
 #define AUDIO_NAME "wm8960"
 #define WM8960_VERSION "0.2"
 
-/*
- * Debug
- */
-
-#define WM8960_DEBUG 0
-
-#ifdef WM8960_DEBUG
-#define dbg(format, arg...) \
-	printk(KERN_DEBUG AUDIO_NAME ": " format "\n" , ## arg)
-#else
-#define dbg(format, arg...) do {} while (0)
-#endif
-#define err(format, arg...) \
-	printk(KERN_ERR AUDIO_NAME ": " format "\n" , ## arg)
-#define info(format, arg...) \
-	printk(KERN_INFO AUDIO_NAME ": " format "\n" , ## arg)
-#define warn(format, arg...) \
-	printk(KERN_WARNING AUDIO_NAME ": " format "\n" , ## arg)
 
 struct snd_soc_codec_device soc_codec_dev_wm8960;
 
@@ -679,13 +661,13 @@ static int wm8960_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 
 	ret = i2c_attach_client(i2c);
 	if (ret < 0) {
-		err("failed to attach codec at addr %x\n", addr);
+		pr_err("failed to attach codec at addr %x\n", addr);
 		goto err;
 	}
 
 	ret = wm8960_init(socdev);
 	if (ret < 0) {
-		err("failed to initialise WM8960\n");
+		pr_err("failed to initialise WM8960\n");
 		goto err;
 	}
 	return ret;
@@ -734,7 +716,7 @@ static int wm8960_probe(struct platform_device *pdev)
 	struct snd_soc_codec *codec;
 	int ret = 0;
 
-	info("WM8960 Audio Codec %s", WM8960_VERSION);
+	pr_info("WM8960 Audio Codec %s", WM8960_VERSION);
 
 	setup = socdev->codec_data;
 	codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);

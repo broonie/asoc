@@ -37,25 +37,6 @@
 #define AUDIO_NAME "wm8991"
 #define WM8991_VERSION "0.01"
 
-/*
- * Debug
- */
-
-#define WM8991_DEBUG 0
-
-#ifdef WM8991_DEBUG
-#define dbg(format, arg...) \
-	printk(KERN_DEBUG AUDIO_NAME ": " format "\n" , ## arg)
-#else
-#define dbg(format, arg...) do {} while (0)
-#endif
-#define err(format, arg...) \
-	printk(KERN_ERR AUDIO_NAME ": " format "\n" , ## arg)
-#define info(format, arg...) \
-	printk(KERN_INFO AUDIO_NAME ": " format "\n" , ## arg)
-#define warn(format, arg...) \
-	printk(KERN_WARNING AUDIO_NAME ": " format "\n" , ## arg)
-
 /* codec private data */
 struct wm8991_priv {
 	unsigned int sysclk;
@@ -1387,13 +1368,13 @@ static int wm8991_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 
 	ret = i2c_attach_client(i2c);
 	if (ret < 0) {
-		err("failed to attach codec at addr %x\n", addr);
+		pr_err("failed to attach codec at addr %x\n", addr);
 		goto err;
 	}
 
 	ret = wm8991_init(socdev);
 	if (ret < 0) {
-		err("failed to initialise WM8991\n");
+		pr_err("failed to initialise WM8991\n");
 		goto err;
 	}
 	return ret;
@@ -1443,7 +1424,7 @@ static int wm8991_probe(struct platform_device *pdev)
 	struct wm8991_priv *wm8991;
 	int ret = 0;
 
-	info("WM8991 Audio Codec %s", WM8991_VERSION);
+	pr_info("WM8991 Audio Codec %s", WM8991_VERSION);
 
 	setup = socdev->codec_data;
 	codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);
