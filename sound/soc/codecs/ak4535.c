@@ -419,7 +419,7 @@ static int ak4535_set_bias_level(struct snd_soc_codec *codec,
 		break;
 	case SND_SOC_BIAS_STANDBY:
 		i = ak4535_read_reg_cache(codec, AK4535_PM1);
-		ak4535_write(codec, AK4535_PM1, i|0x80);
+		ak4535_write(codec, AK4535_PM1, i | 0x80);
 		i = ak4535_read_reg_cache(codec, AK4535_PM2);
 		ak4535_write(codec, AK4535_PM2, i & (~0x80));
 		break;
