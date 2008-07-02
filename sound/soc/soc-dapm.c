@@ -70,12 +70,12 @@ static int dapm_status = 1;
 module_param(dapm_status, int, 0);
 MODULE_PARM_DESC(dapm_status, "enable DPM sysfs entries");
 
-static int pop_time;
+static unsigned int pop_time;
 
 static void pop_wait(void)
 {
 	if (pop_time)
-		schedule_timeout_uninterruptible(msecs_to_jiffies(timeout));
+		schedule_timeout_uninterruptible(msecs_to_jiffies(pop_time));
 }
 
 static void pop_dbg(const char *fmt, ...)
@@ -808,10 +808,8 @@ static ssize_t dapm_pop_time_store(struct device *dev,
 				   const char *buf, size_t count)
 
 {
-	int val = simple_strtoul(buf, NULL, 10);
-
-	if (val >= 0)
-		pop_time = val;
+	if (strict_strtoul(buf, 10, &pop_time) < 0)
+		printk(KERN_ERR "Unable to parse pop_time setting\n");
 
 	return count;
 }
