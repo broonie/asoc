@@ -100,7 +100,7 @@ static int ad1980_add_controls(struct snd_soc_codec *codec)
 	int err, i;
 
 	for (i = 0; i < ARRAY_SIZE(ad1980_snd_ac97_controls); i++) {
-		err = snd_ctl_add(codec->card, snd_soc_cnew( \
+		err = snd_ctl_add(codec->card, snd_soc_cnew(
 				&ad1980_snd_ac97_controls[i], codec, NULL));
 		if (err < 0)
 			return err;
@@ -113,14 +113,18 @@ static unsigned int ac97_read(struct snd_soc_codec *codec,
 {
 	u16 *cache = codec->reg_cache;
 
-	if (reg == AC97_RESET || reg == AC97_INT_PAGING || \
-			reg == AC97_POWERDOWN || reg == AC97_EXTENDED_STATUS  \
-			|| reg == AC97_VENDOR_ID1 || reg == AC97_VENDOR_ID2)
+	switch (reg) {
+	case AC97_RESET:
+	case AC97_INT_PAGING:
+	case AC97_POWERDOWN:
+	case AC97_EXTENDED_STATUS:
+	case AC97_VENDOR_ID1:
+	case AC97_VENDOR_ID2:
 		return soc_ac97_ops.read(codec->ac97, reg);
-	else {
+	default:
 		reg = reg >> 1;
 
-		if (reg > (ARRAY_SIZE(ad1980_reg)))
+		if (reg >= (ARRAY_SIZE(ad1980_reg)))
 			return -EINVAL;
 
 		return cache[reg];
@@ -134,7 +138,7 @@ static int ac97_write(struct snd_soc_codec *codec, unsigned int reg,
 
 	soc_ac97_ops.write(codec->ac97, reg, val);
 	reg = reg >> 1;
-	if (reg <= (ARRAY_SIZE(ad1980_reg)))
+	if (reg < (ARRAY_SIZE(ad1980_reg)))
 		cache[reg] = val;
 
 	return 0;
@@ -184,17 +188,6 @@ err:
 
 	printk(KERN_ERR "AD1980 AC97 reset failed\n");
 	return -EIO;
-}
-
-static int ad1980_soc_suspend(struct platform_device *pdev,
-	pm_message_t state)
-{
-	return 0;
-}
-
-static int ad1980_soc_resume(struct platform_device *pdev)
-{
-	return 0;
 }
 
 static int ad1980_soc_probe(struct platform_device *pdev)
@@ -311,8 +304,6 @@ static int ad1980_soc_remove(struct platform_device *pdev)
 struct snd_soc_codec_device soc_codec_dev_ad1980 = {
 	.probe = 	ad1980_soc_probe,
 	.remove = 	ad1980_soc_remove,
-	.suspend =	ad1980_soc_suspend,
-	.resume =	ad1980_soc_resume,
 };
 EXPORT_SYMBOL_GPL(soc_codec_dev_ad1980);
 
