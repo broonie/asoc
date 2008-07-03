@@ -16,7 +16,6 @@
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/clk.h>
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/initval.h>
