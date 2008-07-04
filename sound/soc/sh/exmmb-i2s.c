@@ -116,7 +116,7 @@ static int exm7760_i2s_machine_init(struct snd_soc_codec *codec)
 	cs4251x_gpio_mode(codec, CS4251X_RXP_6,
 			  CS4251X_GPIO_MODE_GPOLOW, 0, 0);
 
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 
 	return 0;
 }

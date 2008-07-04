@@ -46,7 +46,7 @@ static int exm7760_ac97_machine_init(struct snd_soc_codec *codec)
 {
 	MSG("machine_init() enter\n");
 
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 
 	MSG("machine_init() leave\n");
 	return 0;
