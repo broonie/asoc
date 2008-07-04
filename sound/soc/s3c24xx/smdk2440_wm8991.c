@@ -209,8 +209,8 @@ static int smdk2440_wm8991_init(struct snd_soc_codec *codec)
 	int i;
 
 	/* set up NC codec pins */
-	snd_soc_dapm_set_endpoint(codec, "Internal DAC Sink", 1);
-	snd_soc_dapm_set_endpoint(codec, "Internal ADC Source", 1);
+	snd_soc_dapm_enable_pin(codec, "Internal DAC Sink", 1);
+	snd_soc_dapm_enable_pin(codec, "Internal ADC Source", 1);
 
 	/* Add smdk2440 specific widgets */
 	snd_soc_dapm_new_controls(codec, &wm8976_dapm_widgets,
@@ -222,10 +222,10 @@ static int smdk2440_wm8991_init(struct snd_soc_codec *codec)
 			audio_map[i][2]);
 	}
 
-	snd_soc_dapm_set_endpoint(codec, "Headphones", 1);
-	snd_soc_dapm_set_endpoint(codec, "Line In", 1);
+	snd_soc_dapm_enable_pin(codec, "Headphones", 1);
+	snd_soc_dapm_enable_pin(codec, "Line In", 1);
 
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 
 	return 0;
 }

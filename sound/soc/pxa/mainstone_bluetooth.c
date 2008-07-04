@@ -174,7 +174,10 @@ static int machine_set_jack(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec =  snd_kcontrol_chip(kcontrol);
 	machine_jack_func = ucontrol->value.integer.value[0];
-	snd_soc_dapm_set_endpoint(codec, "Headphone Jack", machine_jack_func);
+	if (machine_jack_func)
+		snd_soc_dapm_enable_pin(codec, "Headphone Jack");
+	else
+		snd_soc_dapm_disable_pin(codec, "Headphone Jack");
 	return 0;
 }
 
@@ -194,7 +197,11 @@ static int machine_set_spk(struct snd_kcontrol *kcontrol,
 		return 0;
 
 	machine_spk_func = ucontrol->value.integer.value[0];
-	snd_soc_dapm_set_endpoint(codec, "Spk", machine_spk_func);
+	if (machine_spk_func)
+		snd_soc_dapm_enable_pin(codec, "Spk");
+	else
+		snd_soc_dapm_disable_pin(codec, "Spk");
+
 	return 1;
 }
 
@@ -214,7 +221,10 @@ static int machine_set_mic(struct snd_kcontrol *kcontrol,
 		return 0;
 
 	machine_spk_func = ucontrol->value.integer.value[0];
-	snd_soc_dapm_set_endpoint(codec, "Mic", machine_mic_func);
+	if (machine_spk_func)
+		snd_soc_dapm_enable_pin(codec, "Mic");
+	else
+		snd_soc_dapm_disable_pin(codec, "Mic");
 	return 1;
 }
 
@@ -275,15 +285,15 @@ static int mainstone_wm8753_init(struct snd_soc_codec *codec)
 	int i, err;
 
 	/* not used on this machine - e.g. will never be powered up */
-	snd_soc_dapm_set_endpoint(codec, "OUT3", 0);
-	snd_soc_dapm_set_endpoint(codec, "OUT4", 0);
-	snd_soc_dapm_set_endpoint(codec, "MONO2", 0);
-	snd_soc_dapm_set_endpoint(codec, "MONO1", 0);
-	snd_soc_dapm_set_endpoint(codec, "LINE1", 0);
-	snd_soc_dapm_set_endpoint(codec, "LINE2", 0);
-	snd_soc_dapm_set_endpoint(codec, "RXP", 0);
-	snd_soc_dapm_set_endpoint(codec, "RXN", 0);
-	snd_soc_dapm_set_endpoint(codec, "MIC2", 0);
+	snd_soc_dapm_disable_pin(codec, "OUT3");
+	snd_soc_dapm_disable_pin(codec, "OUT4");
+	snd_soc_dapm_disable_pin(codec, "MONO2");
+	snd_soc_dapm_disable_pin(codec, "MONO1");
+	snd_soc_dapm_disable_pin(codec, "LINE1");
+	snd_soc_dapm_disable_pin(codec, "LINE2");
+	snd_soc_dapm_disable_pin(codec, "RXP");
+	snd_soc_dapm_disable_pin(codec, "RXN");
+	snd_soc_dapm_disable_pin(codec, "MIC2");
 
 	/* Add machine specific controls */
 	for (i = 0; i < ARRAY_SIZE(wm8753_machine_controls); i++) {
@@ -302,7 +312,7 @@ static int mainstone_wm8753_init(struct snd_soc_codec *codec)
 		snd_soc_dapm_connect_input(codec, audio_map[i][0], audio_map[i][1], audio_map[i][2]);
 	}
 
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 	return 0;
 }
 

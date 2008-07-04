@@ -60,23 +60,27 @@ extern struct platform_device magician_cpld;
 
 static void magician_ext_control(struct snd_soc_codec *codec)
 {
-	snd_soc_dapm_set_endpoint(codec, "Speaker",
-			(magician_spk_func == MAGICIAN_SPK_ON));
+	if (magician_spk_func == MAGICIAN_SPK_ON)
+		snd_soc_dapm_enable_pin(codec, "Speaker");
+	else
+		snd_soc_dapm_disable_pin(codec, "Speaker");
 
-	snd_soc_dapm_set_endpoint(codec, "Headphone Jack",
-			(magician_hp_func == MAGICIAN_HP_ON));
+	if (magician_hp_func == MAGICIAN_HP_ON)
+		snd_soc_dapm_enable_pin(codec, "Headphone Jack");
+	else
+		snd_soc_dapm_disable_pin(codec, "Headphone Jack");
 
 	switch (magician_in_sel) {
 	case MAGICIAN_MIC:
-		snd_soc_dapm_set_endpoint(codec, "Headset Mic", 0);
-		snd_soc_dapm_set_endpoint(codec, "Call Mic", 1);
+		snd_soc_dapm_disable_pin(codec, "Headset Mic");
+		snd_soc_dapm_enable_pin(codec, "Call Mic");
 		break;
 	case MAGICIAN_MIC_EXT:
-		snd_soc_dapm_set_endpoint(codec, "Call Mic", 0);
-		snd_soc_dapm_set_endpoint(codec, "Headset Mic", 1);
+		snd_soc_dapm_disable_pin(codec, "Call Mic");
+		snd_soc_dapm_enable_pin(codec, "Headset Mic");
 		break;
 	}
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 }
 
 static int magician_startup(struct snd_pcm_substream *substream)
@@ -414,12 +418,12 @@ static int magician_uda1380_init(struct snd_soc_codec *codec)
 	int i, err;
 
 	/* NC codec pins */
-	snd_soc_dapm_set_endpoint(codec, "VOUTLHP", 0);
-	snd_soc_dapm_set_endpoint(codec, "VOUTRHP", 0);
+	snd_soc_dapm_disable_pin(codec, "VOUTLHP");
+	snd_soc_dapm_disable_pin(codec, "VOUTRHP");
 
 	/* FIXME: is anything connected here? */
-	snd_soc_dapm_set_endpoint(codec, "VINL", 0);
-	snd_soc_dapm_set_endpoint(codec, "VINR", 0);
+	snd_soc_dapm_disable_pin(codec, "VINL");
+	snd_soc_dapm_disable_pin(codec, "VINR");
 
 	/* Add magician specific controls */
 	for (i = 0; i < ARRAY_SIZE(uda1380_magician_controls); i++) {
@@ -440,7 +444,7 @@ static int magician_uda1380_init(struct snd_soc_codec *codec)
 				audio_map[i][1], audio_map[i][2]);
 	}
 
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 	return 0;
 }
 

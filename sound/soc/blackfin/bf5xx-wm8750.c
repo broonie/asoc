@@ -172,10 +172,10 @@ static int bf5xx_wm8750_init_dev(struct snd_soc_codec *codec)
 	 * NC codec pins -
 	 * Add any NC codec pins as follows :-
 	 * 
-	 * snd_soc_dapm_set_endpoint(codec, "RINPUT1", 0);
+	 * snd_soc_dapm_disable_pin(codec, "RINPUT1");
 	 */
 	printd("%s\n", __func__);
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 	return 0;
 }
 

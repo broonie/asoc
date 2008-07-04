@@ -448,9 +448,9 @@ static int mainstone_wm8753_init(struct snd_soc_codec *codec)
 	int i, err;
 
 	/* set up mainstone codec pins */
-	snd_soc_dapm_set_endpoint(codec, "RXP", 0);
-	snd_soc_dapm_set_endpoint(codec, "RXN", 0);
-	snd_soc_dapm_set_endpoint(codec, "MIC2", 0);
+	snd_soc_dapm_disable_pin(codec, "RXP");
+	snd_soc_dapm_disable_pin(codec, "RXN");
+	snd_soc_dapm_disable_pin(codec, "MIC2");
 
 	/* add mainstone specific controls */
 	for (i = 0; i < ARRAY_SIZE(wm8753_mainstone_controls); i++) {
@@ -464,7 +464,7 @@ static int mainstone_wm8753_init(struct snd_soc_codec *codec)
 		snd_soc_dapm_connect_input(codec, audio_map[i][0], audio_map[i][1], audio_map[i][2]);
 	}
 
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 	return 0;
 }
 

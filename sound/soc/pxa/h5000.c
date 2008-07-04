@@ -48,10 +48,10 @@ static void h5000_ext_control(struct snd_soc_codec *codec)
 {
 	switch (h5000_spk_func) {
 	case H5000_SPK_OFF:
-		snd_soc_dapm_set_endpoint(codec, "Ext Spk", 0);
+		snd_soc_dapm_disable_pin(codec, "Ext Spk");
 		break;
 	case H5000_SPK_ON:
-		snd_soc_dapm_set_endpoint(codec, "Ext Spk", 1);
+		snd_soc_dapm_enable_pin(codec, "Ext Spk");
 		break;
 	default:
 		printk (KERN_ERR "%s: invalid value %d for h5000_spk_func\n", 
@@ -61,19 +61,19 @@ static void h5000_ext_control(struct snd_soc_codec *codec)
 
 	switch (h5000_jack_func) {
 	case H5000_OFF:
-		snd_soc_dapm_set_endpoint(codec, "Headphone Jack", 0);
-		snd_soc_dapm_set_endpoint(codec, "Internal Mic", 1);
-		snd_soc_dapm_set_endpoint(codec, "Mic Jack", 0);
+		snd_soc_dapm_disable_pin(codec, "Headphone Jack");
+		snd_soc_dapm_enable_pin(codec, "Internal Mic");
+		snd_soc_dapm_disable_pin(codec, "Mic Jack");
 		break;
 	case H5000_HP:
-		snd_soc_dapm_set_endpoint(codec, "Headphone Jack", 1);
-		snd_soc_dapm_set_endpoint(codec, "Internal Mic", 1);
-		snd_soc_dapm_set_endpoint(codec, "Mic Jack", 0);
+		snd_soc_dapm_enable_pin(codec, "Headphone Jack");
+		snd_soc_dapm_enable_pin(codec, "Internal Mic");
+		snd_soc_dapm_disable_pin(codec, "Mic Jack");
 		break;
 	case H5000_MIC:
-		snd_soc_dapm_set_endpoint(codec, "Headphone Jack", 0);
-		snd_soc_dapm_set_endpoint(codec, "Internal Mic", 0);
-		snd_soc_dapm_set_endpoint(codec, "Mic Jack", 1);
+		snd_soc_dapm_disable_pin(codec, "Headphone Jack");
+		snd_soc_dapm_disable_pin(codec, "Internal Mic");
+		snd_soc_dapm_enable_pin(codec, "Mic Jack");
 		break;
 	default:
 		printk(KERN_ERR "%s: invalid value %d for h5000_jack_func\n", 
@@ -81,7 +81,7 @@ static void h5000_ext_control(struct snd_soc_codec *codec)
 		break;
 	};
 
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 };
 
 static int h5000_startup(struct snd_pcm_substream *substream)
@@ -257,15 +257,15 @@ static int h5000_ak4535_init (struct snd_soc_codec *codec)
 	int i, err;
 	
 	/* NC codec pins */
-	snd_soc_dapm_set_endpoint(codec, "MOUT1", 0);
-	snd_soc_dapm_set_endpoint(codec, "LOUT", 0);
-	snd_soc_dapm_set_endpoint(codec, "ROUT", 0);
+	snd_soc_dapm_disable_pin(codec, "MOUT1");
+	snd_soc_dapm_disable_pin(codec, "LOUT");
+	snd_soc_dapm_disable_pin(codec, "ROUT");
 	
 	// mp - not sure I understand here, is the codec driver wrong ?
-	snd_soc_dapm_set_endpoint(codec, "MOUT2", 0);	/* FIXME: These pins are marked as INPUTS */
-	snd_soc_dapm_set_endpoint(codec, "MIN", 0);	/* FIXME: and OUTPUTS in ak4535.c . We need to do this in order */
-	snd_soc_dapm_set_endpoint(codec, "AIN", 0);	/* FIXME: to get DAPM working properly, because the pins are connected */
-	snd_soc_dapm_set_endpoint(codec, "MICOUT", 0);	/* FIXME: OUTPUT -> INPUT. */
+	snd_soc_dapm_disable_pin(codec, "MOUT2");	/* FIXME: These pins are marked as INPUTS */
+	snd_soc_dapm_disable_pin(codec, "MIN");	/* FIXME: and OUTPUTS in ak4535.c . We need to do this in order */
+	snd_soc_dapm_disable_pin(codec, "AIN");	/* FIXME: to get DAPM working properly, because the pins are connected */
+	snd_soc_dapm_disable_pin(codec, "MICOUT");	/* FIXME: OUTPUT -> INPUT. */
 
 	/* Add h5000 specific controls */
 	for (i = 0; i < ARRAY_SIZE (ak4535_h5000_controls); i++) {
@@ -286,7 +286,7 @@ static int h5000_ak4535_init (struct snd_soc_codec *codec)
 			audio_map [i][1], audio_map [i][2]);
 	};
 
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 	return 0;
 };
 

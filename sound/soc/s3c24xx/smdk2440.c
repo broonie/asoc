@@ -206,7 +206,7 @@ static int smdk2440_uda1341_init(struct snd_soc_codec *codec)
 			audio_map[i][1], audio_map[i][2]);
 	}
 
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 
 	DBG("Ending smdk2440 init\n");
 

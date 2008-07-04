@@ -215,9 +215,9 @@ static int mainstone_wm9713_init(struct snd_soc_codec *codec)
 	int i, err;
 
 	/* set up mainstone codec pins */
-	snd_soc_dapm_set_endpoint(codec, "RXP", 0);
-	snd_soc_dapm_set_endpoint(codec, "RXN", 0);
-	//snd_soc_dapm_set_endpoint(codec, "MIC2", 0);
+	snd_soc_dapm_disable_pin(codec, "RXP");
+	snd_soc_dapm_disable_pin(codec, "RXN");
+	//snd_soc_dapm_disable_pin(codec, "MIC2");
 
 	/* Add test specific controls */
 	for (i = 0; i < ARRAY_SIZE(mainstone_controls); i++) {
@@ -237,7 +237,7 @@ static int mainstone_wm9713_init(struct snd_soc_codec *codec)
 			audio_map[i][2]);
 	}
 
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 	return 0;
 }
 

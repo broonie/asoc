@@ -113,7 +113,7 @@ static int exm1200_mobo_i2s_machine_init(struct snd_soc_codec *codec)
 	/* Set up template specific audio path audio_map */
 
 	/* synchronise subsystem */
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 
 	return 0;
 }

@@ -47,7 +47,7 @@
  */
 static int exm1200_mobo_ac97_machine_init(struct snd_soc_codec *codec)
 {
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 	return 0;
 }
 

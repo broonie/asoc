@@ -129,14 +129,14 @@ static int mainstone_wm8731_init(struct snd_soc_codec *codec)
 	}
 
 	/* not connected */
-	snd_soc_dapm_set_endpoint(codec, "RLINEIN", 0);
-	snd_soc_dapm_set_endpoint(codec, "LLINEIN", 0);
+	snd_soc_dapm_disable_pin(codec, "RLINEIN");
+	snd_soc_dapm_disable_pin(codec, "LLINEIN");
 
 	/* always connected */
-	snd_soc_dapm_set_endpoint(codec, "Int Mic", 1);
-	snd_soc_dapm_set_endpoint(codec, "Ext Spk", 1);
+	snd_soc_dapm_enable_pin(codec, "Int Mic");
+	snd_soc_dapm_enable_pin(codec, "Ext Spk");
 
-	snd_soc_dapm_sync_endpoints(codec);
+	snd_soc_dapm_sync(codec);
 
 	return 0;
 }
