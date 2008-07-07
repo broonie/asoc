@@ -672,12 +672,12 @@ static void dbg_dump_dapm(struct snd_soc_codec* codec, const char *action)
 
 				list_for_each_entry(p, &w->sources, list_sink) {
 					if (p->connect)
-						printk(" in  %s %s\n", p->name ? p->name : "static",
+						printk(" in  %s from %s\n", p->name ? p->name : "static",
 							p->source->name);
 				}
 				list_for_each_entry(p, &w->sinks, list_source) {
 					if (p->connect)
-						printk(" out %s %s\n", p->name ? p->name : "static",
+						printk(" out %s to %s\n", p->name ? p->name : "static",
 							p->sink->name);
 				}
 			}
