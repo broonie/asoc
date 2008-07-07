@@ -223,6 +223,8 @@ static const char *aic3x_right_hpcom_mux[] =
     { "differential of HPROUT", "constant VCM", "single-ended",
       "differential of HPLCOM", "external feedback" };
 static const char *aic3x_linein_mode_mux[] = { "single-ended", "differential" };
+static const char *aic3x_adc_hpf[] =
+    { "Disabled", "0.0045xFs", "0.0125xFs", "0.025xFs" };
 
 #define LDAC_ENUM	0
 #define RDAC_ENUM	1
@@ -232,6 +234,7 @@ static const char *aic3x_linein_mode_mux[] = { "single-ended", "differential" };
 #define LINE1R_ENUM	5
 #define LINE2L_ENUM	6
 #define LINE2R_ENUM	7
+#define ADC_HPF_ENUM	8
 
 static const struct soc_enum aic3x_enum[] = {
 	SOC_ENUM_SINGLE(DAC_LINE_MUX, 6, 3, aic3x_left_dac_mux),
@@ -242,6 +245,7 @@ static const struct soc_enum aic3x_enum[] = {
 	SOC_ENUM_SINGLE(LINE1R_2_RADC_CTRL, 7, 2, aic3x_linein_mode_mux),
 	SOC_ENUM_SINGLE(LINE2L_2_LADC_CTRL, 7, 2, aic3x_linein_mode_mux),
 	SOC_ENUM_SINGLE(LINE2R_2_RADC_CTRL, 7, 2, aic3x_linein_mode_mux),
+	SOC_ENUM_DOUBLE(AIC3X_CODEC_DFILT_CTRL, 6, 4, 4, aic3x_adc_hpf),
 };
 
 static const struct snd_kcontrol_new aic3x_snd_controls[] = {
@@ -292,6 +296,8 @@ static const struct snd_kcontrol_new aic3x_snd_controls[] = {
 	/* Input */
 	SOC_DOUBLE_R("PGA Capture Volume", LADC_VOL, RADC_VOL, 0, 0x7f, 0),
 	SOC_DOUBLE_R("PGA Capture Switch", LADC_VOL, RADC_VOL, 7, 0x01, 1),
+
+	SOC_ENUM("ADC HPF Cut-off", aic3x_enum[ADC_HPF_ENUM]),
 };
 
 /* add non dapm controls */
@@ -455,11 +461,34 @@ static const struct snd_soc_dapm_widget aic3x_dapm_widgets[] = {
 	SND_SOC_DAPM_MUX("Right Line2R Mux", SND_SOC_NOPM, 0, 0,
 			 &aic3x_right_line2_mux_controls),
 
+	/*
+	 * Not a real mic bias widget but similar function. This is for dynamic
+	 * control of GPIO1 digital mic modulator clock output function when
+	 * using digital mic.
+	 */
+	SND_SOC_DAPM_REG(snd_soc_dapm_micbias, "GPIO1 dmic modclk",
+			 AIC3X_GPIO1_REG, 4, 0xf,
+			 AIC3X_GPIO1_FUNC_DIGITAL_MIC_MODCLK,
+			 AIC3X_GPIO1_FUNC_DISABLED),
+
+	/*
+	 * Also similar function like mic bias. Selects digital mic with
+	 * configurable oversampling rate instead of ADC converter.
+	 */
+	SND_SOC_DAPM_REG(snd_soc_dapm_micbias, "DMic Rate 128",
+			 AIC3X_ASD_INTF_CTRLA, 0, 3, 1, 0),
+	SND_SOC_DAPM_REG(snd_soc_dapm_micbias, "DMic Rate 64",
+			 AIC3X_ASD_INTF_CTRLA, 0, 3, 2, 0),
+	SND_SOC_DAPM_REG(snd_soc_dapm_micbias, "DMic Rate 32",
+			 AIC3X_ASD_INTF_CTRLA, 0, 3, 3, 0),
+
 	/* Mic Bias */
-	SND_SOC_DAPM_MICBIAS("Mic Bias 2V", MICBIAS_CTRL, 6, 0),
-	SND_SOC_DAPM_MICBIAS("Mic Bias 2.5V", MICBIAS_CTRL, 7, 0),
-	SND_SOC_DAPM_MICBIAS("Mic Bias AVDD", MICBIAS_CTRL, 6, 0),
-	SND_SOC_DAPM_MICBIAS("Mic Bias AVDD", MICBIAS_CTRL, 7, 0),
+	SND_SOC_DAPM_REG(snd_soc_dapm_micbias, "Mic Bias 2V",
+			 MICBIAS_CTRL, 6, 3, 1, 0),
+	SND_SOC_DAPM_REG(snd_soc_dapm_micbias, "Mic Bias 2.5V",
+			 MICBIAS_CTRL, 6, 3, 2, 0),
+	SND_SOC_DAPM_REG(snd_soc_dapm_micbias, "Mic Bias AVDD",
+			 MICBIAS_CTRL, 6, 3, 3, 0),
 
 	/* Left PGA to Left Output bypass */
 	SND_SOC_DAPM_MIXER("Left PGA Bypass Mixer", SND_SOC_NOPM, 0, 0,
@@ -568,6 +597,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"Left PGA Mixer", "Mic3L Switch", "MIC3L"},
 
 	{"Left ADC", NULL, "Left PGA Mixer"},
+	{"Left ADC", NULL, "GPIO1 dmic modclk"},
 
 	/* Right Input */
 	{"Right Line1R Mux", "single-ended", "LINE1R"},
@@ -581,6 +611,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"Right PGA Mixer", "Mic3R Switch", "MIC3R"},
 
 	{"Right ADC", NULL, "Right PGA Mixer"},
+	{"Right ADC", NULL, "GPIO1 dmic modclk"},
 
 	/* Left PGA Bypass */
 	{"Left PGA Bypass Mixer", "Line Switch", "Left PGA Mixer"},
@@ -641,6 +672,13 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"Right Line Out", NULL, "Right Line2 Bypass Mixer"},
 	{"Mono Out", NULL, "Right Line2 Bypass Mixer"},
 	{"Right HP Out", NULL, "Right Line2 Bypass Mixer"},
+	/*
+	 * Logical path between digital mic enable and GPIO1 modulator clock
+	 * output function
+	 */
+	{"GPIO1 dmic modclk", NULL, "DMic Rate 128"},
+	{"GPIO1 dmic modclk", NULL, "DMic Rate 64"},
+	{"GPIO1 dmic modclk", NULL, "DMic Rate 32"},
 };
 
 static int aic3x_add_widgets(struct snd_soc_codec *codec)
@@ -775,7 +813,7 @@ static int aic3x_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int aic3x_mute(struct snd_soc_codec_dai *dai, int mute)
+static int aic3x_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
 	u8 ldac_reg = aic3x_read_reg_cache(codec, LDAC_VOL) & ~MUTE_ON;
@@ -792,7 +830,7 @@ static int aic3x_mute(struct snd_soc_codec_dai *dai, int mute)
 	return 0;
 }
 
-static int aic3x_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
+static int aic3x_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 				int clk_id, unsigned int freq, int dir)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -802,13 +840,15 @@ static int aic3x_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int aic3x_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int aic3x_set_dai_fmt(struct snd_soc_dai *codec_dai,
 			     unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	struct aic3x_priv *aic3x = codec->private_data;
-	u8 iface_areg = 0;
-	u8 iface_breg = 0;
+	u8 iface_areg, iface_breg;
+
+	iface_areg = aic3x_read_reg_cache(codec, AIC3X_ASD_INTF_CTRLA) & 0x3f;
+	iface_breg = aic3x_read_reg_cache(codec, AIC3X_ASD_INTF_CTRLB) & 0x3f;
 
 	/* set master/slave audio interface */
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
@@ -949,7 +989,7 @@ EXPORT_SYMBOL_GPL(aic3x_headset_detected);
 #define AIC3X_FORMATS	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE | \
 			 SNDRV_PCM_FMTBIT_S24_3LE | SNDRV_PCM_FMTBIT_S32_LE)
 
-struct snd_soc_codec_dai aic3x_dai = {
+struct snd_soc_dai aic3x_dai = {
 	.name = "aic3x",
 	.playback = {
 		.stream_name = "Playback",

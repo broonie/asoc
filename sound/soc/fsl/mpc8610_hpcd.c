@@ -58,9 +58,9 @@ static int mpc8610_hpcd_machine_probe(struct platform_device *sound_device)
 		sound_device->dev.platform_data;
 
 	/* Program the signal routing between the SSI and the DMA */
-	guts_set_dmacr(machine_data->guts, machine_data->dma_id + 1,
+	guts_set_dmacr(machine_data->guts, machine_data->dma_id,
 		machine_data->dma_channel_id[0], CCSR_GUTS_DMACR_DEV_SSI);
-	guts_set_dmacr(machine_data->guts, machine_data->dma_id + 1,
+	guts_set_dmacr(machine_data->guts, machine_data->dma_id,
 		machine_data->dma_channel_id[1], CCSR_GUTS_DMACR_DEV_SSI);
 
 	guts_set_pmuxcr_dma(machine_data->guts, machine_data->dma_id,
@@ -96,8 +96,8 @@ static int mpc8610_hpcd_machine_probe(struct platform_device *sound_device)
 static int mpc8610_hpcd_startup(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_codec_dai *codec_dai = rtd->dai->codec_dai;
-	struct snd_soc_cpu_dai *cpu_dai = rtd->dai->cpu_dai;
+	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
+	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
 	struct mpc8610_hpcd_data *machine_data =
 		rtd->socdev->dev->platform_data;
 	int ret = 0;
@@ -170,9 +170,9 @@ int mpc8610_hpcd_machine_remove(struct platform_device *sound_device)
 
 	/* Restore the signal routing */
 
-	guts_set_dmacr(machine_data->guts, machine_data->dma_id + 1,
+	guts_set_dmacr(machine_data->guts, machine_data->dma_id,
 		machine_data->dma_channel_id[0], 0);
-	guts_set_dmacr(machine_data->guts, machine_data->dma_id + 1,
+	guts_set_dmacr(machine_data->guts, machine_data->dma_id,
 		machine_data->dma_channel_id[1], 0);
 
 	switch (machine_data->ssi_id) {
@@ -182,7 +182,7 @@ int mpc8610_hpcd_machine_remove(struct platform_device *sound_device)
 		break;
 	case 1:
 		clrsetbits_be32(&machine_data->guts->pmuxcr,
-			CCSR_GUTS_PMUXCR_SSI2_MASK, CCSR_GUTS_PMUXCR_SSI1_LA);
+			CCSR_GUTS_PMUXCR_SSI2_MASK, CCSR_GUTS_PMUXCR_SSI2_LA);
 		break;
 	}
 

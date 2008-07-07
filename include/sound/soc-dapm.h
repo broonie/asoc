@@ -130,6 +130,13 @@
 {	.id = snd_soc_dapm_adc, .name = wname, .sname = stname, .reg = wreg, \
 	.shift = wshift, .invert = winvert}
 
+/* generic register modifier widget */
+#define SND_SOC_DAPM_REG(wid, wname, wreg, wshift, wmask, won_val, woff_val) \
+{	.id = wid, .name = wname, .kcontrols = NULL, .num_kcontrols = 0, \
+	.reg = -((wreg) + 1), .shift = wshift, .mask = wmask, \
+	.on_val = won_val, .off_val = woff_val, .event = dapm_reg_event, \
+	.event_flags = SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD}
+
 /* dapm kcontrol types */
 #define SOC_DAPM_SINGLE(xname, reg, shift, max, invert) \
 {	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = xname, \
@@ -297,6 +304,9 @@ struct snd_soc_dapm_widget {
 	unsigned char shift;			/* bits to shift */
 	unsigned int saved_value;		/* widget saved value */
 	unsigned int value;				/* widget current value */
+	unsigned int mask;			/* non-shifted mask */
+	unsigned int on_val;			/* on state value */
+	unsigned int off_val;			/* off state value */
 	unsigned char power:1;			/* block power status */
 	unsigned char invert:1;			/* invert the power bit */
 	unsigned char active:1;			/* active stream on DAC, ADC's */
