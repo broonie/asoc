@@ -587,44 +587,44 @@ static int dapm_power_widgets(struct snd_soc_codec *codec, int event)
 			w->power = power;
 
 			/* call any power change event handlers */
-			if (power_change) {
-				if (w->event) {
-					pr_debug("power %s event for %s flags %x\n",
-						 w->power ? "on" : "off", w->name, w->event_flags);
-					if (power) {
-						/* power up event */
-						if (w->event_flags & SND_SOC_DAPM_PRE_PMU) {
-							ret = w->event(w,
-								NULL, SND_SOC_DAPM_PRE_PMU);
-							if (ret < 0)
-								return ret;
-						}
-						dapm_update_bits(w);
-						if (w->event_flags & SND_SOC_DAPM_POST_PMU){
-							ret = w->event(w,
-								NULL, SND_SOC_DAPM_POST_PMU);
-							if (ret < 0)
-								return ret;
-						}
-					} else {
-						/* power down event */
-						if (w->event_flags & SND_SOC_DAPM_PRE_PMD) {
-							ret = w->event(w,
-								NULL, SND_SOC_DAPM_PRE_PMD);
-							if (ret < 0)
-								return ret;
-						}
-						dapm_update_bits(w);
-						if (w->event_flags & SND_SOC_DAPM_POST_PMD) {
-							ret = w->event(w,
-								NULL, SND_SOC_DAPM_POST_PMD);
-							if (ret < 0)
-								return ret;
-						}
-					}
-				} else
-					/* no event handler */
-					dapm_update_bits(w);
+			if (power_change && w->event)
+				pr_debug("power %s event for %s flags %x\n",
+					 w->power ? "on" : "off",
+					 w->name, w->event_flags);
+
+			/* power up pre event */
+			if (power_change && power && w->event &&
+			    w->event_flags & SND_SOC_DAPM_PRE_PMU) {
+				ret = w->event(w, NULL, SND_SOC_DAPM_PRE_PMU);
+				if (ret < 0)
+					return ret;
+			}
+
+			/* power down pre event */
+			if (power_change && !power && w->event &&
+			    w->event_flags & SND_SOC_DAPM_PRE_PMD) {
+				ret = w->event(w, NULL, SND_SOC_DAPM_PRE_PMD);
+				if (ret < 0)
+					return ret;
+			}
+
+			dapm_update_bits(w);
+
+			/* power up post event */
+			if (power_change && power && w->event &&
+			    w->event_flags & SND_SOC_DAPM_POST_PMU){
+				ret = w->event(w,
+					       NULL, SND_SOC_DAPM_POST_PMU);
+				if (ret < 0)
+					return ret;
+			}
+
+			/* power down post event */
+			if (power_change && !power && w->event &&
+			    w->event_flags & SND_SOC_DAPM_POST_PMD) {
+				ret = w->event(w, NULL, SND_SOC_DAPM_POST_PMD);
+				if (ret < 0)
+					return ret;
 			}
 		}
 	}
