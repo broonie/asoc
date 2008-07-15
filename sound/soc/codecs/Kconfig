@@ -17,6 +17,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_WM8753
 	select SND_SOC_WM8772
 	select SND_SOC_WM8900
+	select SND_SOC_WM8903
 	select SND_SOC_WM8950
 	select SND_SOC_WM8951
 	select SND_SOC_WM8956
