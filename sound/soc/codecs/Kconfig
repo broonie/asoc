@@ -102,6 +102,10 @@ config SND_SOC_WM8900
 	tristate
 	depends on SND_SOC
 
+config SND_SOC_WM8903
+	tristate
+	depends on SND_SOC
+
 config SND_SOC_WM8950
 	tristate
 	depends on SND_SOC
