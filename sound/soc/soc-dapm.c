@@ -568,6 +568,9 @@ static int dapm_power_widgets(struct snd_soc_codec *codec, int event)
 			power_change = (w->power == power) ? 0: 1;
 			w->power = power;
 
+			if (!power_change)
+				continue;
+
 			/* call any power change event handlers */
 			if (power_change && w->event)
 				pr_debug("power %s event for %s flags %x\n",
@@ -576,7 +579,7 @@ static int dapm_power_widgets(struct snd_soc_codec *codec, int event)
 
 			/* power up pre event */
 			if (power_change && power && w->event &&
-			    w->event_flags & SND_SOC_DAPM_PRE_PMU) {
+			    (w->event_flags & SND_SOC_DAPM_PRE_PMU)) {
 				ret = w->event(w, NULL, SND_SOC_DAPM_PRE_PMU);
 				if (ret < 0)
 					return ret;
@@ -584,7 +587,7 @@ static int dapm_power_widgets(struct snd_soc_codec *codec, int event)
 
 			/* power down pre event */
 			if (power_change && !power && w->event &&
-			    w->event_flags & SND_SOC_DAPM_PRE_PMD) {
+			    (w->event_flags & SND_SOC_DAPM_PRE_PMD)) {
 				ret = w->event(w, NULL, SND_SOC_DAPM_PRE_PMD);
 				if (ret < 0)
 					return ret;
@@ -602,7 +605,7 @@ static int dapm_power_widgets(struct snd_soc_codec *codec, int event)
 
 			/* power up post event */
 			if (power_change && power && w->event &&
-			    w->event_flags & SND_SOC_DAPM_POST_PMU){
+			    (w->event_flags & SND_SOC_DAPM_POST_PMU)) {
 				ret = w->event(w,
 					       NULL, SND_SOC_DAPM_POST_PMU);
 				if (ret < 0)
@@ -611,7 +614,7 @@ static int dapm_power_widgets(struct snd_soc_codec *codec, int event)
 
 			/* power down post event */
 			if (power_change && !power && w->event &&
-			    w->event_flags & SND_SOC_DAPM_POST_PMD) {
+			    (w->event_flags & SND_SOC_DAPM_POST_PMD)) {
 				ret = w->event(w, NULL, SND_SOC_DAPM_POST_PMD);
 				if (ret < 0)
 					return ret;
