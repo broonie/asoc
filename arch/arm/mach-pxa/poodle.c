@@ -35,6 +35,7 @@
 #include <asm/arch/pxa2xx-gpio.h>
 #include <asm/arch/mmc.h>
 #include <asm/arch/udc.h>
+#include <asm/arch/i2c.h>
 #include <asm/arch/irda.h>
 #include <asm/arch/poodle.h>
 #include <asm/arch/pxafb.h>
@@ -385,6 +386,7 @@ static void __init poodle_init(void)
 	pxa_set_udc_info(&udc_info);
 	pxa_set_mci_info(&poodle_mci_platform_data);
 	pxa_set_ficp_info(&poodle_ficp_platform_data);
+	pxa_set_i2c_info(NULL);
 
 	platform_scoop_config = &poodle_pcmcia_config;
 

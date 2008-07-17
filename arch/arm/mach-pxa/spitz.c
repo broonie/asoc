@@ -38,6 +38,8 @@
 #include <asm/arch/pxa-regs.h>
 #include <asm/arch/pxa2xx-regs.h>
 #include <asm/arch/pxa2xx-gpio.h>
+#include <asm/arch/pxa27x-udc.h>
+#include <asm/arch/i2c.h>
 #include <asm/arch/irda.h>
 #include <asm/arch/mmc.h>
 #include <asm/arch/ohci.h>
@@ -573,6 +575,7 @@ static void __init common_init(void)
 	pxa_set_ficp_info(&spitz_ficp_platform_data);
 	set_pxa_fb_parent(&spitzssp_device.dev);
 	set_pxa_fb_info(&spitz_pxafb_info);
+	pxa_set_i2c_info(NULL);
 }
 
 #if defined(CONFIG_MACH_SPITZ) || defined(CONFIG_MACH_BORZOI)
