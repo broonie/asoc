@@ -972,10 +972,16 @@ static ssize_t codec_reg_show(struct device *dev,
 		step = codec->reg_cache_step;
 
 	count += sprintf(buf, "%s registers\n", codec->name);
-	for (i = 0; i < codec->reg_cache_size; i += step)
-		count += sprintf(buf + count, "%2x: %4x\n", i,
-			codec->read(codec, i));
-
+	for (i = 0; i < codec->reg_cache_size; i += step) {
+		count += sprintf(buf + count, "%2x: ", i);
+		if (codec->display_register)
+			count += codec->display_register(codec,
+							 buf + count, i);
+		else
+			count += sprintf(buf + count, "%4x",
+					 codec->read(codec, i));
+		count += sprintf(buf + count, "\n");
+	}
 	return count;
 }
 static DEVICE_ATTR(codec_reg, 0444, codec_reg_show, NULL);
