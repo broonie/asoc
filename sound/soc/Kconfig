@@ -44,5 +44,7 @@ source "sound/soc/omap/Kconfig"
 # Supported codecs
 source "sound/soc/codecs/Kconfig"
 
-endif	# SND_SOC
+endif
+
+endmenu	# SND_SOC
 
