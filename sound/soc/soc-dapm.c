@@ -455,8 +455,8 @@ static int is_connected_input_ep(struct snd_soc_dapm_widget *widget)
 /*
  * Handler for generic register modifier widget.
  */
-static int dapm_reg_event(struct snd_soc_dapm_widget *w,
-			  struct snd_kcontrol *kcontrol, int event)
+int dapm_reg_event(struct snd_soc_dapm_widget *w,
+		   struct snd_kcontrol *kcontrol, int event)
 {
 	unsigned int val;
 
@@ -470,6 +470,7 @@ static int dapm_reg_event(struct snd_soc_dapm_widget *w,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(dapm_reg_event);
 
 /*
  * Scan each dapm widget for complete audio path.
