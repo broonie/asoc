@@ -984,6 +984,7 @@ static int wm8903_set_bias_level(struct snd_soc_codec *codec,
 				 enum snd_soc_bias_level level)
 {
 	struct wm8903_priv *wm8903 = codec->private_data;
+	struct i2c_client *i2c = codec->control_data;
 	u16 reg, reg2;
 
 	switch (level) {
@@ -1000,12 +1001,6 @@ static int wm8903_set_bias_level(struct snd_soc_codec *codec,
 			wm8903_run_sequence(codec, 0);
 			wm8903_sync_reg_cache(codec, codec->reg_cache);
 
-			/* The default power on sequence configures
-			 * up the headphone and line outputs.
-			 */
-			wm8903->charge_pump_users = 0;
-			wm8903->class_w_users = 4;
-
 			/* Enable low impedence charge pump output */
 			reg = wm8903_read(codec,
 					  WM8903_CONTROL_INTERFACE_TEST_1);
@@ -1016,6 +1011,13 @@ static int wm8903_set_bias_level(struct snd_soc_codec *codec,
 				     reg2 | WM8903_CP_SW_KELVIN_MODE_MASK);
 			wm8903_write(codec, WM8903_CONTROL_INTERFACE_TEST_1,
 				     reg);
+
+			/* By default no bypass paths are enabled so
+			 * enable Class W support.
+			 */
+			dev_dbg(&i2c->dev, "Enabling Class W\n");
+			wm8903_write(codec, WM8903_CLASS_W_0, reg |
+				     WM8903_CP_DYN_FREQ | WM8903_CP_DYN_V);
 		}
 
 		reg = wm8903_read(codec, WM8903_VMID_CONTROL_0);
