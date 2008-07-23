@@ -714,7 +714,7 @@ SOC_ENUM("DAC Companding Mode", dac_companding),
 SOC_SINGLE("DAC Companding Switch", WM8903_AUDIO_INTERFACE_0, 1, 1, 0),
 
 /* Headphones */
-SOC_DOUBLE_R("Headphone Mute Switch",
+SOC_DOUBLE_R("Headphone Switch",
 	     WM8903_ANALOGUE_OUT1_LEFT, WM8903_ANALOGUE_OUT1_RIGHT,
 	     8, 1, 0),
 SOC_DOUBLE_R("Headphone ZC Switch",
