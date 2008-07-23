@@ -67,7 +67,7 @@
 	.info = snd_soc_info_volsw, .get = snd_soc_get_volsw, \
 	.put = snd_soc_put_volsw, \
 	.private_value = (unsigned long)&(struct soc_mixer_control) \
-		{.reg = xreg, .shift = shift_left, .rshift = right_shift,\
+		{.reg = xreg, .shift = shift_left, .rshift = shift_right,\
 		 .max = xmax, .invert = xinvert} }
 #define SOC_DOUBLE_R_TLV(xname, reg_left, reg_right, xshift, xmax, xinvert, tlv_array) \
 {	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname),\
