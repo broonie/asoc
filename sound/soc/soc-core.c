@@ -974,14 +974,28 @@ static ssize_t codec_reg_show(struct device *dev,
 	count += sprintf(buf, "%s registers\n", codec->name);
 	for (i = 0; i < codec->reg_cache_size; i += step) {
 		count += sprintf(buf + count, "%2x: ", i);
+		if (count >= PAGE_SIZE - 1)
+			break;
+
 		if (codec->display_register)
-			count += codec->display_register(codec,
-							 buf + count, i);
+			count += codec->display_register(codec, buf + count,
+							 PAGE_SIZE - count, i);
 		else
-			count += sprintf(buf + count, "%4x",
-					 codec->read(codec, i));
-		count += sprintf(buf + count, "\n");
+			count += snprintf(buf + count, PAGE_SIZE - count,
+					  "%4x", codec->read(codec, i));
+
+		if (count >= PAGE_SIZE - 1)
+			break;
+
+		count += snprintf(buf + count, PAGE_SIZE - count, "\n");
+		if (count >= PAGE_SIZE - 1)
+			break;
 	}
+
+	/* Truncate count; min() would cause a warning */
+	if (count >= PAGE_SIZE)
+		count = PAGE_SIZE - 1;
+
 	return count;
 }
 static DEVICE_ATTR(codec_reg, 0444, codec_reg_show, NULL);
