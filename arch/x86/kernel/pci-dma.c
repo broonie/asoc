@@ -5,13 +5,13 @@
 
 #include <asm/proto.h>
 #include <asm/dma.h>
-#include <asm/gart.h>
+#include <asm/iommu.h>
 #include <asm/calgary.h>
+#include <asm/amd_iommu.h>
 
-int forbid_dac __read_mostly;
-EXPORT_SYMBOL(forbid_dac);
+static int forbid_dac __read_mostly;
 
-const struct dma_mapping_ops *dma_ops;
+struct dma_mapping_ops *dma_ops;
 EXPORT_SYMBOL(dma_ops);
 
 static int iommu_sac_force __read_mostly;
@@ -74,13 +74,17 @@ early_param("dma32_size", parse_dma32_size_opt);
 void __init dma32_reserve_bootmem(void)
 {
 	unsigned long size, align;
-	if (end_pfn <= MAX_DMA32_PFN)
+	if (max_pfn <= MAX_DMA32_PFN)
 		return;
 
+	/*
+	 * check aperture_64.c allocate_aperture() for reason about
+	 * using 512M as goal
+	 */
 	align = 64ULL<<20;
 	size = round_up(dma32_bootmem_size, align);
 	dma32_bootmem_ptr = __alloc_bootmem_nopanic(size, align,
-				 __pa(MAX_DMA_ADDRESS));
+				 512ULL<<20);
 	if (dma32_bootmem_ptr)
 		dma32_bootmem_size = size;
 	else
@@ -88,17 +92,14 @@ void __init dma32_reserve_bootmem(void)
 }
 static void __init dma32_free_bootmem(void)
 {
-	int node;
 
-	if (end_pfn <= MAX_DMA32_PFN)
+	if (max_pfn <= MAX_DMA32_PFN)
 		return;
 
 	if (!dma32_bootmem_ptr)
 		return;
 
-	for_each_online_node(node)
-		free_bootmem_node(NODE_DATA(node), __pa(dma32_bootmem_ptr),
-				  dma32_bootmem_size);
+	free_bootmem(__pa(dma32_bootmem_ptr), dma32_bootmem_size);
 
 	dma32_bootmem_ptr = NULL;
 	dma32_bootmem_size = 0;
@@ -112,19 +113,15 @@ void __init pci_iommu_alloc(void)
 	 * The order of these functions is important for
 	 * fall-back/fail-over reasons
 	 */
-#ifdef CONFIG_GART_IOMMU
 	gart_iommu_hole_init();
-#endif
 
-#ifdef CONFIG_CALGARY_IOMMU
 	detect_calgary();
-#endif
 
 	detect_intel_iommu();
 
-#ifdef CONFIG_SWIOTLB
+	amd_iommu_detect();
+
 	pci_swiotlb_init();
-#endif
 }
 #endif
 
@@ -180,9 +177,7 @@ static __init int iommu_setup(char *p)
 			swiotlb = 1;
 #endif
 
-#ifdef CONFIG_GART_IOMMU
 		gart_parse_options(p);
-#endif
 
 #ifdef CONFIG_CALGARY_IOMMU
 		if (!strncmp(p, "calgary", 7))
@@ -317,16 +312,17 @@ static int dma_release_coherent(struct device *dev, int order, void *vaddr)
 
 int dma_supported(struct device *dev, u64 mask)
 {
+	struct dma_mapping_ops *ops = get_dma_ops(dev);
+
 #ifdef CONFIG_PCI
 	if (mask > 0xffffffff && forbid_dac > 0) {
-		printk(KERN_INFO "PCI: Disallowing DAC for device %s\n",
-				 dev->bus_id);
+		dev_info(dev, "PCI: Disallowing DAC for device\n");
 		return 0;
 	}
 #endif
 
-	if (dma_ops->dma_supported)
-		return dma_ops->dma_supported(dev, mask);
+	if (ops->dma_supported)
+		return ops->dma_supported(dev, mask);
 
 	/* Copied from i386. Doesn't make much sense, because it will
 	   only work for pci_alloc_coherent.
@@ -347,8 +343,7 @@ int dma_supported(struct device *dev, u64 mask)
 	   type. Normally this doesn't make any difference, but gives
 	   more gentle handling of IOMMU overflow. */
 	if (iommu_sac_force && (mask >= DMA_40BIT_MASK)) {
-		printk(KERN_INFO "%s: Force SAC with mask %Lx\n",
-				 dev->bus_id, mask);
+		dev_info(dev, "Force SAC with mask %Lx\n", mask);
 		return 0;
 	}
 
@@ -357,7 +352,7 @@ int dma_supported(struct device *dev, u64 mask)
 EXPORT_SYMBOL(dma_supported);
 
 /* Allocate DMA memory on node near device */
-noinline struct page *
+static noinline struct page *
 dma_alloc_pages(struct device *dev, gfp_t gfp, unsigned order)
 {
 	int node;
@@ -374,6 +369,7 @@ void *
 dma_alloc_coherent(struct device *dev, size_t size, dma_addr_t *dma_handle,
 		   gfp_t gfp)
 {
+	struct dma_mapping_ops *ops = get_dma_ops(dev);
 	void *memory = NULL;
 	struct page *page;
 	unsigned long dma_mask = 0;
@@ -442,8 +438,8 @@ dma_alloc_coherent(struct device *dev, size_t size, dma_addr_t *dma_handle,
 			/* Let low level make its own zone decisions */
 			gfp &= ~(GFP_DMA32|GFP_DMA);
 
-			if (dma_ops->alloc_coherent)
-				return dma_ops->alloc_coherent(dev, size,
+			if (ops->alloc_coherent)
+				return ops->alloc_coherent(dev, size,
 							   dma_handle, gfp);
 			return NULL;
 		}
@@ -455,14 +451,14 @@ dma_alloc_coherent(struct device *dev, size_t size, dma_addr_t *dma_handle,
 		}
 	}
 
-	if (dma_ops->alloc_coherent) {
+	if (ops->alloc_coherent) {
 		free_pages((unsigned long)memory, get_order(size));
 		gfp &= ~(GFP_DMA|GFP_DMA32);
-		return dma_ops->alloc_coherent(dev, size, dma_handle, gfp);
+		return ops->alloc_coherent(dev, size, dma_handle, gfp);
 	}
 
-	if (dma_ops->map_simple) {
-		*dma_handle = dma_ops->map_simple(dev, virt_to_phys(memory),
+	if (ops->map_simple) {
+		*dma_handle = ops->map_simple(dev, virt_to_phys(memory),
 					      size,
 					      PCI_DMA_BIDIRECTIONAL);
 		if (*dma_handle != bad_dma_address)
@@ -484,27 +480,27 @@ EXPORT_SYMBOL(dma_alloc_coherent);
 void dma_free_coherent(struct device *dev, size_t size,
 			 void *vaddr, dma_addr_t bus)
 {
+	struct dma_mapping_ops *ops = get_dma_ops(dev);
+
 	int order = get_order(size);
 	WARN_ON(irqs_disabled());	/* for portability */
 	if (dma_release_coherent(dev, order, vaddr))
 		return;
-	if (dma_ops->unmap_single)
-		dma_ops->unmap_single(dev, bus, size, 0);
+	if (ops->unmap_single)
+		ops->unmap_single(dev, bus, size, 0);
 	free_pages((unsigned long)vaddr, order);
 }
 EXPORT_SYMBOL(dma_free_coherent);
 
 static int __init pci_iommu_init(void)
 {
-#ifdef CONFIG_CALGARY_IOMMU
 	calgary_iommu_init();
-#endif
 
 	intel_iommu_init();
 
-#ifdef CONFIG_GART_IOMMU
+	amd_iommu_init();
+
 	gart_iommu_init();
-#endif
 
 	no_iommu_init();
 	return 0;

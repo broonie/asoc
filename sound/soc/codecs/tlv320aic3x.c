@@ -672,6 +672,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"Right Line Out", NULL, "Right Line2 Bypass Mixer"},
 	{"Mono Out", NULL, "Right Line2 Bypass Mixer"},
 	{"Right HP Out", NULL, "Right Line2 Bypass Mixer"},
+
 	/*
 	 * Logical path between digital mic enable and GPIO1 modulator clock
 	 * output function

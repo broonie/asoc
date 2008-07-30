@@ -9,9 +9,6 @@
  *  under  the terms of  the GNU General  Public License as published by the
  *  Free Software Foundation;  either version 2 of the  License, or (at your
  *  option) any later version.
- *
- *  Revision history
- *    1st July 2007   Initial version.
  */
 
 #include <linux/init.h>
@@ -213,8 +210,8 @@ static int ad1980_soc_probe(struct platform_device *pdev)
 	}
 	memcpy(codec->reg_cache, ad1980_reg, sizeof(u16) * \
 			ARRAY_SIZE(ad1980_reg));
-	codec->reg_cache_size = ARRAY_SIZE(ad1980_reg);
-	codec->reg_cache_step = 1;
+	codec->reg_cache_size = sizeof(u16) * ARRAY_SIZE(ad1980_reg);
+	codec->reg_cache_step = 2;
 	codec->name = "AD1980";
 	codec->owner = THIS_MODULE;
 	codec->dai = &ad1980_dai;

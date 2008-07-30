@@ -63,7 +63,7 @@ static void n810_ext_control(struct snd_soc_codec *codec)
 	if (n810_dmic_func)
 		snd_soc_dapm_enable_pin(codec, "DMic");
 	else
-		snd_soc_dapm_disable_pin(codec, "DMic);
+		snd_soc_dapm_disable_pin(codec, "DMic");
 
 	snd_soc_dapm_sync(codec);
 }
@@ -91,7 +91,7 @@ static int n810_hw_params(struct snd_pcm_substream *substream,
 	int err;
 
 	/* Set codec DAI configuration */
-	err = codec_dai->dai_ops.set_fmt(codec_dai,
+	err = snd_soc_dai_set_fmt(codec_dai,
 					 SND_SOC_DAIFMT_I2S |
 					 SND_SOC_DAIFMT_NB_NF |
 					 SND_SOC_DAIFMT_CBM_CFM);
@@ -99,7 +99,7 @@ static int n810_hw_params(struct snd_pcm_substream *substream,
 		return err;
 
 	/* Set cpu DAI configuration */
-	err = cpu_dai->dai_ops.set_fmt(cpu_dai,
+	err = snd_soc_dai_set_fmt(cpu_dai,
 				       SND_SOC_DAIFMT_I2S |
 				       SND_SOC_DAIFMT_NB_NF |
 				       SND_SOC_DAIFMT_CBM_CFM);
@@ -107,7 +107,7 @@ static int n810_hw_params(struct snd_pcm_substream *substream,
 		return err;
 
 	/* Set the codec system clock for DAC and ADC */
-	err = codec_dai->dai_ops.set_sysclk(codec_dai, 0, 12000000,
+	err = snd_soc_dai_set_sysclk(codec_dai, 0, 12000000,
 					    SND_SOC_CLOCK_IN);
 
 	return err;

@@ -1,4 +1,5 @@
-menu "ALSA SoC audio for Freescale SOCs"
+config SND_SOC_OF_SIMPLE
+	tristate
 
 config SND_SOC_OF_SIMPLE
 	tristate
@@ -26,5 +27,3 @@ config SND_SOC_MPC5200_I2S
 	depends on SND_SOC && PPC_MPC52xx
 	help
 	  Say Y here to support the MPC5200 PSCs in I2S mode.
-
-endmenu

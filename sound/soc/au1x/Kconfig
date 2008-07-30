@@ -3,7 +3,7 @@
 ##
 config SND_SOC_AU1XPSC
 	tristate "SoC Audio for Au1200/Au1250/Au1550"
-	depends on SND_SOC && (SOC_AU1200 || SOC_AU1550)
+	depends on SOC_AU1200 || SOC_AU1550
 	help
 	  This option enables support for the Programmable Serial
 	  Controllers in AC97 and I2S mode, and the Descriptor-Based DMA
@@ -21,6 +21,17 @@ config SND_SOC_AU1XPSC_AC97
 ##
 ## Boards
 ##
+
+config SND_SOC_SAMPLE_PSC_AC97
+	tristate "Sample Au12x0/Au1550 PSC AC97 sound machine"
+	depends on SND_SOC_AU1XPSC
+	select SND_SOC_AU1XPSC_AC97
+	select SND_SOC_AC97_CODEC
+	help
+	  This is a sample AC97 sound machine for use in Au12x0/Au1550
+	  based systems which have audio on PSC1 (e.g. Db1200 demoboard).
+
+
 config SND_SOC_EXM1200_AC97
 	tristate "MSC EXM32-Au1200 AC97 support"
 	depends on SND_SOC_AU1XPSC
@@ -37,4 +48,3 @@ config SND_SOC_EXM1200_SSI
 	select SND_SOC_CS4251X
 	help
 	  I2S sound support for EXM32 Development Motherboard
-
