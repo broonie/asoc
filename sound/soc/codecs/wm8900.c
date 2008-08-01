@@ -300,7 +300,7 @@ static const DECLARE_TLV_DB_SCALE(dac_tlv, -7200, 75, 1);
 
 static const DECLARE_TLV_DB_SCALE(adc_svol_tlv, -3600, 300, 0);
 
-static const DECLARE_TLV_DB_SCALE(adc_tlv, -7200, 75, 0);
+static const DECLARE_TLV_DB_SCALE(adc_tlv, -7200, 75, 1);
 
 static const char *mic_bias_level_txt[] = { "0.9*AVDD", "0.65*AVDD" };
 
