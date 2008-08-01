@@ -296,7 +296,7 @@ static const DECLARE_TLV_DB_SCALE(in_pga_tlv, -1200, 100, 0);
 
 static const DECLARE_TLV_DB_SCALE(dac_boost_tlv, 0, 600, 0);
 
-static const DECLARE_TLV_DB_SCALE(dac_tlv, -7200, 75, 0);
+static const DECLARE_TLV_DB_SCALE(dac_tlv, -7200, 75, 1);
 
 static const DECLARE_TLV_DB_SCALE(adc_svol_tlv, -3600, 300, 0);
 
