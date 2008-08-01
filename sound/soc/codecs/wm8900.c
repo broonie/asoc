@@ -127,9 +127,12 @@
 
 #define WM8900_REG_FLLCTL6_FLL_SLOW_LOCK_REF 0x100
 
-#define WM8900_REG_HPCTL_HP_CLAMP_IP   0x20
-#define WM8900_REG_HPCTL_HP_CLAMP_OP   0x10
-#define WM8900_REG_HPCTL_HP_SHORT      0x08
+#define WM8900_REG_HPCTL1_HP_IPSTAGE_ENA 0x80
+#define WM8900_REG_HPCTL1_HP_OPSTAGE_ENA 0x40
+#define WM8900_REG_HPCTL1_HP_CLAMP_IP    0x20
+#define WM8900_REG_HPCTL1_HP_CLAMP_OP    0x10
+#define WM8900_REG_HPCTL1_HP_SHORT       0x08
+#define WM8900_REG_HPCTL1_HP_SHORT2      0x04
 
 #define WM8900_LRC_MASK 0xfc00
 
@@ -284,6 +287,70 @@ static void wm8900_reset(struct snd_soc_codec *codec)
 
 	memcpy(codec->reg_cache, wm8900_reg_defaults,
 	       sizeof(codec->reg_cache));
+}
+
+static int wm8900_hp_event(struct snd_soc_dapm_widget *w,
+			   struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_codec *codec = w->codec;
+	u16 hpctl1 = wm8900_read(codec, WM8900_REG_HPCTL1);
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		/* Clamp headphone outputs */
+		hpctl1 = WM8900_REG_HPCTL1_HP_CLAMP_IP |
+			WM8900_REG_HPCTL1_HP_CLAMP_OP;
+		wm8900_write(codec, WM8900_REG_HPCTL1, hpctl1);
+		break;
+
+	case SND_SOC_DAPM_POST_PMU:
+		/* Enable the input stage */
+		hpctl1 &= ~WM8900_REG_HPCTL1_HP_CLAMP_IP;
+		hpctl1 |= WM8900_REG_HPCTL1_HP_SHORT |
+			WM8900_REG_HPCTL1_HP_SHORT2 |
+			WM8900_REG_HPCTL1_HP_IPSTAGE_ENA;
+		wm8900_write(codec, WM8900_REG_HPCTL1, hpctl1);
+
+		msleep(400);
+
+		/* Enable the output stage */
+		hpctl1 &= ~WM8900_REG_HPCTL1_HP_CLAMP_OP;
+		hpctl1 |= WM8900_REG_HPCTL1_HP_OPSTAGE_ENA;
+		wm8900_write(codec, WM8900_REG_HPCTL1, hpctl1);
+
+		/* Remove the shorts */
+		hpctl1 &= ~WM8900_REG_HPCTL1_HP_SHORT2;
+		wm8900_write(codec, WM8900_REG_HPCTL1, hpctl1);
+		hpctl1 &= ~WM8900_REG_HPCTL1_HP_SHORT;
+		wm8900_write(codec, WM8900_REG_HPCTL1, hpctl1);
+		break;
+
+	case SND_SOC_DAPM_PRE_PMD:
+		/* Short the output */
+		hpctl1 |= WM8900_REG_HPCTL1_HP_SHORT;
+		wm8900_write(codec, WM8900_REG_HPCTL1, hpctl1);
+
+		/* Disable the output stage */
+		hpctl1 &= ~WM8900_REG_HPCTL1_HP_OPSTAGE_ENA;
+		wm8900_write(codec, WM8900_REG_HPCTL1, hpctl1);
+
+		/* Clamp the outputs and power down input */
+		hpctl1 |= WM8900_REG_HPCTL1_HP_CLAMP_IP |
+			WM8900_REG_HPCTL1_HP_CLAMP_OP;
+		hpctl1 &= ~WM8900_REG_HPCTL1_HP_IPSTAGE_ENA;
+		wm8900_write(codec, WM8900_REG_HPCTL1, hpctl1);
+		break;
+
+	case SND_SOC_DAPM_POST_PMD:
+		/* Disable everything */
+		wm8900_write(codec, WM8900_REG_HPCTL1, 0);
+		break;
+
+	default:
+		BUG();
+	}
+
+	return 0;
 }
 
 static const DECLARE_TLV_DB_SCALE(out_pga_tlv, -5700, 100, 0);
@@ -563,10 +630,10 @@ SND_SOC_DAPM_ADC("ADCR", "Right HiFi Capture", WM8900_REG_POWER2, 0, 0),
 SND_SOC_DAPM_DAC("DACL", "Left HiFi Playback", WM8900_REG_POWER3, 1, 0),
 SND_SOC_DAPM_DAC("DACR", "Right HiFi Playback", WM8900_REG_POWER3, 0, 0),
 
-SND_SOC_DAPM_MIXER("HP_OPSTAGE", WM8900_REG_HPCTL1, 6, 0, NULL, 0),
-SND_SOC_DAPM_MIXER("HP_IPSTAGE", WM8900_REG_HPCTL1, 7, 0, NULL, 0),
-/* See comment in audio map */
-SND_SOC_DAPM_MIXER("HP_CP", WM8900_REG_POWER3, 7, 0, NULL, 0),
+SND_SOC_DAPM_PGA_E("Headphone Amplifier", WM8900_REG_POWER3, 7, 0, NULL, 0,
+		   wm8900_hp_event,
+		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
+		   SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 
 SND_SOC_DAPM_PGA("LINEOUT1L PGA", WM8900_REG_POWER2, 8, 0, NULL, 0),
 SND_SOC_DAPM_PGA("LINEOUT1R PGA", WM8900_REG_POWER2, 7, 0, NULL, 0),
@@ -642,12 +709,10 @@ static const struct snd_soc_dapm_route audio_map[] = {
  * Note also that left and right headphone paths are treated as a
  * mono path.
  */
-{"HP_CP", NULL, "LINEOUT2 LP"},
-{"HP_CP", NULL, "LINEOUT2 LP"},
-{"HP_IPSTAGE", NULL, "HP_CP"},
-{"HP_OPSTAGE", NULL, "HP_IPSTAGE"},
-{"HP_L", NULL, "HP_OPSTAGE"},
-{"HP_R", NULL, "HP_OPSTAGE"},
+{"Headphone Amplifier", NULL, "LINEOUT2 LP"},
+{"Headphone Amplifier", NULL, "LINEOUT2 LP"},
+{"HP_L", NULL, "Headphone Amplifier"},
+{"HP_R", NULL, "Headphone Amplifier"},
 };
 
 static int wm8900_add_widgets(struct snd_soc_codec *codec)
@@ -1124,11 +1189,6 @@ static int wm8900_set_bias_level(struct snd_soc_codec *codec,
 		break;
 
 	case SND_SOC_BIAS_OFF:
-		/* Clamp headphone outputs */
-		wm8900_write(codec, WM8900_REG_HPCTL1,
-			     WM8900_REG_HPCTL_HP_CLAMP_IP |
-			     WM8900_REG_HPCTL_HP_CLAMP_OP);
-
 		/* Startup bias enable */
 		reg = wm8900_read(codec, WM8900_REG_POWER1);
 		wm8900_write(codec, WM8900_REG_POWER1,
