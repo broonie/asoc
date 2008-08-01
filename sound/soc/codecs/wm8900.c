@@ -848,13 +848,13 @@ reenable:
 	return 0;
 }
 
-static int wm8900_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
+static int wm8900_set_dai_pll(struct snd_soc_dai *codec_dai,
 		int pll_id, unsigned int freq_in, unsigned int freq_out)
 {
 	return wm8900_set_fll(codec_dai->codec, pll_id, freq_in, freq_out);
 }
 
-static int wm8900_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
+static int wm8900_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
 				 int div_id, int div)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -904,7 +904,7 @@ static int wm8900_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 }
 
 
-static int wm8900_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8900_set_dai_fmt(struct snd_soc_dai *codec_dai,
 			      unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -1017,7 +1017,7 @@ static int wm8900_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int wm8900_digital_mute(struct snd_soc_codec_dai *codec_dai, int mute)
+static int wm8900_digital_mute(struct snd_soc_dai *codec_dai, int mute)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	u16 reg;
@@ -1043,7 +1043,7 @@ static int wm8900_digital_mute(struct snd_soc_codec_dai *codec_dai, int mute)
 	(SNDRV_PCM_FORMAT_S16_LE | SNDRV_PCM_FORMAT_S20_3LE | \
 	 SNDRV_PCM_FORMAT_S24_LE)
 
-struct snd_soc_codec_dai wm8900_dai = {
+struct snd_soc_dai wm8900_dai = {
 	.name = "WM8900 HiFi",
 	.playback = {
 		.stream_name = "HiFi Playback",
