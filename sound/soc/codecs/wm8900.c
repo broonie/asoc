@@ -720,10 +720,10 @@ static int wm8900_add_widgets(struct snd_soc_codec *codec)
 	snd_soc_dapm_new_controls(codec, wm8900_dapm_widgets,
 				  ARRAY_SIZE(wm8900_dapm_widgets));
 
-	/* set up audio path audio_mapnects */
 	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
 
 	snd_soc_dapm_new_widgets(codec);
+
 	return 0;
 }
 
@@ -737,7 +737,6 @@ static int wm8900_hw_params(struct snd_pcm_substream *substream,
 
 	reg = wm8900_read(codec, WM8900_REG_AUDIO1) & ~0x60;
 
-	/* bit size */
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S16_LE:
 		break;
