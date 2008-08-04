@@ -462,7 +462,7 @@ SOC_DOUBLE_R_TLV("Digital Playback Volume",
 		 WM8900_REG_LDAC_DV, WM8900_REG_RDAC_DV,
 		 1, 96, 0, dac_tlv),
 SOC_DOUBLE_R_TLV("Digital Capture Volume",
-		 WM8900_REG_LADC_DV,WM8900_REG_RADC_DV, 1, 119, 0, adc_tlv),
+		 WM8900_REG_LADC_DV, WM8900_REG_RADC_DV, 1, 119, 0, adc_tlv),
 
 SOC_SINGLE_TLV("LINPUT3 Bypass Volume", WM8900_REG_LOUTMIXCTL1, 4, 7, 0,
 	       out_mix_tlv),
@@ -1083,11 +1083,10 @@ static int wm8900_digital_mute(struct snd_soc_dai *codec_dai, int mute)
 
 	reg = wm8900_read(codec, WM8900_REG_DACCTRL);
 
-	if (mute) {
+	if (mute)
 		reg |= WM8900_REG_DACCTRL_MUTE;
-	} else {
+	else
 		reg &= ~WM8900_REG_DACCTRL_MUTE;
-	}
 
 	wm8900_write(codec, WM8900_REG_DACCTRL, reg);
 
@@ -1277,9 +1276,8 @@ static int wm8900_resume(struct platform_device *pdev)
 	}
 
 	if (cache) {
-		for (i = 0; i < WM8900_MAXREG; i++) {
+		for (i = 0; i < WM8900_MAXREG; i++)
 			wm8900_write(codec, i, cache[i]);
-		}
 		kfree(cache);
 	} else
 		dev_err(&pdev->dev, "Unable to allocate register cache\n");
