@@ -28,8 +28,6 @@
 #define WM8580_CLKSRC_OSC  4
 #define WM8580_CLKSRC_NONE 5
 
-extern struct snd_soc_codec_device soc_codec_dev_wm8580;
-
 struct wm8580_setup_data {
 	unsigned short i2c_address;
 };
@@ -37,7 +35,7 @@ struct wm8580_setup_data {
 #define WM8580_DAI_PAIFRX 0
 #define WM8580_DAI_PAIFTX 1
 
-extern struct snd_soc_codec_dai wm8580_dai[];
+extern struct snd_soc_dai wm8580_dai[];
 extern struct snd_soc_codec_device soc_codec_dev_wm8580;
 
 #endif

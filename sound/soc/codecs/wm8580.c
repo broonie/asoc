@@ -494,7 +494,7 @@ static int pll_factors(struct _pll_div *pll_div, unsigned int target,
 	return 0;
 }
 
-static int wm8580_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
+static int wm8580_set_dai_pll(struct snd_soc_dai *codec_dai,
 		int pll_id, unsigned int freq_in, unsigned int freq_out)
 {
 	int offset;
@@ -596,7 +596,7 @@ static int wm8580_paif_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int wm8580_set_paif_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8580_set_paif_dai_fmt(struct snd_soc_dai *codec_dai,
 				      unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -677,7 +677,7 @@ static int wm8580_set_paif_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int wm8580_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
+static int wm8580_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
 				 int div_id, int div)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -786,7 +786,7 @@ static int wm8580_set_bias_level(struct snd_soc_codec *codec,
 #define WM8580_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
 
-struct snd_soc_codec_dai wm8580_dai[] = {
+struct snd_soc_dai wm8580_dai[] = {
 	{
 		.name = "WM8580 PAIFRX",
 		.id = 0,
