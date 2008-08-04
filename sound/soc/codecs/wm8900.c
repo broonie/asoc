@@ -1,7 +1,7 @@
 /*
  * wm8900.c  --  WM8900 ALSA Soc Audio driver
  *
- * Copyright 2007 Wolfson Microelectronics PLC.
+ * Copyright 2007, 2008 Wolfson Microelectronics PLC.
  *
  * Author: Mark Brown <broonie@opensource.wolfsonmicro.com>
  *

@@ -1,5 +1,5 @@
 /*
- * wm8900.h  --  WM8050 Soc Audio driver
+ * wm8900.h  --  WM890 Soc Audio driver
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
