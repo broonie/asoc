@@ -286,47 +286,49 @@ static int wm8580_out_vu(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	int reg = kcontrol->private_value & 0xff;
+	int reg2 = (kcontrol->private_value >> 24) & 0xff;
 	int ret;
 	u16 val;
 
 	/* Clear the register cache so we write without VU set */
 	wm8580_write_reg_cache(codec, reg, 0);
+	wm8580_write_reg_cache(codec, reg2, 0);
 
-	ret = snd_soc_put_volsw(kcontrol, ucontrol);
+	ret = snd_soc_put_volsw_2r(kcontrol, ucontrol);
 	if (ret < 0)
 		return ret;
 
 	/* Now write again with the volume update bit set */
 	val = wm8580_read_reg_cache(codec, reg);
-	return wm8580_write(codec, reg, val | 0x0100);
+	wm8580_write(codec, reg, val | 0x0100);
+
+	val = wm8580_read_reg_cache(codec, reg2);
+	wm8580_write(codec, reg2, val | 0x0100);
+
+	return 0;
 }
 
-#define SOC_WM8580_OUT_SINGLE_R_TLV(xname, reg, shift, max, invert, tlv_array) \
+#define SOC_WM8580_OUT_DOUBLE_R_TLV(xname, reg_left, reg_right, shift, max, invert, tlv_array) \
 {	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname), \
 	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |\
 		SNDRV_CTL_ELEM_ACCESS_READWRITE,  \
 	.tlv.p = (tlv_array), \
-	.info = snd_soc_info_volsw, \
-	.get = snd_soc_get_volsw, .put = wm8580_out_vu, \
-	.private_value = SOC_SINGLE_VALUE(reg, shift, max, invert) }
+	.info = snd_soc_info_volsw_2r, \
+	.get = snd_soc_get_volsw_2r, .put = wm8580_out_vu, \
+	.private_value = (reg_left) | ((shift) << 8)  |		\
+		((max) << 12) | ((invert) << 20) | ((reg_right) << 24) }
 
 static const struct snd_kcontrol_new wm8580_snd_controls[] = {
-SOC_WM8580_OUT_SINGLE_R_TLV("Left DAC1 Playback Volume",
+SOC_WM8580_OUT_DOUBLE_R_TLV("DAC1 Playback Volume",
 			    WM8580_DIGITAL_ATTENUATION_DACL1,
-			    0, 0xff, 0, dac_tlv),
-SOC_WM8580_OUT_SINGLE_R_TLV("Right DAC1 Playback Volume",
 			    WM8580_DIGITAL_ATTENUATION_DACR1,
 			    0, 0xff, 0, dac_tlv),
-SOC_WM8580_OUT_SINGLE_R_TLV("Left DAC2 Playback Volume",
+SOC_WM8580_OUT_DOUBLE_R_TLV("DAC2 Playback Volume",
 			    WM8580_DIGITAL_ATTENUATION_DACL2,
-			    0, 0xff, 0, dac_tlv),
-SOC_WM8580_OUT_SINGLE_R_TLV("Right DAC2 Playback Volume",
 			    WM8580_DIGITAL_ATTENUATION_DACR2,
 			    0, 0xff, 0, dac_tlv),
-SOC_WM8580_OUT_SINGLE_R_TLV("Left DAC3 Playback Volume",
+SOC_WM8580_OUT_DOUBLE_R_TLV("DAC3 Playback Volume",
 			    WM8580_DIGITAL_ATTENUATION_DACL3,
-			    0, 0xff, 0, dac_tlv),
-SOC_WM8580_OUT_SINGLE_R_TLV("Right DAC3 Playback Volume",
 			    WM8580_DIGITAL_ATTENUATION_DACR3,
 			    0, 0xff, 0, dac_tlv),
 
@@ -334,20 +336,16 @@ SOC_SINGLE("DAC1 Deemphasis Switch", WM8580_DAC_CONTROL3, 0, 1, 0),
 SOC_SINGLE("DAC2 Deemphasis Switch", WM8580_DAC_CONTROL3, 1, 1, 0),
 SOC_SINGLE("DAC3 Deemphasis Switch", WM8580_DAC_CONTROL3, 2, 1, 0),
 
-SOC_SINGLE("DAC1 Left Invert Switch", WM8580_DAC_CONTROL4,  0, 1, 0),
-SOC_SINGLE("DAC1 Right Invert Switch", WM8580_DAC_CONTROL4, 1, 1, 0),
-SOC_SINGLE("DAC2 Left Invert Switch", WM8580_DAC_CONTROL4,  2, 1, 0),
-SOC_SINGLE("DAC2 Right Invert Switch", WM8580_DAC_CONTROL4, 3, 1, 0),
-SOC_SINGLE("DAC3 Left Invert Switch", WM8580_DAC_CONTROL4,  4, 1, 0),
-SOC_SINGLE("DAC3 Right Invert Switch", WM8580_DAC_CONTROL4, 5, 1, 0),
+SOC_DOUBLE("DAC1 Invert Switch", WM8580_DAC_CONTROL4,  0, 1, 1, 0),
+SOC_DOUBLE("DAC2 Invert Switch", WM8580_DAC_CONTROL4,  2, 3, 1, 0),
+SOC_DOUBLE("DAC3 Invert Switch", WM8580_DAC_CONTROL4,  4, 5, 1, 0),
 
 SOC_SINGLE("DAC ZC Switch", WM8580_DAC_CONTROL5, 5, 1, 0),
-SOC_SINGLE("DAC1 Mute Switch", WM8580_DAC_CONTROL5, 0, 1, 0),
-SOC_SINGLE("DAC2 Mute Switch", WM8580_DAC_CONTROL5, 1, 1, 0),
-SOC_SINGLE("DAC3 Mute Switch", WM8580_DAC_CONTROL5, 2, 1, 0),
+SOC_SINGLE("DAC1 Switch", WM8580_DAC_CONTROL5, 0, 1, 0),
+SOC_SINGLE("DAC2 Switch", WM8580_DAC_CONTROL5, 1, 1, 0),
+SOC_SINGLE("DAC3 Switch", WM8580_DAC_CONTROL5, 2, 1, 0),
 
-SOC_SINGLE("ADCL Mute Switch", WM8580_ADC_CONTROL1, 0, 1, 0),
-SOC_SINGLE("ADCR Mute Switch", WM8580_ADC_CONTROL1, 1, 1, 0),
+SOC_DOUBLE("ADC Mute Switch", WM8580_ADC_CONTROL1, 0, 1, 1, 0),
 SOC_SINGLE("ADC High-Pass Filter Switch", WM8580_ADC_CONTROL1, 4, 1, 0),
 };
 
