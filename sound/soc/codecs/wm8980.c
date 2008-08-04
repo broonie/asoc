@@ -403,7 +403,7 @@ static struct pll_ pll[] = {
 	/* TODO: liam - add more entries */
 };
 
-static int wm8980_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
+static int wm8980_set_dai_pll(struct snd_soc_dai *codec_dai,
 		int pll_id, unsigned int freq_in, unsigned int freq_out)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -430,7 +430,7 @@ static int wm8980_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 	return -EINVAL;
 }
 
-static int wm8980_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8980_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -532,7 +532,7 @@ static int wm8980_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int wm8980_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
+static int wm8980_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
 		int div_id, int div)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -570,7 +570,7 @@ static int wm8980_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int wm8980_mute(struct snd_soc_codec_dai *dai, int mute)
+static int wm8980_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
 	u16 mute_reg = wm8980_read_reg_cache(codec, WM8980_DAC) & 0xffbf;
@@ -616,7 +616,7 @@ static int wm8980_set_bias_level(struct snd_soc_codec *codec,
 	(SNDRV_PCM_FORMAT_S16_LE | SNDRV_PCM_FORMAT_S20_3LE | \
 	SNDRV_PCM_FORMAT_S24_3LE | SNDRV_PCM_FORMAT_S24_LE)
 
-struct snd_soc_codec_dai wm8980_dai = {
+struct snd_soc_dai wm8980_dai = {
 	.name = "WM8980 HiFi",
 	.playback = {
 		.stream_name = "Playback",

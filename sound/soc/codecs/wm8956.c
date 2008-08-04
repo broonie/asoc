@@ -163,7 +163,7 @@ static int wm8956_add_widgets(struct snd_soc_codec *codec)
 	return 0;
 }
 
-static int wm8956_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8956_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -247,7 +247,7 @@ static int wm8956_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int wm8956_mute(struct snd_soc_codec_dai *dai, int mute)
+static int wm8956_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
 	u16 mute_reg = wm8956_read_reg_cache(codec, WM8956_DACCTL1) & 0xfff7;
@@ -326,7 +326,7 @@ static void pll_factors(unsigned int target, unsigned int source)
 	pll_div.k = K;
 }
 
-static int wm8956_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
+static int wm8956_set_dai_pll(struct snd_soc_dai *codec_dai,
 		int pll_id, unsigned int freq_in, unsigned int freq_out)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -355,7 +355,7 @@ static int wm8956_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int wm8956_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
+static int wm8956_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
 		int div_id, int div)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -402,7 +402,7 @@ static int wm8956_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE | \
 	SNDRV_PCM_FMTBIT_S24_LE)
 
-struct snd_soc_codec_dai wm8956_dai = {
+struct snd_soc_dai wm8956_dai = {
 	.name = "WM8956",
 	.playback = {
 		.stream_name = "Playback",

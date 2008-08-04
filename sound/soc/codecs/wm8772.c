@@ -145,7 +145,7 @@ static int wm8772_add_controls(struct snd_soc_codec *codec)
 	return 0;
 }
 
-static int wm8772_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
+static int wm8772_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 		int clk_id, unsigned int freq, int dir)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -178,7 +178,7 @@ static int wm8772_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
 	return -EINVAL;
 }
 
-static int wm8772_set_dac_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8772_set_dac_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -232,7 +232,7 @@ static int wm8772_set_dac_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int wm8772_set_adc_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8772_set_adc_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -400,7 +400,7 @@ static int wm8772_set_bias_level(struct snd_soc_codec *codec,
 	return 0;
 }
 
-struct snd_soc_codec_dai wm8772_dai[] = {
+struct snd_soc_dai wm8772_dai[] = {
 {
 	.name = "WM8772",
 	.playback = {

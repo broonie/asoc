@@ -895,7 +895,7 @@ struct wm8991_setup_data {
 #define WM8991_ADCCLK_DIV 2
 #define WM8991_BCLK_DIV 3
 
-extern struct snd_soc_codec_dai wm8991_dai;
+extern struct snd_soc_dai wm8991_dai;
 extern struct snd_soc_codec_device soc_codec_dev_wm8991;
 
 #endif	/* __WM8991REGISTERDEFS_H__ */

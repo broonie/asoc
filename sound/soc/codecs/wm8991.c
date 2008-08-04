@@ -988,7 +988,7 @@ static void pll_factors(struct _pll_div *pll_div, unsigned int target,
 	pll_div->k = K;
 }
 
-static int wm8991_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
+static int wm8991_set_dai_pll(struct snd_soc_dai *codec_dai,
 		int pll_id, unsigned int freq_in, unsigned int freq_out)
 {
 	u16 reg;
@@ -1024,7 +1024,7 @@ static int wm8991_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 /*
  * Clock after PLL and dividers
  */
-static int wm8991_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
+static int wm8991_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 		int clk_id, unsigned int freq, int dir)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -1037,7 +1037,7 @@ static int wm8991_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
 /*
  * Set's ADC and Voice DAC format.
  */
-static int wm8991_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8991_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -1090,7 +1090,7 @@ static int wm8991_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int wm8991_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
+static int wm8991_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
 		int div_id, int div)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -1156,7 +1156,7 @@ static int wm8991_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int wm8991_mute(struct snd_soc_codec_dai *dai, int mute)
+static int wm8991_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
 
@@ -1187,7 +1187,7 @@ static int wm8991_set_bias_level(struct snd_soc_codec *codec,
  * 1. ADC/DAC on Primary Interface
  * 2. ADC on Primary Interface/DAC on secondary
  */
-struct snd_soc_codec_dai wm8991_dai = {
+struct snd_soc_dai wm8991_dai = {
 /* ADC/DAC on primary */
 	.name = "WM8991 ADC/DAC Primary",
 	.id = 1,

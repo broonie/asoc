@@ -462,7 +462,7 @@ static int get_coeff(int mclk, int rate)
 	return -EINVAL;
 }
 
-static int wm8971_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
+static int wm8971_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 		int clk_id, unsigned int freq, int dir)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -480,7 +480,7 @@ static int wm8971_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
 	return -EINVAL;
 }
 
-static int wm8971_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8971_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -573,7 +573,7 @@ static int wm8971_pcm_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int wm8971_mute(struct snd_soc_codec_dai *dai, int mute)
+static int wm8971_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
 	u16 mute_reg = wm8971_read_reg_cache(codec, WM8971_ADCDAC) & 0xfff7;
@@ -616,7 +616,7 @@ static int wm8971_set_bias_level(struct snd_soc_codec *codec,
 #define WM8971_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 	SNDRV_PCM_FMTBIT_S24_LE)
 
-struct snd_soc_codec_dai wm8971_dai = {
+struct snd_soc_dai wm8971_dai = {
 	.name = "WM8971",
 	.playback = {
 		.stream_name = "Playback",

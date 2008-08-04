@@ -282,7 +282,7 @@ static void wm8951_shutdown(struct snd_pcm_substream *substream)
 	}
 }
 
-static int wm8951_mute(struct snd_soc_codec_dai *dai, int mute)
+static int wm8951_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
 	u16 mute_reg = wm8951_read_reg_cache(codec, WM8951_APDIGI) & 0xfff7;
@@ -294,7 +294,7 @@ static int wm8951_mute(struct snd_soc_codec_dai *dai, int mute)
 	return 0;
 }
 
-static int wm8951_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
+static int wm8951_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 		int clk_id, unsigned int freq, int dir)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -313,7 +313,7 @@ static int wm8951_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
 }
 
 
-static int wm8951_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8951_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -404,7 +404,7 @@ static int wm8951_set_bias_level(struct snd_soc_codec *codec,
 #define WM8951_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 	SNDRV_PCM_FMTBIT_S24_LE)
 
-struct snd_soc_codec_dai wm8951_dai = {
+struct snd_soc_dai wm8951_dai = {
 	.name = "WM8951",
 	.capture = {
 		.stream_name = "Capture",

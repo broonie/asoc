@@ -36,7 +36,7 @@ struct wm8951_setup_data {
 	unsigned short i2c_address;
 };
 
-extern struct snd_soc_codec_dai wm8951_dai;
+extern struct snd_soc_dai wm8951_dai;
 extern struct snd_soc_codec_device soc_codec_dev_wm8951;
 
 #endif

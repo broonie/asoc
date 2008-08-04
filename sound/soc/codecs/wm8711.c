@@ -273,7 +273,7 @@ static void wm8711_shutdown(struct snd_pcm_substream *substream)
 	}
 }
 
-static int wm8711_mute(struct snd_soc_codec_dai *dai, int mute)
+static int wm8711_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
 	u16 mute_reg = wm8711_read_reg_cache(codec, WM8711_APDIGI) & 0xfff7;
@@ -286,7 +286,7 @@ static int wm8711_mute(struct snd_soc_codec_dai *dai, int mute)
 	return 0;
 }
 
-static int wm8711_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
+static int wm8711_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 		int clk_id, unsigned int freq, int dir)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -304,7 +304,7 @@ static int wm8711_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
 	return -EINVAL;
 }
 
-static int wm8711_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8711_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -396,7 +396,7 @@ static int wm8711_set_bias_level(struct snd_soc_codec *codec,
 #define WM8711_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 	SNDRV_PCM_FMTBIT_S24_LE)
 
-struct snd_soc_codec_dai wm8711_dai = {
+struct snd_soc_dai wm8711_dai = {
 	.name = "WM8711",
 	.playback = {
 		.stream_name = "Playback",

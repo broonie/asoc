@@ -288,7 +288,7 @@ static struct pll_ pll[] = {
 	/* liam - add more entries */
 };
 
-static int wm8950_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
+static int wm8950_set_dai_pll(struct snd_soc_dai *codec_dai,
 		int pll_id, unsigned int freq_in, unsigned int freq_out)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -318,7 +318,7 @@ static int wm8950_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 /*
  * Configure WM8950 clock dividers.
  */
-static int wm8950_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
+static int wm8950_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
 		int div_id, int div)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -348,7 +348,7 @@ static int wm8950_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int wm8950_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8950_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -486,7 +486,7 @@ static int wm8950_set_bias_level(struct snd_soc_codec *codec,
 #define WM8950_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 	SNDRV_PCM_FMTBIT_S24_LE)
 
-struct snd_soc_codec_dai wm8950_dai = {
+struct snd_soc_dai wm8950_dai = {
 	.name = "WM8950 HiFi",
 	.capture = {
 		.stream_name = "Capture",
