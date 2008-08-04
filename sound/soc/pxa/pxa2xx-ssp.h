@@ -38,6 +38,6 @@
 #define PXA2XX_SSP_CLK_SCDB_4		0
 #define PXA2XX_SSP_CLK_SCDB_1		1
 
-extern struct snd_soc_cpu_dai pxa_ssp_dai[3];
+extern struct snd_soc_dai pxa_ssp_dai[3];
 
 #endif
