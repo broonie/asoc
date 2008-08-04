@@ -39,25 +39,6 @@
 #define AUDIO_NAME "wm8580"
 #define WM8580_VERSION "0.1"
 
-/*
- * Debug
- */
-
-#define WM8580_DEBUG 0
-
-#ifdef WM8580_DEBUG
-#define dbg(format, arg...) \
-	printk(KERN_DEBUG AUDIO_NAME ": " format , ## arg)
-#else
-#define dbg(format, arg...) do {} while (0)
-#endif
-#define err(format, arg...) \
-	printk(KERN_ERR AUDIO_NAME ": " format , ## arg)
-#define info(format, arg...) \
-	printk(KERN_INFO AUDIO_NAME ": " format , ## arg)
-#define warn(format, arg...) \
-	printk(KERN_WARNING AUDIO_NAME ": " format , ## arg)
-
 struct pll_state {
 	unsigned int in;
 	unsigned int out;
@@ -441,7 +422,7 @@ static int pll_factors(struct _pll_div *pll_div, unsigned int target,
 	unsigned int K, Ndiv, Nmod;
 	int i;
 
-	dbg("wm8580: PLL %dHz->%dHz\n", source, target);
+	pr_debug("wm8580: PLL %dHz->%dHz\n", source, target);
 
 	/* Scale the output frequency up; the PLL should run in the
 	 * region of 90-100MHz.
@@ -487,9 +468,9 @@ static int pll_factors(struct _pll_div *pll_div, unsigned int target,
 
 	pll_div->k = K;
 
-	dbg("PLL %x.%x prescale %d freqmode %d postscale %d\n",
-	    pll_div->n, pll_div->k, pll_div->prescale, pll_div->freqmode,
-	    pll_div->postscale);
+	pr_debug("PLL %x.%x prescale %d freqmode %d postscale %d\n",
+		 pll_div->n, pll_div->k, pll_div->prescale, pll_div->freqmode,
+		 pll_div->postscale);
 
 	return 0;
 }
@@ -932,13 +913,13 @@ static int wm8580_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 
 	ret = i2c_attach_client(i2c);
 	if (ret < 0) {
-		err("failed to attach codec at addr %x\n", addr);
+		dev_err(&i2c->dev, "failed to attach codec at addr %x\n", addr);
 		goto err;
 	}
 
 	ret = wm8580_init(socdev);
 	if (ret < 0) {
-		err("failed to initialise WM8580\n");
+		dev_err(&i2c->dev, "failed to initialise WM8580\n");
 		goto err;
 	}
 
@@ -989,7 +970,7 @@ static int wm8580_probe(struct platform_device *pdev)
 	struct wm8580_priv *wm8580;
 	int ret = 0;
 
-	info("WM8580 Audio Codec %s\n", WM8580_VERSION);
+	pr_info("WM8580 Audio Codec %s\n", WM8580_VERSION);
 
 	setup = socdev->codec_data;
 	codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);
