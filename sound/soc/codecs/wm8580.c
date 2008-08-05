@@ -171,6 +171,8 @@ struct wm8580_priv {
 #define WM8580_PWRDN2_SPDIFTXD 0x010
 #define WM8580_PWRDN2_SPDIFRXD 0x020
 
+#define WM8580_DAC_CONTROL5_MUTEALL 0x10
+
 /*
  * wm8580 register cache
  * We can't read the WM8580 register space when we
@@ -746,6 +748,23 @@ static int wm8580_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
 	return 0;
 }
 
+static int wm8580_digital_mute(struct snd_soc_dai *codec_dai, int mute)
+{
+	struct snd_soc_codec *codec = codec_dai->codec;
+	unsigned int reg;
+
+	reg = wm8580_read(codec, WM8580_DAC_CONTROL5);
+
+	if (mute)
+		reg |= WM8580_DAC_CONTROL5_MUTEALL;
+	else
+		reg &= ~WM8580_DAC_CONTROL5_MUTEALL;
+
+	wm8580_write(codec, WM8580_DAC_CONTROL5, reg);
+
+	return 0;
+}
+
 static int wm8580_set_bias_level(struct snd_soc_codec *codec,
 	enum snd_soc_bias_level level)
 {
@@ -785,6 +804,7 @@ struct snd_soc_dai wm8580_dai[] = {
 			 .set_fmt = wm8580_set_paif_dai_fmt,
 			 .set_clkdiv = wm8580_set_dai_clkdiv,
 			 .set_pll = wm8580_set_dai_pll,
+			 .digital_mute = wm8580_digital_mute,
 		 },
 	},
 	{
