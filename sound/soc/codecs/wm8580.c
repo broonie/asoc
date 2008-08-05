@@ -489,6 +489,11 @@ static int wm8580_set_dai_pll(struct snd_soc_dai *codec_dai,
 	unsigned int pwr_mask;
 	int ret;
 
+	/* GCC isn't able to work out the ifs below for initialising/using
+	 * pll_div so suppress warnings.
+	 */
+	memset(&pll_div, 0, sizeof(pll_div));
+
 	switch (pll_id) {
 	case WM8580_PLLA:
 		state = &wm8580->a;
