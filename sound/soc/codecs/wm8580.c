@@ -562,18 +562,14 @@ static int wm8580_paif_hw_params(struct snd_pcm_substream *substream,
 	/* bit size */
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S16_LE:
-		printk(KERN_CRIT "16 bit\n");
 		break;
 	case SNDRV_PCM_FORMAT_S20_3LE:
-		printk(KERN_CRIT "20 bit\n");
 		paifb |= WM8580_AIF_LENGTH_20;
 		break;
 	case SNDRV_PCM_FORMAT_S24_LE:
-		printk(KERN_CRIT "24 bit\n");
 		paifb |= WM8580_AIF_LENGTH_24;
 		break;
 	case SNDRV_PCM_FORMAT_S32_LE:
-		printk(KERN_CRIT "32 bit\n");
 		paifb |= WM8580_AIF_LENGTH_24;
 		break;
 	default:
