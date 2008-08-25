@@ -426,7 +426,6 @@ static int wm8903_output_event(struct snd_soc_dapm_widget *w,
 			wm8903_write(codec, WM8903_CHARGE_PUMP_0,
 				     cp_reg | WM8903_CP_ENA);
 			mdelay(4);
-			
 		}
 	}
 
@@ -858,20 +857,20 @@ SND_SOC_DAPM_MIXER("Right Speaker Mixer", WM8903_POWER_MANAGEMENT_4, 0, 0,
 SND_SOC_DAPM_PGA_E("Left Headphone Output PGA", WM8903_POWER_MANAGEMENT_2,
 		   1, 0, NULL, 0, wm8903_output_event,
 		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
-		   SND_SOC_DAPM_PRE_PMD |SND_SOC_DAPM_POST_PMD),
+		   SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 SND_SOC_DAPM_PGA_E("Right Headphone Output PGA", WM8903_POWER_MANAGEMENT_2,
 		   0, 0, NULL, 0, wm8903_output_event,
 		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
-		   SND_SOC_DAPM_PRE_PMD |SND_SOC_DAPM_POST_PMD),
+		   SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 
 SND_SOC_DAPM_PGA_E("Left Line Output PGA", WM8903_POWER_MANAGEMENT_3, 1, 0,
 		   NULL, 0, wm8903_output_event,
 		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
-		   SND_SOC_DAPM_PRE_PMD |SND_SOC_DAPM_POST_PMD),
+		   SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 SND_SOC_DAPM_PGA_E("Right Line Output PGA", WM8903_POWER_MANAGEMENT_3, 0, 0,
 		   NULL, 0, wm8903_output_event,
 		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
-		   SND_SOC_DAPM_PRE_PMD |SND_SOC_DAPM_POST_PMD),
+		   SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 
 SND_SOC_DAPM_PGA("Left Speaker PGA", WM8903_POWER_MANAGEMENT_5, 1, 0,
 		 NULL, 0),
@@ -899,25 +898,26 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{ "Right Input Inverting Mux", "IN3R", "IN3R" },
 
 	{ "Left Input Mode Mux", "Single-Ended", "Left Input Inverting Mux" },
-	{ "Left Input Mode Mux", "Differential Line", 
+	{ "Left Input Mode Mux", "Differential Line",
 	  "Left Input Mux" },
 	{ "Left Input Mode Mux", "Differential Line",
 	  "Left Input Inverting Mux" },
-	{ "Left Input Mode Mux", "Differential Mic", 
+	{ "Left Input Mode Mux", "Differential Mic",
 	  "Left Input Mux" },
 	{ "Left Input Mode Mux", "Differential Mic",
 	  "Left Input Inverting Mux" },
 
-	{ "Right Input Mode Mux", "Single-Ended", "Right Input Inverting Mux" },
-	{ "Right Input Mode Mux", "Differential Line", 
+	{ "Right Input Mode Mux", "Single-Ended",
+	  "Right Input Inverting Mux" },
+	{ "Right Input Mode Mux", "Differential Line",
 	  "Right Input Mux" },
 	{ "Right Input Mode Mux", "Differential Line",
 	  "Right Input Inverting Mux" },
-	{ "Right Input Mode Mux", "Differential Mic", 
+	{ "Right Input Mode Mux", "Differential Mic",
 	  "Right Input Mux" },
 	{ "Right Input Mode Mux", "Differential Mic",
 	  "Right Input Inverting Mux" },
-	
+
 	{ "Left Input PGA", NULL, "Left Input Mode Mux" },
 	{ "Right Input PGA", NULL, "Right Input Mode Mux" },
 
@@ -1138,11 +1138,10 @@ static int wm8903_digital_mute(struct snd_soc_dai *codec_dai, int mute)
 
 	reg = wm8903_read(codec, WM8903_DAC_DIGITAL_1);
 
-	if (mute) {	
+	if (mute)
 		reg |= WM8903_DAC_MUTE;
-	} else {
+	else
 		reg &= ~WM8903_DAC_MUTE;
-	}
 
 	wm8903_write(codec, WM8903_DAC_DIGITAL_1, reg);
 
@@ -1415,7 +1414,7 @@ static int wm8903_hw_params(struct snd_pcm_substream *substream,
 			 clk_sys_ratios[0].div)) - fs);
 	for (i = 1; i < ARRAY_SIZE(clk_sys_ratios); i++) {
 		cur_val = abs((wm8903->sysclk /
-			       (clk_sys_ratios[i].mclk_div * 
+			       (clk_sys_ratios[i].mclk_div *
 				clk_sys_ratios[i].div)) - fs);
 
 		if (cur_val <= best_val) {
@@ -1436,7 +1435,7 @@ static int wm8903_hw_params(struct snd_pcm_substream *substream,
 		    WM8903_CLK_SYS_MODE_MASK);
 	clock1 |= clk_sys_ratios[clk_config].rate << WM8903_CLK_SYS_RATE_SHIFT;
 	clock1 |= clk_sys_ratios[clk_config].mode << WM8903_CLK_SYS_MODE_SHIFT;
-	
+
 	dev_dbg(&i2c->dev, "CLK_SYS_RATE=%x, CLK_SYS_MODE=%x div=%d\n",
 		clk_sys_ratios[clk_config].rate,
 		clk_sys_ratios[clk_config].mode,
@@ -1584,7 +1583,7 @@ static int wm8903_init(struct snd_soc_device *socdev)
 			"Device with ID register %x is not a WM8903\n", val);
 		return -ENODEV;
 	}
-	
+
 	codec->name = "WM8903";
 	codec->owner = THIS_MODULE;
 	codec->read = wm8903_read;
@@ -1605,7 +1604,7 @@ static int wm8903_init(struct snd_soc_device *socdev)
 	val = wm8903_read(codec, WM8903_REVISION_NUMBER);
 	dev_info(&i2c->dev, "WM8903 revision %d\n",
 		 val & WM8903_CHIP_REV_MASK);
-	
+
 	wm8903_reset(codec);
 
 	/* register pcms */
