@@ -332,12 +332,6 @@ static int wm8903_run_sequence(struct snd_soc_codec *codec, unsigned int start)
 		msleep(10);
 
 		reg[4] = wm8903_read(codec, WM8903_WRITE_SEQUENCER_4);
-
-		if (reg[4] & WM8903_WSEQ_BUSY)
-			dev_dbg(&i2c->dev, "Sequence running at step %d\n",
-				(reg[4] >> WM8903_WSEQ_CURRENT_INDEX_SHIFT)
-				& 0x1f);
-
 	} while (reg[4] & WM8903_WSEQ_BUSY);
 
 	dev_dbg(&i2c->dev, "Sequence complete\n");
