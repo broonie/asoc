@@ -47,16 +47,14 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 
-#include <asm/hardware.h>
-#include <asm/arch/pxa-regs.h>
-#include <asm/arch/audio.h>
-#include <asm/arch/ssp.h>
+#include <mach/pxa-regs.h>
+#include <mach/audio.h>
+#include <mach/ssp.h>
 
 #include "../codecs/wm9713.h"
 #include "pxa2xx-pcm.h"

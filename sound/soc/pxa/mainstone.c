@@ -28,9 +28,9 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 
-#include <asm/arch/pxa-regs.h>
-#include <asm/arch/mainstone.h>
-#include <asm/arch/audio.h>
+#include <mach/pxa-regs.h>
+#include <mach/mainstone.h>
+#include <mach/audio.h>
 
 #include "../codecs/ac97.h"
 #include "pxa2xx-pcm.h"
