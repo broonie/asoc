@@ -34,11 +34,15 @@
 
 struct wm8903_priv {
 	int sysclk;
-	int fs;
+
+	/* Reference counts */
 	int charge_pump_users;
 	int class_w_users;
 	int playback_active;
 	int capture_active;
+
+	struct snd_pcm_substream *master_substream;
+	struct snd_pcm_substream *slave_substream;
 };
 
 /* Register defaults at reset */
@@ -1267,11 +1271,36 @@ static int wm8903_startup(struct snd_pcm_substream *substream)
 	struct snd_soc_codec *codec = socdev->codec;
 	struct wm8903_priv *wm8903 = codec->private_data;
 	struct i2c_client *i2c = codec->control_data;
+	struct snd_pcm_runtime *master_runtime;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		wm8903->playback_active++;
 	else
 		wm8903->capture_active++;
+
+	/* The DAI has shared clocks so if we already have a playback or
+	 * capture going then constrain this substream to match it.
+	 */
+	if (wm8903->master_substream) {
+		master_runtime = wm8903->master_substream->runtime;
+
+		dev_dbg(&i2c->dev, "Constraining to %d bits at %dHz\n",
+			master_runtime->sample_bits,
+			master_runtime->rate);
+
+		snd_pcm_hw_constraint_minmax(substream->runtime,
+					     SNDRV_PCM_HW_PARAM_RATE,
+					     master_runtime->rate,
+					     master_runtime->rate);
+
+		snd_pcm_hw_constraint_minmax(substream->runtime,
+					     SNDRV_PCM_HW_PARAM_SAMPLE_BITS,
+					     master_runtime->sample_bits,
+					     master_runtime->sample_bits);
+
+		wm8903->slave_substream = substream;
+	} else
+		wm8903->master_substream = substream;
 
 	return 0;
 }
@@ -1282,12 +1311,16 @@ static void wm8903_shutdown(struct snd_pcm_substream *substream)
 	struct snd_soc_device *socdev = rtd->socdev;
 	struct snd_soc_codec *codec = socdev->codec;
 	struct wm8903_priv *wm8903 = codec->private_data;
-	struct i2c_client *i2c = codec->control_data;	
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		wm8903->playback_active--;
 	else
 		wm8903->capture_active--;
+
+	if (wm8903->master_substream == substream)
+		wm8903->master_substream = wm8903->slave_substream;
+
+	wm8903->slave_substream = NULL;
 }
 
 static int wm8903_hw_params(struct snd_pcm_substream *substream,
@@ -1314,6 +1347,11 @@ static int wm8903_hw_params(struct snd_pcm_substream *substream,
 	u16 clock0 = wm8903_read(codec, WM8903_CLOCK_RATES_0);
 	u16 clock1 = wm8903_read(codec, WM8903_CLOCK_RATES_1);
 
+	if (substream == wm8903->slave_substream) {
+		dev_dbg(&i2c->dev, "Ignoring hw_params for slave substream\n");
+		return 0;
+	}
+
 	/* Configure sample rate logic for DSP - choose nearest rate */
 	dsp_config = 0;
 	best_val = abs(sample_rates[dsp_config].rate - fs);
@@ -1325,6 +1363,7 @@ static int wm8903_hw_params(struct snd_pcm_substream *substream,
 		}
 	}
 
+	/* Constraints should stop us hitting this but let's make sure */
 	if (wm8903->capture_active)
 		switch (sample_rates[dsp_config].rate) {
 		case 88200:
@@ -1441,15 +1480,23 @@ static int wm8903_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-#define WM8903_RATES (SNDRV_PCM_RATE_8000 |\
-		      SNDRV_PCM_RATE_11025 |\
-		      SNDRV_PCM_RATE_16000 |\
-		      SNDRV_PCM_RATE_22050 |\
-		      SNDRV_PCM_RATE_32000 |\
-		      SNDRV_PCM_RATE_44100 |\
-		      SNDRV_PCM_RATE_48000 |\
-		      SNDRV_PCM_RATE_88200 |\
-		      SNDRV_PCM_RATE_96000)
+#define WM8903_PLAYBACK_RATES (SNDRV_PCM_RATE_8000 |\
+			       SNDRV_PCM_RATE_11025 |	\
+			       SNDRV_PCM_RATE_16000 |	\
+			       SNDRV_PCM_RATE_22050 |	\
+			       SNDRV_PCM_RATE_32000 |	\
+			       SNDRV_PCM_RATE_44100 |	\
+			       SNDRV_PCM_RATE_48000 |	\
+			       SNDRV_PCM_RATE_88200 |	\
+			       SNDRV_PCM_RATE_96000)
+
+#define WM8903_CAPTURE_RATES (SNDRV_PCM_RATE_8000 |\
+			      SNDRV_PCM_RATE_11025 |	\
+			      SNDRV_PCM_RATE_16000 |	\
+			      SNDRV_PCM_RATE_22050 |	\
+			      SNDRV_PCM_RATE_32000 |	\
+			      SNDRV_PCM_RATE_44100 |	\
+			      SNDRV_PCM_RATE_48000)
 
 #define WM8903_FORMATS (SNDRV_PCM_FMTBIT_S16_LE |\
 			SNDRV_PCM_FMTBIT_S20_3LE |\
@@ -1459,16 +1506,18 @@ struct snd_soc_dai wm8903_dai = {
 	.name = "WM8903",
 	.playback = {
 		.stream_name = "Playback",
-		.channels_min = 1,
+		.channels_min = 2,
 		.channels_max = 2,
-		.rates = WM8903_RATES,
-		.formats = WM8903_FORMATS,},
+		.rates = WM8903_PLAYBACK_RATES,
+		.formats = WM8903_FORMATS,
+	},
 	.capture = {
 		 .stream_name = "Capture",
-		 .channels_min = 1,
+		 .channels_min = 2,
 		 .channels_max = 2,
-		 .rates = WM8903_RATES,
-		 .formats = WM8903_FORMATS,},
+		 .rates = WM8903_CAPTURE_RATES,
+		 .formats = WM8903_FORMATS,
+	 },
 	.ops = {
 		 .startup = wm8903_startup,
 		 .shutdown = wm8903_shutdown,
