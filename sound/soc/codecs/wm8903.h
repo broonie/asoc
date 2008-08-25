@@ -13,10 +13,13 @@
 #ifndef _WM8903_H
 #define _WM8903_H
 
+#include <linux/i2c.h>
+
 extern struct snd_soc_dai wm8903_dai;
 extern struct snd_soc_codec_device soc_codec_dev_wm8903;
 
 struct wm8903_setup_data {
+	int i2c_bus;
 	int i2c_address;
 };
 

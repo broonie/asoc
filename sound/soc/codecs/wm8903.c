@@ -1623,90 +1623,48 @@ pcm_err:
 
 static struct snd_soc_device *wm8903_socdev;
 
-/*
- * WM8903 2 wire address is determined by GPIO3 state during powerup.
- *    low  = 0x1a
- *    high = 0x1b
- */
-static unsigned short normal_i2c[] = { 0, I2C_CLIENT_END };
-
-/* Magic definition of all other variables and things */
-I2C_CLIENT_INSMOD;
-
-static struct i2c_driver wm8903_i2c_driver;
-static struct i2c_client client_template;
-
-/* If the i2c layer weren't so broken, we could pass this kind of data
-   around */
-
-static int wm8903_codec_probe(struct i2c_adapter *adap, int addr, int kind)
+static int wm8903_i2c_probe(struct i2c_client *i2c,
+			    const struct i2c_device_id *id)
 {
 	struct snd_soc_device *socdev = wm8903_socdev;
-	struct wm8903_setup_data *setup = socdev->codec_data;
 	struct snd_soc_codec *codec = socdev->codec;
-	struct i2c_client *i2c;
 	int ret;
 
-	if (addr != setup->i2c_address)
-		return -ENODEV;
-
-	client_template.adapter = adap;
-	client_template.addr = addr;
-
-	i2c = kmemdup(&client_template, sizeof(client_template), GFP_KERNEL);
-	if (i2c == NULL) {
-		kfree(codec);
-		return -ENOMEM;
-	}
 	i2c_set_clientdata(i2c, codec);
 	codec->control_data = i2c;
 
-	ret = i2c_attach_client(i2c);
-	if (ret < 0) {
-		pr_err("failed to attach codec at addr %x\n", addr);
-		goto err;
-	}
-
 	ret = wm8903_init(socdev);
 	if (ret < 0)
-		goto err;
-	return ret;
+		dev_err(&i2c->dev, "Device initialisation failed\n");
 
-err:
-	kfree(codec);
-	kfree(i2c);
 	return ret;
 }
 
-static int wm8903_i2c_detach(struct i2c_client *client)
+static int wm8903_i2c_remove(struct i2c_client *client)
 {
 	struct snd_soc_codec *codec = i2c_get_clientdata(client);
-	i2c_detach_client(client);
 	kfree(codec->reg_cache);
-	kfree(client);
 	return 0;
 }
 
-static int wm8903_i2c_attach(struct i2c_adapter *adap)
-{
-	return i2c_probe(adap, &addr_data, wm8903_codec_probe);
-}
-
 /* i2c codec control layer */
+static const struct i2c_device_id wm8903_i2c_id[] = {
+       { "wm8903", 0 },
+       { }
+};
+MODULE_DEVICE_TABLE(i2c, wm8903_i2c_id);
+
 static struct i2c_driver wm8903_i2c_driver = {
 	.driver = {
 		.name = "WM8903",
 		.owner = THIS_MODULE,
 	},
-	.attach_adapter = wm8903_i2c_attach,
-	.detach_client =  wm8903_i2c_detach,
-	.command =        NULL,
+	.probe    = wm8903_i2c_probe,
+	.remove   = wm8903_i2c_remove,
+	.id_table = wm8903_i2c_id,
 };
 
-static struct i2c_client client_template = {
-	.name =   "WM8903",
-	.driver = &wm8903_i2c_driver,
-};
+static struct i2c_client *wm8903_i2c_device;
 
 static int wm8903_probe(struct platform_device *pdev)
 {
@@ -1714,17 +1672,25 @@ static int wm8903_probe(struct platform_device *pdev)
 	struct wm8903_setup_data *setup;
 	struct snd_soc_codec *codec;
 	struct wm8903_priv *wm8903;
+	struct i2c_board_info board_info;
+	struct i2c_adapter *adapter;
 	int ret = 0;
 
 	setup = socdev->codec_data;
+
+	if (!setup->i2c_address) {
+		dev_err(&pdev->dev, "No codec address provided\n");
+		return -ENODEV;
+	}
+
 	codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);
 	if (codec == NULL)
 		return -ENOMEM;
 
 	wm8903 = kzalloc(sizeof(struct wm8903_priv), GFP_KERNEL);
 	if (wm8903 == NULL) {
-		kfree(codec);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err_codec;
 	}
 
 	codec->private_data = wm8903;
@@ -1734,14 +1700,42 @@ static int wm8903_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&codec->dapm_paths);
 
 	wm8903_socdev = socdev;
-	if (setup->i2c_address) {
-		normal_i2c[0] = setup->i2c_address;
-		codec->hw_write = (hw_write_t)i2c_master_send;
-		ret = i2c_add_driver(&wm8903_i2c_driver);
-		if (ret != 0)
-			printk(KERN_ERR "can't add i2c driver");
+
+	codec->hw_write = (hw_write_t)i2c_master_send;
+	ret = i2c_add_driver(&wm8903_i2c_driver);
+	if (ret != 0) {
+		dev_err(&pdev->dev, "can't add i2c driver");
+		goto err_priv;
+	} else {
+		memset(&board_info, 0, sizeof(board_info));
+		strlcpy(board_info.type, "wm8903", I2C_NAME_SIZE);
+		board_info.addr = setup->i2c_address;
+
+		adapter = i2c_get_adapter(setup->i2c_bus);
+		if (!adapter) {
+			dev_err(&pdev->dev, "Can't get I2C bus %d\n",
+				setup->i2c_bus);
+			goto err_adapter;
+		}
+
+		wm8903_i2c_device = i2c_new_device(adapter, &board_info);
+		i2c_put_adapter(adapter);
+		if (wm8903_i2c_device == NULL) {
+			dev_err(&pdev->dev,
+				"I2C driver registration failed\n");
+			ret = -ENODEV;
+			goto err_adapter;
+		}
 	}
 
+	return ret;
+
+err_adapter:
+	i2c_del_driver(&wm8903_i2c_driver);
+err_priv:
+	kfree(codec->private_data);
+err_codec:
+	kfree(codec);
 	return ret;
 }
 
@@ -1756,6 +1750,7 @@ static int wm8903_remove(struct platform_device *pdev)
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
+	i2c_unregister_device(wm8903_i2c_device);
 	i2c_del_driver(&wm8903_i2c_driver);
 	kfree(codec->private_data);
 	kfree(codec);
