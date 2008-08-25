@@ -1413,16 +1413,20 @@ static int wm8903_hw_params(struct snd_pcm_substream *substream,
 	dev_dbg(&i2c->dev, "Actual CLK_SYS = %dHz\n", clk_sys);
 
 	/* We may not get quite the right frequency if using
-	 * approximate clocks so look for the closest match.
+	 * approximate clocks so look for the closest match that is
+	 * higher than the target (we need to ensure that there enough
+	 * BCLKs to clock out the samples).
 	 */
 	bclk_div = 0;
-	best_val = abs((clk_sys * 10) / bclk_divs[0].ratio - bclk);
-	for (i = 1; i < ARRAY_SIZE(bclk_divs); i++) {
-		cur_val = abs((clk_sys * 10) / bclk_divs[i].ratio - bclk);
-		if (cur_val < best_val) {
-			bclk_div = i;
-			best_val = cur_val;
-		}
+	best_val = ((clk_sys * 10) / bclk_divs[0].ratio) - bclk;
+	i = 1;
+	while (i < ARRAY_SIZE(bclk_divs)) {
+		cur_val = ((clk_sys * 10) / bclk_divs[i].ratio) - bclk;
+		if (cur_val < 0) /* BCLK table is sorted */
+			break;
+		bclk_div = i;
+		best_val = cur_val;
+		i++;
 	}
 
 	aif2 &= ~WM8903_BCLK_DIV_MASK;
