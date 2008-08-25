@@ -64,16 +64,12 @@ static int mainstone_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct snd_soc_machine_config codecs[] = {
+static struct snd_soc_dai_link codecs[] = {
 {
 	.name = "AC97",
-	.sname = "AC97 HiFi",
-	.iface = &pxa_ac97_interface[0],
-},
-{
-	.name = "AC97 Aux",
-	.sname = "AC97 Aux",
-	.iface = &pxa_ac97_interface[1],
+	.stream_name = "AC97 HiFi",
+	.cpu_dai = &pxa_ac97_dai[PXA2XX_DAI_AC97_HIFI],
+	.codec_dai = &ac97_dai,
 },
 };
 
@@ -83,8 +79,8 @@ static struct snd_soc_machine mainstone = {
 	.remove = mainstone_remove,
 	.suspend_pre = mainstone_suspend,
 	.resume_post = mainstone_resume,
-	.config = codecs,
-	.nconfigs = ARRAY_SIZE(codecs),
+	.dai_link = codecs,
+	.num_links = ARRAY_SIZE(codecs),
 };
 
 static struct snd_soc_device mainstone_snd_devdata = {

@@ -109,6 +109,7 @@ config SND_PXA2XX_SOC_MAINSTONE
 	tristate "SoC AC97 Audio support for Intel Mainstone"
 	depends on SND_PXA2XX_SOC && MACH_MAINSTONE
 	select SND_PXA2XX_SOC_AC97
+	select SND_SOC_AC97_CODEC
 	help
 	  Say Y if you want to add support for generic AC97 SoC audio on Mainstone.
 
