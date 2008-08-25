@@ -97,7 +97,7 @@ static int bt_hw_free(struct snd_pcm_substream *substream)
 /*
  * BT Codec DAI
  */
-static struct snd_soc_cpu_dai bt_dai =
+static struct snd_soc_dai bt_dai =
 {	.name = "Bluetooth",
 	.id = 0,
 	.type = SND_SOC_DAI_PCM,

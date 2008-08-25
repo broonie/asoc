@@ -90,7 +90,7 @@ static int baseband_hw_free(struct snd_pcm_substream *substream)
 /*
  * Baseband Processor DAI
  */
-static struct snd_soc_cpu_dai baseband_dai =
+static struct snd_soc_dai baseband_dai =
 {	.name = "Baseband",
 	.id = 0,
 	.type = SND_SOC_DAI_PCM,
