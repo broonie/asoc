@@ -543,7 +543,7 @@ static const DECLARE_TLV_DB_SCALE(drc_tlv_max, 1200, 600, 0);
 static const DECLARE_TLV_DB_SCALE(drc_tlv_startup, -300, 50, 0);
 
 static const char *drc_slope_text[] = {
-	"0", "1/16", "1/8", "1/4", "1/2", "1"
+	"1", "1/2", "1/4", "1/8", "1/16", "0"
 };
 
 static const struct soc_enum drc_slope_r0 =
