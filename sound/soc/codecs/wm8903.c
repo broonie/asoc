@@ -977,7 +977,6 @@ static int wm8903_add_widgets(struct snd_soc_codec *codec)
 static int wm8903_set_bias_level(struct snd_soc_codec *codec,
 				 enum snd_soc_bias_level level)
 {
-	struct wm8903_priv *wm8903 = codec->private_data;
 	struct i2c_client *i2c = codec->control_data;
 	u16 reg, reg2;
 
