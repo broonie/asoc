@@ -11,8 +11,9 @@
  *
  * TODO:
  *  - TDM mode configuration.
- *  - Mic detect
+ *  - Mic detect.
  *  - Digital microphone support.
+ *  - Interrupt support (mic detect and sequencer).
  */
 
 #include <linux/module.h>
@@ -367,14 +368,9 @@ static void wm8903_reset(struct snd_soc_codec *codec)
 #define WM8903_OUTPUT_IN    0x1
 
 /*
- * Event for headphone and line out amplifier power changes.  We
- * handle two things here:
- *
- *  - These outputs share the charge pump and DAPM does not currently
- *    support this mode of operation (post v2 work).
- *
- *  - Special power up/down sequences are required in order to maximise
- *    pop/click performance.
+ * Event for headphone and line out amplifier power changes.  Special
+ * power up/down sequences are required in order to maximise pop/click
+ * performance.
  */
 static int wm8903_output_event(struct snd_soc_dapm_widget *w,
 			       struct snd_kcontrol *kcontrol, int event)
@@ -458,8 +454,6 @@ static int wm8903_output_event(struct snd_soc_dapm_widget *w,
 		val &= ~((WM8903_OUTPUT_OUT | WM8903_OUTPUT_INT |
 			  WM8903_OUTPUT_IN) << shift);
 		wm8903_write(codec, reg, val);
-
-		/* Disable in the DC servo */
 	}
 
 	if (event & SND_SOC_DAPM_POST_PMD) {
