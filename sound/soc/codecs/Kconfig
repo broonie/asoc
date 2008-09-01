@@ -26,13 +26,14 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_WM8980
 	select SND_SOC_WM8990
 	select SND_SOC_WM8991
-	help
-	  Normally ASoC codec drivers are only built if a machine driver which
+        help
+          Normally ASoC codec drivers are only built if a machine driver which
           uses them is also built since they are only usable with a machine
           driver.  Selecting this option will allow these drivers to be built
-	  anyway for test and development purposes.
+          without an explicit machine driver for test and development purposes.
 
           If unsure select "N".
+
 
 config SND_SOC_AC97_CODEC
 	tristate
