@@ -121,25 +121,26 @@ static const char *wm8971_adcpol[] = {"Normal", "L Invert", "R Invert",
 	"L + R Invert"};
 
 static const struct soc_enum wm8971_enum[] = {
-	SOC_ENUM_SINGLE(WM8971_BASS, 7, 2, wm8971_bass),			/* 0 */
+	SOC_ENUM_SINGLE(WM8971_BASS, 7, 2, wm8971_bass),	/* 0 */
 	SOC_ENUM_SINGLE(WM8971_BASS, 6, 2, wm8971_bass_filter),
 	SOC_ENUM_SINGLE(WM8971_TREBLE, 6, 2, wm8971_treble),
 	SOC_ENUM_SINGLE(WM8971_ALC1, 7, 4, wm8971_alc_func),
-	SOC_ENUM_SINGLE(WM8971_NGATE, 1, 2, wm8971_ng_type),        /* 4 */
+	SOC_ENUM_SINGLE(WM8971_NGATE, 1, 2, wm8971_ng_type),    /* 4 */
 	SOC_ENUM_SINGLE(WM8971_ADCDAC, 1, 4, wm8971_deemp),
 	SOC_ENUM_SINGLE(WM8971_ADCTL1, 4, 4, wm8971_mono_mux),
 	SOC_ENUM_SINGLE(WM8971_ADCTL1, 1, 2, wm8971_dac_phase),
-	SOC_ENUM_SINGLE(WM8971_LOUTM1, 0, 5, wm8971_lline_mux),     /* 8 */
+	SOC_ENUM_SINGLE(WM8971_LOUTM1, 0, 5, wm8971_lline_mux), /* 8 */
 	SOC_ENUM_SINGLE(WM8971_ROUTM1, 0, 5, wm8971_rline_mux),
 	SOC_ENUM_SINGLE(WM8971_LADCIN, 6, 4, wm8971_lpga_sel),
 	SOC_ENUM_SINGLE(WM8971_RADCIN, 6, 4, wm8971_rpga_sel),
-	SOC_ENUM_SINGLE(WM8971_ADCDAC, 5, 4, wm8971_adcpol),        /* 12 */
+	SOC_ENUM_SINGLE(WM8971_ADCDAC, 5, 4, wm8971_adcpol),    /* 12 */
 	SOC_ENUM_SINGLE(WM8971_ADCIN, 6, 4, wm8971_mono_mux),
 };
 
 static const struct snd_kcontrol_new wm8971_snd_controls[] = {
 	SOC_DOUBLE_R("Capture Volume", WM8971_LINVOL, WM8971_RINVOL, 0, 63, 0),
-	SOC_DOUBLE_R("Capture ZC Switch", WM8971_LINVOL, WM8971_RINVOL, 6, 1, 0),
+	SOC_DOUBLE_R("Capture ZC Switch", WM8971_LINVOL, WM8971_RINVOL,
+		     6, 1, 0),
 	SOC_DOUBLE_R("Capture Switch", WM8971_LINVOL, WM8971_RINVOL, 7, 1, 1),
 
 	SOC_DOUBLE_R("Headphone Playback ZC Switch", WM8971_LOUT1V,
@@ -188,7 +189,7 @@ static const struct snd_kcontrol_new wm8971_snd_controls[] = {
 	SOC_SINGLE("Capture 6dB Attenuate", WM8971_ADCDAC, 8, 1, 0),
 	SOC_SINGLE("Playback 6dB Attenuate", WM8971_ADCDAC, 7, 1, 0),
 
-    SOC_ENUM("Playback De-emphasis", wm8971_enum[5]),
+	SOC_ENUM("Playback De-emphasis", wm8971_enum[5]),
 	SOC_ENUM("Playback Function", wm8971_enum[6]),
 	SOC_ENUM("Playback Phase", wm8971_enum[7]),
 
@@ -202,7 +203,8 @@ static int wm8971_add_controls(struct snd_soc_codec *codec)
 
 	for (i = 0; i < ARRAY_SIZE(wm8971_snd_controls); i++) {
 		err = snd_ctl_add(codec->card,
-				snd_soc_cnew(&wm8971_snd_controls[i],codec, NULL));
+				snd_soc_cnew(&wm8971_snd_controls[i],
+					     codec, NULL));
 		if (err < 0)
 			return err;
 	}
@@ -390,6 +392,7 @@ static int wm8971_add_widgets(struct snd_soc_codec *codec)
 	snd_soc_dapm_add_routes(codec, audio_map, ARRAY_SIZE(audio_map));
 
 	snd_soc_dapm_new_widgets(codec);
+
 	return 0;
 }
 
@@ -767,95 +770,87 @@ static struct snd_soc_device *wm8971_socdev;
 
 #if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
 
-/*
- * WM8731 2 wire address is determined by GPIO5
- * state during powerup.
- *    low  = 0x1a
- *    high = 0x1b
- */
-#define I2C_DRIVERID_WM8971 0xfefe /* liam -  need a proper id */
-
-static unsigned short normal_i2c[] = { 0, I2C_CLIENT_END };
-
-/* Magic definition of all other variables and things */
-I2C_CLIENT_INSMOD;
-
-static struct i2c_driver wm8971_i2c_driver;
-static struct i2c_client client_template;
-
-static int wm8971_codec_probe(struct i2c_adapter *adap, int addr, int kind)
+static int wm8971_i2c_probe(struct i2c_client *i2c,
+			    const struct i2c_device_id *id)
 {
 	struct snd_soc_device *socdev = wm8971_socdev;
-	struct wm8971_setup_data *setup = socdev->codec_data;
 	struct snd_soc_codec *codec = socdev->codec;
-	struct i2c_client *i2c;
 	int ret;
 
-	if (addr != setup->i2c_address)
-		return -ENODEV;
-
-	client_template.adapter = adap;
-	client_template.addr = addr;
-
-	i2c = kmemdup(&client_template, sizeof(client_template), GFP_KERNEL);
-	if (i2c == NULL) {
-		kfree(codec);
-		return -ENOMEM;
-	}
-	
 	i2c_set_clientdata(i2c, codec);
 
 	codec->control_data = i2c;
 
-	ret = i2c_attach_client(i2c);
-	if (ret < 0) {
-		pr_err("failed to attach codec at addr %x\n", addr);
-		goto err;
-	}
-
 	ret = wm8971_init(socdev);
-	if (ret < 0) {
+	if (ret < 0)
 		pr_err("failed to initialise WM8971\n");
-		goto err;
-	}
-	return ret;
 
-err:
-	kfree(codec);
-	kfree(i2c);
 	return ret;
 }
 
-static int wm8971_i2c_detach(struct i2c_client *client)
+static int wm8971_i2c_remove(struct i2c_client *client)
 {
-	struct snd_soc_codec* codec = i2c_get_clientdata(client);
-	i2c_detach_client(client);
+	struct snd_soc_codec *codec = i2c_get_clientdata(client);
 	kfree(codec->reg_cache);
-	kfree(client);
 	return 0;
 }
 
-static int wm8971_i2c_attach(struct i2c_adapter *adap)
-{
-	return i2c_probe(adap, &addr_data, wm8971_codec_probe);
-}
+static const struct i2c_device_id wm8971_i2c_id[] = {
+	{ "wm8971", 0 },
+	{ }
+};
+MODULE_DEVICE_TABLE(i2c, wm8971_i2c_id);
 
-/* corgi i2c codec control layer */
 static struct i2c_driver wm8971_i2c_driver = {
 	.driver = {
 		.name = "WM8971 I2C Codec",
 		.owner = THIS_MODULE,
 	},
-	.id =             I2C_DRIVERID_WM8971,
-	.attach_adapter = wm8971_i2c_attach,
-	.detach_client =  wm8971_i2c_detach,
-	.command =        NULL,
+	.probe    = wm8971_i2c_probe,
+	.remove   = wm8971_i2c_remove,
+	.id_table = wm8971_i2c_id,
 };
 
-static struct i2c_client client_template = {
-	.name =   "WM8971",
-	.driver = &wm8971_i2c_driver,
-};
+static int wm8971_add_i2c_device(struct platform_device *pdev,
+				 const struct wm8971_setup_data *setup)
+{
+	struct i2c_board_info info;
+	struct i2c_adapter *adapter;
+	struct i2c_client *client;
+	int ret;
+
+	ret = i2c_add_driver(&wm8971_i2c_driver);
+	if (ret != 0) {
+		dev_err(&pdev->dev, "can't add i2c driver\n");
+		return ret;
+	}
+
+	memset(&info, 0, sizeof(struct i2c_board_info));
+	info.addr = setup->i2c_address;
+	strlcpy(info.type, "wm8971", I2C_NAME_SIZE);
+
+	adapter = i2c_get_adapter(setup->i2c_bus);
+	if (!adapter) {
+		dev_err(&pdev->dev, "can't get i2c adapter %d\n",
+			setup->i2c_bus);
+		goto err_driver;
+	}
+
+	client = i2c_new_device(adapter, &info);
+	i2c_put_adapter(adapter);
+	if (!client) {
+		dev_err(&pdev->dev, "can't add i2c device at 0x%x\n",
+			(unsigned int)info.addr);
+		goto err_driver;
+	}
+
+	return 0;
+
+err_driver:
+	i2c_del_driver(&wm8971_i2c_driver);
+	return -ENODEV;
+}
+
 #endif
 
 static int wm8971_probe(struct platform_device *pdev)
@@ -889,20 +884,24 @@ static int wm8971_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&codec->delayed_work, wm8971_work);
 	wm8971_workq = create_workqueue("wm8971");
 	if (wm8971_workq == NULL) {
+		kfree(codec->private_data);
 		kfree(codec);
 		return -ENOMEM;
 	}
+
 #if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
 	if (setup->i2c_address) {
-		normal_i2c[0] = setup->i2c_address;
 		codec->hw_write = (hw_write_t)i2c_master_send;
-		ret = i2c_add_driver(&wm8971_i2c_driver);
-		if (ret != 0)
-			printk(KERN_ERR "can't add i2c driver");
+		ret = wm8971_add_i2c_device(pdev, setup);
 	}
-#else
-		/* Add other interfaces here */
 #endif
+	/* Add other interfaces here */
+
+	if (ret != 0) {
+		destroy_workqueue(wm8971_workq);
+		kfree(codec->private_data);
+		kfree(codec);
+	}
 
 	return ret;
 }
@@ -920,6 +919,7 @@ static int wm8971_remove(struct platform_device *pdev)
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
 #if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+	i2c_unregister_device(codec->control_data);
 	i2c_del_driver(&wm8971_i2c_driver);
 #endif
 	kfree(codec->private_data);
