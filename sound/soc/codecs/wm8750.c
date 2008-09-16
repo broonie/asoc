@@ -939,9 +939,8 @@ static int __devinit wm8750_spi_probe(struct spi_device *spi)
 	codec->control_data = spi;
 
 	ret = wm8750_init(socdev);
-	if (ret < 0) {
+	if (ret < 0)
 		dev_err(&spi->dev, "failed to initialise WM8750\n");
-	}
 
 	return ret;
 }
