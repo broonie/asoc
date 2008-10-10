@@ -228,25 +228,25 @@
 #define WM8991_SYSCLK_SRC                       0x4000  /* SYSCLK_SRC */
 #define WM8991_CLK_FORCE                        0x2000  /* CLK_FORCE */
 #define WM8991_MCLK_DIV_MASK                    0x1800  /* MCLK_DIV - [12:11] */
-#define WM8991_MCLK_DIV_1			( 0 << 11)
+#define WM8991_MCLK_DIV_1			(0 << 11)
 #define WM8991_MCLK_DIV_2			( 2 << 11)
 #define WM8991_MCLK_INV                         0x0400  /* MCLK_INV */
 #define WM8991_ADC_CLKDIV_MASK                  0x00E0  /* ADC_CLKDIV - [7:5] */
-#define WM8991_ADC_CLKDIV_1			( 0 << 5)
-#define WM8991_ADC_CLKDIV_1_5			( 1 << 5)
-#define WM8991_ADC_CLKDIV_2			( 2 << 5)
-#define WM8991_ADC_CLKDIV_3			( 3 << 5)
-#define WM8991_ADC_CLKDIV_4			( 4 << 5)
-#define WM8991_ADC_CLKDIV_5_5			( 5 << 5)
-#define WM8991_ADC_CLKDIV_6			( 6 << 5)
+#define WM8991_ADC_CLKDIV_1			(0 << 5)
+#define WM8991_ADC_CLKDIV_1_5			(1 << 5)
+#define WM8991_ADC_CLKDIV_2			(2 << 5)
+#define WM8991_ADC_CLKDIV_3			(3 << 5)
+#define WM8991_ADC_CLKDIV_4			(4 << 5)
+#define WM8991_ADC_CLKDIV_5_5			(5 << 5)
+#define WM8991_ADC_CLKDIV_6			(6 << 5)
 #define WM8991_DAC_CLKDIV_MASK                  0x001C  /* DAC_CLKDIV - [4:2] */
-#define WM8991_DAC_CLKDIV_1			( 0 << 2)
-#define WM8991_DAC_CLKDIV_1_5			( 1 << 2)
-#define WM8991_DAC_CLKDIV_2			( 2 << 2)
-#define WM8991_DAC_CLKDIV_3			( 3 << 2)
-#define WM8991_DAC_CLKDIV_4			( 4 << 2)
-#define WM8991_DAC_CLKDIV_5_5			( 5 << 2)
-#define WM8991_DAC_CLKDIV_6			( 6 << 2)
+#define WM8991_DAC_CLKDIV_1			(0 << 2)
+#define WM8991_DAC_CLKDIV_1_5			(1 << 2)
+#define WM8991_DAC_CLKDIV_2			(2 << 2)
+#define WM8991_DAC_CLKDIV_3			(3 << 2)
+#define WM8991_DAC_CLKDIV_4			(4 << 2)
+#define WM8991_DAC_CLKDIV_5_5			(5 << 2)
+#define WM8991_DAC_CLKDIV_6			(6 << 2)
 
 /*
  * R8 (0x08) - Audio Interface (3)
