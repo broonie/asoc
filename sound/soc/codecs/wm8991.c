@@ -1,17 +1,14 @@
 /*
  * wm8991.c  --  WM8991 ALSA Soc Audio driver
  *
- * Copyright 2007 Wolfson Microelectronics PLC.
+ * Copyright 2007, 2008 Wolfson Microelectronics PLC.
  * Author: Graeme Gregory
- *         graeme.gregory@wolfsonmicro.com or linux@wolfsonmicro.com
+ *         linux@wolfsonmicro.com
  *
  *  This program is free software; you can redistribute  it and/or modify it
  *  under  the terms of  the GNU General  Public License as published by the
  *  Free Software Foundation;  either version 2 of the  License, or (at your
  *  option) any later version.
- *
- *  Revision history
- *    10th Jul 2007   Initial version.
  */
 
 #include <linux/module.h>
@@ -86,7 +83,7 @@ static int wm8991_write(struct snd_soc_codec *codec, unsigned int reg,
 	data[1] = (value >> 8) & 0xFF;
 	data[2] = value & 0xFF;
 
-	wm8991_write_reg_cache (codec, reg, value);
+	wm8991_write_reg_cache(codec, reg, value);
 	if (codec->hw_write(codec->control_data, data, 3) == 2)
 		return 0;
 	else
@@ -136,25 +133,27 @@ static const unsigned int out_sidetone_tlv[] = {
 };
 
 static int wm899x_outpga_put_volsw_vu(struct snd_kcontrol *kcontrol,
-        struct snd_ctl_elem_value *ucontrol)
+	struct snd_ctl_elem_value *ucontrol)
 {
-        struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-        int reg = kcontrol->private_value & 0xff;
-        int ret;
-        u16 val;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	int reg = kcontrol->private_value & 0xff;
+	int ret;
+	u16 val;
 
-        ret = snd_soc_put_volsw(kcontrol, ucontrol);
-        if (ret < 0)
-                return ret;
+	ret = snd_soc_put_volsw(kcontrol, ucontrol);
+	if (ret < 0)
+		return ret;
 
-        /* now hit the volume update bits (always bit 8) */
-        val = wm8991_read_reg_cache(codec, reg);
-        return wm8991_write(codec, reg, val | 0x0100);
+	/* now hit the volume update bits (always bit 8) */
+	val = wm8991_read_reg_cache(codec, reg);
+	return wm8991_write(codec, reg, val | 0x0100);
 }
 
-#define SOC_WM899X_OUTPGA_SINGLE_R_TLV(xname, reg, shift, max, invert, tlv_array) \
+#define SOC_WM899X_OUTPGA_SINGLE_R_TLV(xname, reg, shift, max, invert,\
+					 tlv_array) \
 {	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname), \
-	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ | SNDRV_CTL_ELEM_ACCESS_READWRITE,\
+	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |\
+		 SNDRV_CTL_ELEM_ACCESS_READWRITE,\
 	.tlv.p = (tlv_array), \
 	.info = snd_soc_info_volsw, \
 	.get = snd_soc_get_volsw, .put = wm899x_outpga_put_volsw_vu, \
@@ -380,7 +379,7 @@ static int wm8991_add_controls(struct snd_soc_codec *codec)
 
 	for (i = 0; i < ARRAY_SIZE(wm8991_snd_controls); i++) {
 		err = snd_ctl_add(codec->card,
-				snd_soc_cnew(&wm8991_snd_controls[i],codec,
+				snd_soc_cnew(&wm8991_snd_controls[i], codec,
 					NULL));
 		if (err < 0)
 			return err;
@@ -392,13 +391,13 @@ static int wm8991_add_controls(struct snd_soc_codec *codec)
  * _DAPM_ Controls
  */
 
-static int inmixer_event (struct snd_soc_dapm_widget *w,
+static int inmixer_event(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
 	u16 reg, fakepower;
 
-	reg=wm8991_read_reg_cache(w->codec, WM8991_POWER_MANAGEMENT_2);
-	fakepower=wm8991_read_reg_cache(w->codec, WM8991_INTDRIVBITS);
+	reg = wm8991_read_reg_cache(w->codec, WM8991_POWER_MANAGEMENT_2);
+	fakepower = wm8991_read_reg_cache(w->codec, WM8991_INTDRIVBITS);
 
 	if (fakepower & ((1 << WM8991_INMIXL_PWR_BIT) |
 		(1 << WM8991_AINLMUX_PWR_BIT))) {
@@ -418,25 +417,23 @@ static int inmixer_event (struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
-static int outmixer_event (struct snd_soc_dapm_widget *w,
-	struct snd_kcontrol * kcontrol, int event)
+static int outmixer_event(struct snd_soc_dapm_widget *w,
+	struct snd_kcontrol *kcontrol, int event)
 {
 	u32 reg_shift = kcontrol->private_value & 0xfff;
 	int ret = 0;
 	u16 reg;
 
-//	printk("reg_shift %4.4x\n", reg_shift);
-
 	switch (reg_shift) {
-	case WM8991_SPEAKER_MIXER | (WM8991_LDSPK_BIT << 8) :
+	case WM8991_SPEAKER_MIXER | (WM8991_LDSPK_BIT << 8):
 		reg = wm8991_read_reg_cache(w->codec, WM8991_OUTPUT_MIXER1);
-		printk("reg %4.4x\n", reg);
 		if (reg & WM8991_LDLO) {
 			printk(KERN_WARNING
 			"Cannot set as Output Mixer 1 LDLO Set\n");
 			ret = -1;
 		}
 		break;
+
 	case WM8991_SPEAKER_MIXER | (WM8991_RDSPK_BIT << 8):
 		reg = wm8991_read_reg_cache(w->codec, WM8991_OUTPUT_MIXER2);
 		if (reg & WM8991_RDRO) {
@@ -445,6 +442,7 @@ static int outmixer_event (struct snd_soc_dapm_widget *w,
 			ret = -1;
 		}
 		break;
+
 	case WM8991_OUTPUT_MIXER1 | (WM8991_LDLO_BIT << 8):
 		reg = wm8991_read_reg_cache(w->codec, WM8991_SPEAKER_MIXER);
 		if (reg & WM8991_LDSPK) {
@@ -453,6 +451,7 @@ static int outmixer_event (struct snd_soc_dapm_widget *w,
 			ret = -1;
 		}
 		break;
+
 	case WM8991_OUTPUT_MIXER2 | (WM8991_RDRO_BIT << 8):
 		reg = wm8991_read_reg_cache(w->codec, WM8991_SPEAKER_MIXER);
 		if (reg & WM8991_RDSPK) {
@@ -461,6 +460,9 @@ static int outmixer_event (struct snd_soc_dapm_widget *w,
 			ret = -1;
 		}
 		break;
+
+	default:
+		BUG();
 	}
 
 	return ret;
@@ -469,7 +471,7 @@ static int outmixer_event (struct snd_soc_dapm_widget *w,
 /* INMIX dB values */
 static const unsigned int in_mix_tlv[] = {
 	TLV_DB_RANGE_HEAD(1),
-	0,7, TLV_DB_LINEAR_ITEM(-1200, 600),
+	0, 7, TLV_DB_LINEAR_ITEM(-1200, 600),
 };
 
 /* Left In PGA Connections */
@@ -500,8 +502,10 @@ SOC_DAPM_SINGLE_TLV("Record Left Volume", WM8991_INPUT_MIXER3,
 	WM8991_LDBVOL_SHIFT, WM8991_LDBVOL_MASK, 0, in_mix_tlv),
 SOC_DAPM_SINGLE_TLV("LIN2 Volume", WM8991_INPUT_MIXER5, WM8991_LI2BVOL_SHIFT,
 	7, 0, in_mix_tlv),
-SOC_DAPM_SINGLE("LINPGA12 Switch", WM8991_INPUT_MIXER3, WM8991_L12MNB_BIT, 1, 0),
-SOC_DAPM_SINGLE("LINPGA34 Switch", WM8991_INPUT_MIXER3, WM8991_L34MNB_BIT, 1, 0),
+SOC_DAPM_SINGLE("LINPGA12 Switch", WM8991_INPUT_MIXER3, WM8991_L12MNB_BIT,
+		1, 0),
+SOC_DAPM_SINGLE("LINPGA34 Switch", WM8991_INPUT_MIXER3, WM8991_L34MNB_BIT,
+		1, 0),
 };
 
 /* INMIXR */
@@ -521,7 +525,7 @@ static const char *wm8991_ainlmux[] =
 	{"INMIXL Mix", "RXVOICE Mix", "DIFFINL Mix"};
 
 static const struct soc_enum wm8991_ainlmux_enum =
-SOC_ENUM_SINGLE( WM8991_INPUT_MIXER1, WM8991_AINLMODE_SHIFT,
+SOC_ENUM_SINGLE(WM8991_INPUT_MIXER1, WM8991_AINLMODE_SHIFT,
 	ARRAY_SIZE(wm8991_ainlmux), wm8991_ainlmux);
 
 static const struct snd_kcontrol_new wm8991_dapm_ainlmux_controls =
@@ -534,7 +538,7 @@ static const char *wm8991_ainrmux[] =
 	{"INMIXR Mix", "RXVOICE Mix", "DIFFINR Mix"};
 
 static const struct soc_enum wm8991_ainrmux_enum =
-SOC_ENUM_SINGLE( WM8991_INPUT_MIXER1, WM8991_AINRMODE_SHIFT,
+SOC_ENUM_SINGLE(WM8991_INPUT_MIXER1, WM8991_AINRMODE_SHIFT,
 	ARRAY_SIZE(wm8991_ainrmux), wm8991_ainrmux);
 
 static const struct snd_kcontrol_new wm8991_dapm_ainrmux_controls =
@@ -968,7 +972,7 @@ static void pll_factors(struct _pll_div *pll_div, unsigned int target,
 
 	if ((Ndiv < 6) || (Ndiv > 12))
 		printk(KERN_WARNING
-		"WM8991 N value outwith recommended range! N = %d\n",Ndiv);
+		"WM8991 N value outwith recommended range! N = %d\n", Ndiv);
 
 	pll_div->n = Ndiv;
 	Nmod = target % source;
@@ -984,7 +988,7 @@ static void pll_factors(struct _pll_div *pll_div, unsigned int target,
 
 	/* Move down to proper range now rounding is done */
 	K /= 10;
-	
+
 	pll_div->k = K;
 }
 
@@ -1009,7 +1013,7 @@ static int wm8991_set_dai_pll(struct snd_soc_dai *codec_dai,
 
 		/* set up N , fractional mode and pre-divisor if neccessary */
 		wm8991_write(codec, WM8991_PLL1, pll_div.n | WM8991_SDM |
-			(pll_div.div2?WM8991_PRESCALE:0));
+			(pll_div.div2 ? WM8991_PRESCALE : 0));
 		wm8991_write(codec, WM8991_PLL2, (u8)(pll_div.k>>8));
 		wm8991_write(codec, WM8991_PLL3, (u8)(pll_div.k & 0xFF));
 	} else {
@@ -1221,7 +1225,7 @@ static int wm8991_suspend(struct platform_device *pdev, pm_message_t state)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	/* we only need to suspend if we are a valid card */
-	if(!codec->card)
+	if (!codec->card)
 		return 0;
 
 	wm8991_set_bias_level(codec, SND_SOC_BIAS_OFF);
@@ -1328,7 +1332,7 @@ pcm_err:
    around */
 static struct snd_soc_device *wm8991_socdev;
 
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 
 /*
  * WM891 2 wire address is determined by GPIO5
@@ -1359,7 +1363,7 @@ static int wm8991_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 	client_template.addr = addr;
 
 	i2c =  kmemdup(&client_template, sizeof(client_template), GFP_KERNEL);
-	if (i2c == NULL){
+	if (i2c == NULL) {
 		kfree(codec);
 		return -ENOMEM;
 	}
@@ -1444,7 +1448,7 @@ static int wm8991_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&codec->dapm_paths);
 	wm8991_socdev = socdev;
 
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	if (setup->i2c_address) {
 		normal_i2c[0] = setup->i2c_address;
 		codec->hw_write = (hw_write_t)i2c_master_send;
@@ -1468,7 +1472,7 @@ static int wm8991_remove(struct platform_device *pdev)
 		wm8991_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	i2c_del_driver(&wm8991_i2c_driver);
 #endif
 	kfree(codec->private_data);
@@ -1483,7 +1487,6 @@ struct snd_soc_codec_device soc_codec_dev_wm8991 = {
 	.suspend = 	wm8991_suspend,
 	.resume =	wm8991_resume,
 };
-
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8991);
 
 MODULE_DESCRIPTION("ASoC WM8991 driver");
