@@ -25,12 +25,13 @@
 #include <sound/initval.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
+#include <sound/pxa2xx-lib.h>
 
-#include <asm/hardware.h>
-#include <asm/arch/pxa-regs.h>
-#include <asm/arch/regs-ssp.h>
-#include <asm/arch/audio.h>
-#include <asm/arch/ssp.h>
+#include <mach/hardware.h>
+#include <mach/pxa-regs.h>
+#include <mach/regs-ssp.h>
+#include <mach/audio.h>
+#include <mach/ssp.h>
 
 #include "pxa2xx-pcm.h"
 #include "pxa-ssp.h"
@@ -55,7 +56,7 @@ struct ssp_priv {
 static struct pxa2xx_pcm_dma_params pxa_ssp1_pcm_mono_out = {
 	.name			= "SSP1 PCM Mono out",
 	.dev_addr		= PXA2xx_SSP1_BASE + SSDR,
-	.drcmr			= &DRCMRTXSSDR,
+	.drcmr			= &DRCMR(14),
 	.dcmd			= DCMD_INCSRCADDR | DCMD_FLOWTRG |
 				  DCMD_BURST16 | DCMD_WIDTH2,
 };
@@ -63,7 +64,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp1_pcm_mono_out = {
 static struct pxa2xx_pcm_dma_params pxa_ssp1_pcm_mono_in = {
 	.name			= "SSP1 PCM Mono in",
 	.dev_addr		= PXA2xx_SSP1_BASE + SSDR,
-	.drcmr			= &DRCMRRXSSDR,
+	.drcmr			= &DRCMR(13),
 	.dcmd			= DCMD_INCTRGADDR | DCMD_FLOWSRC |
 				  DCMD_BURST16 | DCMD_WIDTH2,
 };
@@ -71,7 +72,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp1_pcm_mono_in = {
 static struct pxa2xx_pcm_dma_params pxa_ssp1_pcm_stereo_out = {
 	.name			= "SSP1 PCM Stereo out",
 	.dev_addr		= PXA2xx_SSP1_BASE + SSDR,
-	.drcmr			= &DRCMRTXSSDR,
+	.drcmr			= &DRCMR(14),
 	.dcmd			= DCMD_INCSRCADDR | DCMD_FLOWTRG |
 				  DCMD_BURST16 | DCMD_WIDTH4,
 };
@@ -79,7 +80,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp1_pcm_stereo_out = {
 static struct pxa2xx_pcm_dma_params pxa_ssp1_pcm_stereo_in = {
 	.name			= "SSP1 PCM Stereo in",
 	.dev_addr		= PXA2xx_SSP1_BASE + SSDR,
-	.drcmr			= &DRCMRRXSSDR,
+	.drcmr			= &DRCMR(13),
 	.dcmd			= DCMD_INCTRGADDR | DCMD_FLOWSRC |
 				  DCMD_BURST16 | DCMD_WIDTH4,
 };
@@ -87,7 +88,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp1_pcm_stereo_in = {
 static struct pxa2xx_pcm_dma_params pxa_ssp2_pcm_mono_out = {
 	.name			= "SSP2 PCM Mono out",
 	.dev_addr		= PXA27x_SSP2_BASE + SSDR,
-	.drcmr			= &DRCMRTXSS2DR,
+	.drcmr			= &DRCMR(16),
 	.dcmd			= DCMD_INCSRCADDR | DCMD_FLOWTRG |
 				  DCMD_BURST16 | DCMD_WIDTH2,
 };
@@ -95,7 +96,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp2_pcm_mono_out = {
 static struct pxa2xx_pcm_dma_params pxa_ssp2_pcm_mono_in = {
 	.name			= "SSP2 PCM Mono in",
 	.dev_addr		= PXA27x_SSP2_BASE + SSDR,
-	.drcmr			= &DRCMRRXSS2DR,
+	.drcmr			= &DRCMR(15),
 	.dcmd			= DCMD_INCTRGADDR | DCMD_FLOWSRC |
 				  DCMD_BURST16 | DCMD_WIDTH2,
 };
@@ -103,7 +104,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp2_pcm_mono_in = {
 static struct pxa2xx_pcm_dma_params pxa_ssp2_pcm_stereo_out = {
 	.name			= "SSP2 PCM Stereo out",
 	.dev_addr		= PXA27x_SSP2_BASE + SSDR,
-	.drcmr			= &DRCMRTXSS2DR,
+	.drcmr			= &DRCMR(16),
 	.dcmd			= DCMD_INCSRCADDR | DCMD_FLOWTRG |
 				  DCMD_BURST16 | DCMD_WIDTH4,
 };
@@ -111,7 +112,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp2_pcm_stereo_out = {
 static struct pxa2xx_pcm_dma_params pxa_ssp2_pcm_stereo_in = {
 	.name			= "SSP2 PCM Stereo in",
 	.dev_addr		= PXA27x_SSP2_BASE + SSDR,
-	.drcmr			= &DRCMRRXSS2DR,
+	.drcmr			= &DRCMR(15),
 	.dcmd			= DCMD_INCTRGADDR | DCMD_FLOWSRC |
 				  DCMD_BURST16 | DCMD_WIDTH4,
 };
@@ -119,7 +120,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp2_pcm_stereo_in = {
 static struct pxa2xx_pcm_dma_params pxa_ssp3_pcm_mono_out = {
 	.name			= "SSP3 PCM Mono out",
 	.dev_addr		= PXA27x_SSP3_BASE + SSDR,
-	.drcmr			= &DRCMRTXSS3DR,
+	.drcmr			= &DRCMR(67),
 	.dcmd			= DCMD_INCSRCADDR | DCMD_FLOWTRG |
 				  DCMD_BURST16 | DCMD_WIDTH2,
 };
@@ -127,7 +128,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp3_pcm_mono_out = {
 static struct pxa2xx_pcm_dma_params pxa_ssp3_pcm_mono_in = {
 	.name			= "SSP3 PCM Mono in",
 	.dev_addr		= PXA27x_SSP3_BASE + SSDR,
-	.drcmr			= &DRCMRRXSS3DR,
+	.drcmr			= &DRCMR(66),
 	.dcmd			= DCMD_INCTRGADDR | DCMD_FLOWSRC |
 				  DCMD_BURST16 | DCMD_WIDTH2,
 };
@@ -135,7 +136,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp3_pcm_mono_in = {
 static struct pxa2xx_pcm_dma_params pxa_ssp3_pcm_stereo_out = {
 	.name			= "SSP3 PCM Stereo out",
 	.dev_addr		= PXA27x_SSP3_BASE + SSDR,
-	.drcmr			= &DRCMRTXSS3DR,
+	.drcmr			= &DRCMR(67),
 	.dcmd			= DCMD_INCSRCADDR | DCMD_FLOWTRG |
 				  DCMD_BURST16 | DCMD_WIDTH4,
 };
@@ -143,7 +144,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp3_pcm_stereo_out = {
 static struct pxa2xx_pcm_dma_params pxa_ssp3_pcm_stereo_in = {
 	.name			= "SSP3 PCM Stereo in",
 	.dev_addr		= PXA27x_SSP3_BASE + SSDR,
-	.drcmr			= &DRCMRRXSS3DR,
+	.drcmr			= &DRCMR(66),
 	.dcmd			= DCMD_INCTRGADDR | DCMD_FLOWSRC |
 				  DCMD_BURST16 | DCMD_WIDTH4,
 };
@@ -151,7 +152,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp3_pcm_stereo_in = {
 static struct pxa2xx_pcm_dma_params pxa_ssp4_pcm_mono_out = {
 	.name			= "SSP4 PCM Mono out",
 	.dev_addr		= PXA3xx_SSP4_BASE + SSDR,
-	.drcmr			= &DRCMRTXSS3DR,
+	.drcmr			= &DRCMR(67),
 	.dcmd			= DCMD_INCSRCADDR | DCMD_FLOWTRG |
 				  DCMD_BURST16 | DCMD_WIDTH2,
 };
@@ -159,7 +160,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp4_pcm_mono_out = {
 static struct pxa2xx_pcm_dma_params pxa_ssp4_pcm_mono_in = {
 	.name			= "SSP4 PCM Mono in",
 	.dev_addr		= PXA3xx_SSP4_BASE + SSDR,
-	.drcmr			= &DRCMRRXSS3DR,
+	.drcmr			= &DRCMR(66),
 	.dcmd			= DCMD_INCTRGADDR | DCMD_FLOWSRC |
 				  DCMD_BURST16 | DCMD_WIDTH2,
 };
@@ -167,7 +168,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp4_pcm_mono_in = {
 static struct pxa2xx_pcm_dma_params pxa_ssp4_pcm_stereo_out = {
 	.name			= "SSP4 PCM Stereo out",
 	.dev_addr		= PXA3xx_SSP4_BASE + SSDR,
-	.drcmr			= &DRCMRTXSS3DR,
+	.drcmr			= &DRCMR(67),
 	.dcmd			= DCMD_INCSRCADDR | DCMD_FLOWTRG |
 				  DCMD_BURST16 | DCMD_WIDTH4,
 };
@@ -175,7 +176,7 @@ static struct pxa2xx_pcm_dma_params pxa_ssp4_pcm_stereo_out = {
 static struct pxa2xx_pcm_dma_params pxa_ssp4_pcm_stereo_in = {
 	.name			= "SSP4 PCM Stereo in",
 	.dev_addr		= PXA3xx_SSP4_BASE + SSDR,
-	.drcmr			= &DRCMRRXSS3DR,
+	.drcmr			= &DRCMR(66),
 	.dcmd			= DCMD_INCTRGADDR | DCMD_FLOWSRC |
 				  DCMD_BURST16 | DCMD_WIDTH4,
 };
