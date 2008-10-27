@@ -360,16 +360,25 @@ static int pxa_ssp_set_dai_clkdiv(struct snd_soc_dai *cpu_dai,
 		break;
 	case PXA_SSP_AUDIO_DIV_SCDB:
 		val = ssp_read_reg(ssp, SSACD);
-		val &= ~(SSACD_SCDB | SSACD_SCDX8);
+		val &= ~SSACD_SCDB;
+#if defined(CONFIG_PXA3xx)
+		if (cpu_is_pxa3xx())
+			val &= ~SSACD_SCDX8;
+#endif
 		switch (div) {
 		case PXA_SSP_CLK_SCDB_1:
 			val |= SSACD_SCDB;
 			break;
 		case PXA_SSP_CLK_SCDB_4:
 			break;
+#if defined(CONFIG_PXA3xx)
 		case PXA_SSP_CLK_SCDB_8:
-			val |= SSACD_SCDX8;
+			if (cpu_is_pxa3xx())
+				val |= SSACD_SCDX8;
+			else
+				return -EINVAL;
 			break;
+#endif
 		default:
 			return -EINVAL;
 		}
@@ -395,7 +404,10 @@ static int pxa_ssp_set_dai_pll(struct snd_soc_dai *cpu_dai,
 	struct ssp_device *ssp = priv->dev.ssp;
 	u32 ssacd = ssp_read_reg(ssp, SSACD) & ~0x70;
 
-	ssp_write_reg(ssp, SSACDD, 0);
+#if defined(CONFIG_PXA3xx)
+	if (cpu_is_pxa3xx())
+		ssp_write_reg(ssp, SSACDD, 0);
+#endif
 
 	switch (freq_out) {
 	case 5622000:
