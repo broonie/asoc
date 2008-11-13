@@ -6,6 +6,7 @@ snd-soc-uda1380-objs := uda1380.o
 snd-soc-wm8510-objs := wm8510.o
 snd-soc-wm8580-objs := wm8580.o
 snd-soc-wm8711-objs := wm8711.o
+snd-soc-wm8728-objs := wm8728.o
 snd-soc-wm8731-objs := wm8731.o
 snd-soc-wm8750-objs := wm8750.o
 snd-soc-wm8753-objs := wm8753.o
@@ -36,7 +37,11 @@ obj-$(CONFIG_SND_SOC_TLV320)	+= snd-soc-tlv320.o
 obj-$(CONFIG_SND_SOC_UDA1380)	+= snd-soc-uda1380.o
 obj-$(CONFIG_SND_SOC_WM8510)	+= snd-soc-wm8510.o
 obj-$(CONFIG_SND_SOC_WM8580)	+= snd-soc-wm8580.o
+<<<<<<< HEAD:sound/soc/codecs/Makefile
 obj-$(CONFIG_SND_SOC_WM8711)	+= snd-soc-wm8711.o
+=======
+obj-$(CONFIG_SND_SOC_WM8728)	+= snd-soc-wm8728.o
+>>>>>>> 71cfc90... ASoC: Add WM8728 codec driver:sound/soc/codecs/Makefile
 obj-$(CONFIG_SND_SOC_WM8731)	+= snd-soc-wm8731.o
 obj-$(CONFIG_SND_SOC_WM8750)	+= snd-soc-wm8750.o
 obj-$(CONFIG_SND_SOC_WM8753)	+= snd-soc-wm8753.o
