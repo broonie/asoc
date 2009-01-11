@@ -1132,12 +1132,12 @@ static int wm8991_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
  * Set PCM DAI bit size and sample rate.
  */
 static int wm8991_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
 	struct snd_soc_codec *codec = socdev->codec;
-	struct wm8991_priv *wm8991 = codec->private_data;
 	u16 audio1 = wm8991_read_reg_cache(codec, WM8991_AUDIO_INTERFACE_1);
 
 	audio1 &= ~WM8991_AIF_WL_MASK;
@@ -1162,18 +1162,12 @@ static int wm8991_hw_params(struct snd_pcm_substream *substream,
 
 static int wm8991_mute(struct snd_soc_dai *dai, int mute)
 {
-	struct snd_soc_codec *codec = dai->codec;
-
-	// TODO mute codec in here
-
 	return 0;
 }
 
 static int wm8991_set_bias_level(struct snd_soc_codec *codec,
 	enum snd_soc_bias_level level)
 {
-	// TODO handle DPAM power events
-
 	return 0;
 }
 
@@ -1208,13 +1202,12 @@ struct snd_soc_dai wm8991_dai = {
 		.rates = WM8991_RATES,
 		.formats = WM8991_FORMATS,},
 	.ops = {
-		.hw_params = wm8991_hw_params,},
-	.dai_ops = {
-		.digital_mute = wm8991_mute,
-		.set_fmt = wm8991_set_dai_fmt,
-		.set_clkdiv = wm8991_set_dai_clkdiv,
-		.set_pll = wm8991_set_dai_pll,
-		.set_sysclk = wm8991_set_dai_sysclk,
+		 .hw_params = wm8991_hw_params,
+		 .digital_mute = wm8991_mute,
+		 .set_fmt = wm8991_set_dai_fmt,
+		 .set_clkdiv = wm8991_set_dai_clkdiv,
+		 .set_pll = wm8991_set_dai_pll,
+		 .set_sysclk = wm8991_set_dai_sysclk,
 	},
 };
 EXPORT_SYMBOL_GPL(wm8991_dai);
@@ -1313,7 +1306,7 @@ static int wm8991_init(struct snd_soc_device *socdev)
 
 	wm8991_add_controls(codec);
 	wm8991_add_widgets(codec);
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
 		printk(KERN_ERR "wm8991: failed to register card\n");
 		goto card_err;
@@ -1488,6 +1481,18 @@ struct snd_soc_codec_device soc_codec_dev_wm8991 = {
 	.resume =	wm8991_resume,
 };
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8991);
+
+static int __init wm8991_modinit(void)
+{
+	return snd_soc_register_dai(&wm8991_dai);
+}
+module_init(wm8991_modinit);
+
+static void __exit wm8991_exit(void)
+{
+	snd_soc_unregister_dai(&wm8991_dai);
+}
+module_exit(wm8991_exit);
 
 MODULE_DESCRIPTION("ASoC WM8991 driver");
 MODULE_AUTHOR("Graeme Gregory");
