@@ -401,7 +401,7 @@ static struct pll_ pll[] = {
 	/* TODO: liam - add more entries */
 };
 
-static int wm8978_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
+static int wm8978_set_dai_pll(struct snd_soc_dai *codec_dai,
 		int pll_id, unsigned int freq_in, unsigned int freq_out)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -428,7 +428,7 @@ static int wm8978_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 	return -EINVAL;
 }
 
-static int wm8978_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8978_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -485,7 +485,8 @@ static int wm8978_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 }
 
 static int wm8978_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -530,7 +531,7 @@ static int wm8978_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int wm8978_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
+static int wm8978_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
 		int div_id, int div)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -568,7 +569,7 @@ static int wm8978_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int wm8978_mute(struct snd_soc_codec_dai *dai, int mute)
+static int wm8978_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
 	u16 mute_reg = wm8978_read_reg_cache(codec, WM8978_DAC) & 0xffbf;
@@ -605,16 +606,13 @@ static int wm8978_set_bias_level(struct snd_soc_codec *codec,
 	return 0;
 }
 
-#define WM8978_RATES \
-	(SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 | SNDRV_PCM_RATE_16000 | \
-	SNDRV_PCM_RATE_22050 | SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 | \
-	SNDRV_PCM_RATE_48000)
+#define WM8978_RATES SNDRV_PCM_RATE_8000_48000
 
 #define WM8978_FORMATS \
 	(SNDRV_PCM_FORMAT_S16_LE | SNDRV_PCM_FORMAT_S20_3LE | \
 	SNDRV_PCM_FORMAT_S24_3LE | SNDRV_PCM_FORMAT_S24_LE)
 
-struct snd_soc_codec_dai wm8978_dai = {
+struct snd_soc_dai wm8978_dai = {
 	.name = "WM8978 HiFi",
 	.playback = {
 		.stream_name = "Playback",
@@ -630,8 +628,6 @@ struct snd_soc_codec_dai wm8978_dai = {
 		.formats = WM8978_FORMATS,},
 	.ops = {
 		.hw_params = wm8978_hw_params,
-	},
-	.dai_ops = {
 		.digital_mute = wm8978_mute,
 		.set_fmt = wm8978_set_dai_fmt,
 		.set_clkdiv = wm8978_set_dai_clkdiv,
@@ -703,11 +699,11 @@ static int wm8978_init(struct snd_soc_device* socdev)
 	wm8978_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	wm8978_add_controls(codec);
 	wm8978_add_widgets(codec);
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
-      	printk(KERN_ERR "wm8978: failed to register card\n");
+		printk(KERN_ERR "wm8978: failed to register card\n");
 		goto card_err;
-    }
+	}
 	return ret;
 
 card_err:
@@ -763,14 +759,14 @@ static int wm8978_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 	codec->control_data = i2c;
 
 	ret = i2c_attach_client(i2c);
-	if(ret < 0) {
-		err("failed to attach codec at addr %x\n", addr);
+	if (ret < 0) {
+		pr_err("failed to attach codec at addr %x\n", addr);
 		goto err;
 	}
 
 	ret = wm8978_init(socdev);
-	if(ret < 0) {
-		err("failed to initialise WM8978\n");
+	if (ret < 0) {
+		pr_err("failed to initialise WM8978\n");
 		goto err;
 	}
 	return ret;
@@ -821,7 +817,7 @@ static int wm8978_probe(struct platform_device *pdev)
 	struct snd_soc_codec *codec;
 	int ret = 0;
 
-	info("WM8978 Audio Codec %s", WM8978_VERSION);
+	pr_info("WM8978 Audio Codec %s", WM8978_VERSION);
 
 	setup = socdev->codec_data;
 	codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);
@@ -873,8 +869,19 @@ struct snd_soc_codec_device soc_codec_dev_wm8978 = {
 	.suspend = 	wm8978_suspend,
 	.resume =	wm8978_resume,
 };
-
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8978);
+
+static int __init wm8978_modinit(void)
+{
+	return snd_soc_register_dai(&wm8978_dai);
+}
+module_init(wm8978_modinit);
+
+static void __exit wm8978_exit(void)
+{
+	snd_soc_unregister_dai(&wm8978_dai);
+}
+module_exit(wm8978_exit);
 
 MODULE_DESCRIPTION("ASoC WM8978 driver");
 MODULE_AUTHOR("Liam Girdwood");
