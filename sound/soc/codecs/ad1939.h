@@ -65,6 +65,6 @@ struct ad1939_setup_data {
 };
 
 extern struct snd_soc_codec_device soc_codec_dev_ad1939;
-extern struct snd_soc_codec_dai ad1939_dai;
+extern struct snd_soc_dai ad1939_dai;
 
 #endif

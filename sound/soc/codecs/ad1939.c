@@ -43,16 +43,6 @@
 
 #define AUDIO_NAME "AD1939"
 
-#define msg(x...) printk(KERN_INFO AUDIO_NAME ": " x)
-
-/* #define CODEC_DEBUG */
-
-#ifdef CODEC_DEBUG
-#define dbg(x...)	printk(KERN_INFO AUDIO_NAME ": " x)
-#else
-#define dbg(x...)	do {} while(0)
-#endif
-
 struct ad1939_private {
 	struct snd_soc_codec *codec;
 	unsigned long sysclk;
@@ -175,7 +165,8 @@ static int ad1939_add_controls(struct snd_soc_codec *codec)
 
 
 static int ad1939_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+	struct snd_pcm_hw_params *params,
+	struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -185,7 +176,7 @@ static int ad1939_hw_params(struct snd_pcm_substream *substream,
 	unsigned long rate;
 	unsigned int bits;
 
-	dbg("ad1939_hw_params");
+	pr_debug("ad1939_hw_params");
 
 	dac0 = ad1939_read(codec, AD1939_DACCTL0);
 	dac1 = ad1939_read(codec, AD1939_DACCTL1);
@@ -197,8 +188,8 @@ static int ad1939_hw_params(struct snd_pcm_substream *substream,
 	rate = params_rate(params);
 	bits = params->msbits;
 
-	dbg("bits %d srate %lu/%d chans %d\n", bits, rate,
-	     params->rate_den, params_channels(params));
+	pr_debug("bits %d srate %lu/%d chans %d\n", bits, rate,
+	       params->rate_den, params_channels(params));
 
 	/*
 	 * sample rate
@@ -217,7 +208,7 @@ static int ad1939_hw_params(struct snd_pcm_substream *substream,
 		adc0 |= (2<<6);
 		break;
 	default:
-		dbg("rejecting srate %lu\n", rate);
+		pr_debug("rejecting srate %lu\n", rate);
 		return -EINVAL;
 	}
 
@@ -231,7 +222,7 @@ static int ad1939_hw_params(struct snd_pcm_substream *substream,
 	case 20: dac2 |= (1<<3); adc1 |= (1<<0); break;
 	case 24: break;
 	default:
-		dbg("rejecting bits %d\n", bits);
+		pr_debug("rejecting bits %d\n", bits);
 		return -EINVAL;
 	}
 
@@ -264,7 +255,7 @@ static int ad1939_hw_params(struct snd_pcm_substream *substream,
 		adc2 |= (3<<4);
 		break;
 	default:
-		dbg("%d channels not supported\n",
+		pr_debug("%d channels not supported\n",
 			params_channels(params));
 		return -EINVAL;
 	}
@@ -279,13 +270,13 @@ static int ad1939_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int ad1939_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int ad1939_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	unsigned char dac0, dac1, adc1, adc2;
 
-	dbg("ad1939_set_dai_fmt(0x%08lx)", fmt);
+	pr_debug("ad1939_set_dai_fmt(0x%08x)", fmt);
 
 	dac0 = ad1939_read(codec, AD1939_DACCTL0);
 	dac1 = ad1939_read(codec, AD1939_DACCTL1);
@@ -315,7 +306,7 @@ static int ad1939_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 		adc2 &= ~((1<<3) | (1<<6)); /* LRCK BCK slave */
 		break;
 	default:
-		dbg("invalid master/slave configuration\n");
+		pr_debug("invalid master/slave configuration\n");
 		return -EINVAL;
 	}
 
@@ -337,7 +328,7 @@ static int ad1939_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 		break;
 #endif
 	default:
-		dbg("invalid I2S interface format\n");
+		pr_err("invalid I2S interface format\n");
 		return -EINVAL;
 	}
 
@@ -360,7 +351,7 @@ static int ad1939_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 		adc2 |= (1<<1) | (1<<2);
 		break;
 	default:
-		dbg("invalid clock inversion configuration\n");
+		pr_err("invalid clock inversion configuration\n");
 		return -EINVAL;
 	}
 
@@ -372,7 +363,8 @@ static int ad1939_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int ad1939_dapm_event(struct snd_soc_codec *codec, int event)
+static int ad1939_set_bias_level(struct snd_soc_codec *codec,
+				 enum snd_soc_bias_level event)
 {
 	unsigned char pll0, adc0, dac0;
 
@@ -386,44 +378,43 @@ static int ad1939_dapm_event(struct snd_soc_codec *codec, int event)
 
 	switch (event)
 	{
-	case SNDRV_CTL_POWER_D1:
-	case SNDRV_CTL_POWER_D2:
-	case SNDRV_CTL_POWER_D0:
+	case SND_SOC_BIAS_ON:
+	case SND_SOC_BIAS_PREPARE:
 		ad1939_write(codec, AD1939_PLLCTL0, pll0);
 		ad1939_write(codec, AD1939_DACCTL0, dac0);
 		ad1939_write(codec, AD1939_ADCCTL0, adc0);
 		break;
-	case SNDRV_CTL_POWER_D3hot:
-	case SNDRV_CTL_POWER_D3cold:
-		/* turn of internal PLL and DAC/ADCs */
+	case SND_SOC_BIAS_STANDBY:
+	case SND_SOC_BIAS_OFF:
+		/* turn off internal PLL and DAC/ADCs */
 		ad1939_write(codec, AD1939_PLLCTL0, pll0 | 1);
 		ad1939_write(codec, AD1939_DACCTL0, dac0 | 1);
 		ad1939_write(codec, AD1939_ADCCTL0, adc0 | 1);
 		break;
 	}
-	codec->dapm_state = event;
+	codec->bias_level = event;
 	return 0;
 }
 
-static int ad1939_digmute(struct snd_soc_codec_dai *dai, int mute)
+static int ad1939_digmute(struct snd_soc_dai *dai, int mute)
 {
 	dai->codec->write(dai->codec, AD1939_DACMUTE, mute ? 0xff : 0);
 	return 0;
 }
 
-static int ad1939_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
+static int ad1939_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 		int clk_id, unsigned int freq, int dir)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	struct ad1939_private *ad = codec->private_data;
 
-	dbg("sysck id %d f %d dir %d\n", clk_id, freq, dir);
+	pr_debug("sysck id %d f %d dir %d\n", clk_id, freq, dir);
 	switch (freq) {
 	case 11288000:
 		ad->sysclk = freq;
 		break;
 	default:
-		dbg("invalid sysclk\n");
+		pr_err("invalid sysclk\n");
 		return -EINVAL;
 	}
 	return 0;
@@ -436,7 +427,7 @@ static int ad1939_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
 #define AD1939_FORMATS	\
 	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE)
 
-struct snd_soc_codec_dai ad1939_dai = {
+struct snd_soc_dai ad1939_dai = {
 	.name = "AD1939",
 	.playback = {
 		.stream_name = "Playback",
@@ -452,8 +443,6 @@ struct snd_soc_codec_dai ad1939_dai = {
 		.formats = AD1939_FORMATS,},
 	.ops = {
 		.hw_params = ad1939_hw_params,
-	},
-	.dai_ops = {
 		.digital_mute = ad1939_digmute,
 		.set_sysclk = ad1939_set_dai_sysclk,
 		.set_fmt = ad1939_set_dai_fmt,
@@ -471,7 +460,7 @@ static int ad1939_init(struct snd_soc_device *socdev)
 	int ret;
 
 	codec->owner = THIS_MODULE;
-	codec->dapm_event = ad1939_dapm_event;
+	codec->set_bias_level = ad1939_set_bias_level;
 	codec->dai = &ad1939_dai;
 	codec->num_dai = 1;
 	codec->reg_cache_size = ARRAY_SIZE(ad1939_regcache);
@@ -511,11 +500,11 @@ static int ad1939_init(struct snd_soc_device *socdev)
 	ad1939_write(codec, AD1939_ADCCTL2, r1);
 
 	ad1939_add_controls(codec);
-	ad1939_dapm_event(codec, SNDRV_CTL_POWER_D0);
+	ad1939_set_bias_level(codec, SND_SOC_BIAS_ON);
 
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
-		msg("failed to register card\n");
+		pr_err("failed to register card\n");
 		goto card_err;
 	}
 
@@ -566,7 +555,7 @@ static int ad1939_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 
 	ret = i2c_attach_client(i2c);
 	if (ret < 0) {
-		msg("failed to attach codec at addr %x\n", addr);
+		pr_err("failed to attach codec at addr %x\n", addr);
 		goto err;
 	}
 
@@ -575,7 +564,7 @@ static int ad1939_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 
 	ret = ad1939_init(socdev);
 	if (ret < 0) {
-		msg("failed to initialise AD1939 codec\n");
+		pr_err("failed to initialise AD1939 codec\n");
 		goto err;
 	}
 	return ret;
@@ -652,7 +641,7 @@ static int ad1939_probe(struct platform_device *pdev)
 		normal_i2c[0] = setup->i2c_address;
 		ret = i2c_add_driver(&ad1939_i2c_driver);
 		if (ret != 0)
-			msg("can't add i2c driver");
+			pr_err("can't add i2c driver");
 	}
 #endif
 	ret = 0;
@@ -666,7 +655,7 @@ static int ad1939_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		ad1939_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		ad1939_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
