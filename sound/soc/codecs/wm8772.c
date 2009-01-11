@@ -288,7 +288,8 @@ static int wm8772_set_adc_dai_fmt(struct snd_soc_dai *codec_dai,
 }
 
 static int wm8772_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -410,8 +411,6 @@ struct snd_soc_dai wm8772_dai[] = {
 	},
 	.ops = {
 		.hw_params = wm8772_hw_params,
-	},
-	.dai_ops = {
 		.set_fmt = wm8772_set_dac_dai_fmt,
 		.set_sysclk = wm8772_set_dai_sysclk,
 	},
@@ -425,8 +424,6 @@ struct snd_soc_dai wm8772_dai[] = {
 	},
 	.ops = {
 		.hw_params = wm8772_hw_params,
-	},
-	.dai_ops = {
 		.set_fmt = wm8772_set_adc_dai_fmt,
 		.set_sysclk = wm8772_set_dai_sysclk,
 	},
@@ -513,11 +510,11 @@ static int wm8772_init(struct snd_soc_device *socdev)
 	wm8772_write(codec, WM8772_RDAC3VOL, reg | 0x0100);
 
 	wm8772_add_controls(codec);
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
-      	printk(KERN_ERR "wm8772: failed to register card\n");
+		printk(KERN_ERR "wm8772: failed to register card\n");
 		goto card_err;
-    }
+	}
 	return ret;
 
 card_err:
@@ -560,7 +557,7 @@ static int wm8772_probe(struct platform_device *pdev)
 	wm8772_socdev = socdev;
 
 	/* Add other interfaces here */
-#warning do SPI device probe here and then call wm8772_init()
+	/* FIXME: Do SPI device probe here */
 
 	return ret;
 }
@@ -590,6 +587,18 @@ struct snd_soc_codec_device soc_codec_dev_wm8772 = {
 };
 
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8772);
+
+static int __init wm8772_modinit(void)
+{
+	return snd_soc_register_dais(wm8772_dai, ARRAY_SIZE(wm8772_dai));
+}
+module_init(wm8772_modinit);
+
+static void __exit wm8772_exit(void)
+{
+	snd_soc_unregister_dais(wm8772_dai, ARRAY_SIZE(wm8772_dai));
+}
+module_exit(wm8772_exit);
 
 MODULE_DESCRIPTION("ASoC WM8772 driver");
 MODULE_AUTHOR("Liam Girdwood");
