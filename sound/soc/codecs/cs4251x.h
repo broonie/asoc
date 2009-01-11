@@ -168,7 +168,7 @@ unsigned int cs4251x_read(struct snd_soc_codec *codec, unsigned int reg);
 
 
 /* ASoC DAI */
-extern struct snd_soc_codec_dai cs4251x_dai;
+extern struct snd_soc_dai cs4251x_dai;
 extern struct snd_soc_codec_device soc_codec_dev_cs4251x;
 
 #endif

@@ -38,21 +38,6 @@
 
 #define AUDIO_NAME "cs4251x"
 
-/* #define CS4251X_DEBUG */
-
-#ifdef CS4251X_DEBUG
-#define dbg(format, arg...) \
-	printk(KERN_DEBUG AUDIO_NAME ": " format "\n" , ## arg)
-#else
-#define dbg(format, arg...) do {} while (0)
-#endif
-#define err(format, arg...) \
-	printk(KERN_ERR AUDIO_NAME ": " format "\n" , ## arg)
-#define info(format, arg...) \
-	printk(KERN_INFO AUDIO_NAME ": " format "\n" , ## arg)
-#define warn(format, arg...) \
-	printk(KERN_WARNING AUDIO_NAME ": " format "\n" , ## arg)
-
 /* codec private data */
 struct cs_priv {
 	struct snd_soc_codec	*codec;
@@ -241,7 +226,7 @@ static void cs_irq_work(struct work_struct *data)
 	unsigned char r;
 
 	r = cs4251x_read(cs->codec, CS4251X_IRQSTAT);
-	dbg("IRQ: istat 0x%02x", r);
+	pr_debug("IRQ: istat 0x%02x", r);
 }
 
 static irqreturn_t cs_irq(int irq, void *dev_id)
@@ -302,7 +287,8 @@ static int cs_add_controls(struct snd_soc_codec *codec)
 }
 
 static int cs_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+	struct snd_pcm_hw_params *params,
+	struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -312,23 +298,23 @@ static int cs_hw_params(struct snd_pcm_substream *substream,
 	unsigned char funcmode;
 	int i;
 
-	dbg("cs_hw_params");
+	pr_debug("cs_hw_params");
 
 	rate = params->rate_num / params->rate_den;
 	for (i = 0; i < FS_RATIO_CNT; i++) {
 
-		dbg("%d sck %lu rat %d res %lu rate %lu", i, cs->sysclk,
-			cs_fs_ratios[i],
-			(cs->sysclk / cs_fs_ratios[i]), rate);
+		pr_debug("%d sck %lu rat %d res %lu rate %lu", i, cs->sysclk,
+			 cs_fs_ratios[i],
+			 (cs->sysclk / cs_fs_ratios[i]), rate);
 
 		if ((cs->sysclk / cs_fs_ratios[i]) == rate) {
 			/* found a suitable ratio, program it */
 			funcmode = cs4251x_read(codec, CS4251X_FUNCMODE);
 			/* set both CODEC_SP and SAI_SP */
-			dbg("funcmode: was    %x", funcmode);
+			pr_debug("funcmode: was    %x", funcmode);
 			funcmode &= ~(15<<4);
 			funcmode |= (i<<4) | (i<<6);
-			dbg("funcmode: is now %x", funcmode);
+			pr_debug("funcmode: is now %x", funcmode);
 			cs4251x_write(codec, CS4251X_FUNCMODE, funcmode);
 			return 0;
 		}
@@ -337,7 +323,7 @@ static int cs_hw_params(struct snd_pcm_substream *substream,
 	return -EINVAL;
 }
 
-static int cs_mute(struct snd_soc_codec_dai *dai, int mute)
+static int cs_mute(struct snd_soc_dai *dai, int mute)
 {
 	cs4251x_write(dai->codec, CS4251X_MUTE, mute ? 0xff : 0);
 	return 0;
@@ -346,7 +332,7 @@ static int cs_mute(struct snd_soc_codec_dai *dai, int mute)
 /*
  * someone wants to tell us the OMCK frequency we're running with.
  */
-static int cs_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
+static int cs_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 		int clk_id, unsigned int freq, int dir)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -354,7 +340,7 @@ static int cs_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
 	unsigned char ckctl;
 	unsigned long rates;
 
-	dbg("cs_set_dai_sysclk(%d, %ul, %d)", clk_id, freq, dir);
+	pr_debug("cs_set_dai_sysclk(%d, %ul, %d)", clk_id, freq, dir);
 
 	ckctl = cs4251x_read(codec, CS4251X_CLKCTL);
 	ckctl &= ~(3<<4);
@@ -387,7 +373,7 @@ static int cs_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
 		ckctl |= (2<<4);
 		break;
 	default:
-		dbg("invalid sysclk %uHz", freq);
+		pr_debug("invalid sysclk %uHz", freq);
 		return -EINVAL;
 	}
 
@@ -408,13 +394,13 @@ static int cs_set_dai_sysclk(struct snd_soc_codec_dai *codec_dai,
  * FIXME: this code applies the same values to the CODEC_SP and SAI_SP
  *	 interfaces, although technically they're independent.
  */
-static int cs_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int cs_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	u8 iffmt, misc;
 
-	dbg("cs_set_dai_fmt(0x%08x)", fmt);
+	pr_debug("cs_set_dai_fmt(0x%08x)", fmt);
 
 	iffmt = cs4251x_read(codec, CS4251X_IFFMT);
 	misc = cs4251x_read(codec, CS4251X_MISCCTL);
@@ -463,22 +449,22 @@ static int cs_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int cs_dapm_event(struct snd_soc_codec *codec, int event)
+static int cs_bias_level(struct snd_soc_codec *codec,
+			 enum snd_soc_bias_level event)
 {
 	switch (event)
 	{
-	case SNDRV_CTL_POWER_D0:	/* full on */
-	case SNDRV_CTL_POWER_D1:
-	case SNDRV_CTL_POWER_D2:
+	case SND_SOC_BIAS_ON:
+	case SND_SOC_BIAS_PREPARE:
 		cs4251x_write(codec, CS4251X_PM, 0);
 		break;
-	case SNDRV_CTL_POWER_D3hot:	/* Off, with power */
-	case SNDRV_CTL_POWER_D3cold:	/* Off, without power */
+	case SND_SOC_BIAS_STANDBY:
+	case SND_SOC_BIAS_OFF:
 		/* all DAC/ADCs off, power down */
 		cs4251x_write(codec, CS4251X_PM, 0xff);
 		break;
 	}
-	codec->dapm_state = event;
+	codec->bias_level = event;
 	return 0;
 }
 
@@ -496,7 +482,7 @@ static int cs_dapm_event(struct snd_soc_codec *codec, int event)
  * (connected to ADC and SPDIF receiver). The 4 CODEC_SP and the SAI_SP
  * can be configured independently.
  */
-struct snd_soc_codec_dai cs4251x_dai = {
+struct snd_soc_dai cs4251x_dai = {
 	.name = "CS4251x",
 	.playback = {
 		.stream_name = "Playback",
@@ -512,8 +498,6 @@ struct snd_soc_codec_dai cs4251x_dai = {
 		.formats = CS4251X_FORMATS,},
 	.ops = {
 		.hw_params = cs_hw_params,
-	},
-	.dai_ops = {
 		.digital_mute = cs_mute,
 		.set_sysclk = cs_set_dai_sysclk,
 		.set_fmt = cs_set_dai_fmt,
@@ -533,7 +517,7 @@ static int cs_init(struct snd_soc_device *socdev)
 	int reg, ret;
 
 	codec->owner = THIS_MODULE;
-	codec->dapm_event = cs_dapm_event;
+	codec->set_bias_level = cs_bias_level;
 	codec->dai = &cs4251x_dai;
 	codec->num_dai = 1;
 	codec->reg_cache_size = ARRAY_SIZE(cs4251x_regcache);
@@ -560,7 +544,7 @@ static int cs_init(struct snd_soc_device *socdev)
 		codec->name = "CS42516/CS42528";
 		break;
 	default:
-		info("unknown chip-id %02x; skipping", reg);
+		pr_info("unknown chip-id %02x; skipping", reg);
 		goto pcm_err;
 	}
 
@@ -572,16 +556,16 @@ static int cs_init(struct snd_soc_device *socdev)
 	ret = snd_soc_new_pcms(socdev, SNDRV_DEFAULT_IDX1,
 			       SNDRV_DEFAULT_STR1);
 	if (unlikely(ret < 0)) {
-		err("failed to create pcms");
+		pr_err("failed to create pcms");
 		goto pcm_err;
 	}
 
 	cs_add_controls(codec);
-	cs_dapm_event(codec, SNDRV_CTL_POWER_D0);
+	cs_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (unlikely(ret < 0)) {
-		err("failed to register card\n");
+		pr_err("failed to register card\n");
 		goto card_err;
 	}
 
@@ -590,7 +574,7 @@ static int cs_init(struct snd_soc_device *socdev)
 		INIT_WORK(&cs->irq_work, cs_irq_work);
 		reg = request_irq(cs->irq, cs_irq, 0, "cs4251x", cs);
 		if (unlikely(reg)) {
-			info("irq attach failed");
+			pr_info("irq attach failed");
 			cs->irq = CS4251X_NOIRQ;
 		}
 	}
@@ -642,7 +626,7 @@ static int cs_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 
 	ret = i2c_attach_client(i2c);
 	if (unlikely(ret < 0)) {
-		err("failed to attach codec at addr %x", addr);
+		pr_err("failed to attach codec at addr %x", addr);
 		goto err;
 	}
 
@@ -651,7 +635,7 @@ static int cs_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 
 	ret = cs_init(socdev);
 	if (unlikely(ret < 0)) {
-		err("failed to initialise CS4251x");
+		pr_err("failed to initialise CS4251x");
 		goto err;
 	}
 	return ret;
@@ -732,7 +716,7 @@ static int cs_probe(struct platform_device *pdev)
 		normal_i2c[0] = setup->i2c_address;
 		ret = i2c_add_driver(&cs_i2c_driver);
 		if (ret)
-			err("can't add i2c driver");
+			pr_err("can't add i2c driver");
 	}
 #endif
 
@@ -747,7 +731,7 @@ static int cs_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		cs_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		cs_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
