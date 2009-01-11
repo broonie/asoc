@@ -214,7 +214,7 @@ static int wm8960_add_widgets(struct snd_soc_codec *codec)
 	return 0;
 }
 
-static int wm8960_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
+static int wm8960_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -274,7 +274,8 @@ static int wm8960_set_dai_fmt(struct snd_soc_codec_dai *codec_dai,
 }
 
 static int wm8960_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -298,7 +299,7 @@ static int wm8960_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int wm8960_mute(struct snd_soc_codec_dai *dai, int mute)
+static int wm8960_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
 	u16 mute_reg = wm8960_read(codec, WM8960_DACCTL1) & 0xfff7;
@@ -310,28 +311,29 @@ static int wm8960_mute(struct snd_soc_codec_dai *dai, int mute)
 	return 0;
 }
 
-static int wm8960_dapm_event(struct snd_soc_codec *codec, int event)
+static int wm8960_set_bias_level(struct snd_soc_codec *codec,
+				 enum snd_soc_bias_level level)
 {
 	u16 power1 = wm8960_read(codec, WM8960_POWER1);
 	u16 power2 = wm8960_read(codec, WM8960_POWER2);
 
-	switch (event) {
-	case SNDRV_CTL_POWER_D0: /* full On */
+	switch (level) {
+	case SND_SOC_BIAS_ON:
 		power1 &= ~0x180;
 		power1 |= 0xc0;
 		break;
-	case SNDRV_CTL_POWER_D1: /* partial On */
-	case SNDRV_CTL_POWER_D2: /* partial On */
+
+	case SND_SOC_BIAS_PREPARE:
 		break;
-	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
-		/* everything off except vref/vmid, */
+
+	case SND_SOC_BIAS_STANDBY:
 		power1 &= ~0x180;
 		power1 |= 0x140;
 		wm8960_write(codec, WM8960_ADDCTL1,
 			     wm8960_read(codec, WM8960_ADDCTL1) | 1);
 		break;
-	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
-		/* everything off, dac mute, inactive */
+
+	case SND_SOC_BIAS_OFF:
 		wm8960_write(codec, WM8960_APOP1, 0x94);
 		wm8960_write(codec, WM8960_POWER1, power1 & ~0x1c0);
 		mdelay(600);  /* Ensure HP output has discharged */
@@ -343,7 +345,8 @@ static int wm8960_dapm_event(struct snd_soc_codec *codec, int event)
 	wm8960_write(codec, WM8960_POWER1, power1 | 0x03e);
 	wm8960_write(codec, WM8960_POWER2, power2 | 0x1fe);
 	wm8960_write(codec, WM8960_POWER3, 0xffff);
-	codec->dapm_state = event;
+	codec->bias_level = level;
+
 	return 0;
 }
 
@@ -405,7 +408,7 @@ static int pll_factors(unsigned int source, unsigned int target,
 	return 0;
 }
 
-static int wm8960_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
+static int wm8960_set_dai_pll(struct snd_soc_dai *codec_dai,
 		int pll_id, unsigned int freq_in, unsigned int freq_out)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -449,7 +452,7 @@ static int wm8960_set_dai_pll(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-static int wm8960_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
+static int wm8960_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
 		int div_id, int div)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
@@ -487,16 +490,13 @@ static int wm8960_set_dai_clkdiv(struct snd_soc_codec_dai *codec_dai,
 	return 0;
 }
 
-#define WM8960_RATES \
-	(SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 | SNDRV_PCM_RATE_16000 | \
-	SNDRV_PCM_RATE_22050 | SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 | \
-	SNDRV_PCM_RATE_48000)
+#define WM8960_RATES SNDRV_PCM_RATE_8000_48000
 
 #define WM8960_FORMATS \
 	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE | \
 	SNDRV_PCM_FMTBIT_S24_LE)
 
-struct snd_soc_codec_dai wm8960_dai = {
+struct snd_soc_dai wm8960_dai = {
 	.name = "WM8960",
 	.playback = {
 		.stream_name = "Playback",
@@ -512,8 +512,6 @@ struct snd_soc_codec_dai wm8960_dai = {
 		.formats = WM8960_FORMATS,},
 	.ops = {
 		.hw_params = wm8960_hw_params,
-	},
-	.dai_ops = {
 		.digital_mute = wm8960_mute,
 		.set_fmt = wm8960_set_dai_fmt,
 		.set_clkdiv = wm8960_set_dai_clkdiv,
@@ -529,7 +527,7 @@ static int wm8960_suspend(struct platform_device *pdev, pm_message_t state)
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->codec;
 
-	wm8960_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+	wm8960_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
 }
 
@@ -547,8 +545,9 @@ static int wm8960_resume(struct platform_device *pdev)
 		data[1] = cache[i] & 0x00ff;
 		codec->hw_write(codec->control_data, data, 2);
 	}
-	wm8960_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
-	wm8960_dapm_event(codec, codec->suspend_dapm_state);
+
+	wm8960_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	wm8960_set_bias_level(codec, codec->suspend_bias_level);
 	return 0;
 }
 
@@ -565,7 +564,7 @@ static int wm8960_init(struct snd_soc_device *socdev)
 	codec->owner = THIS_MODULE;
 	codec->read = wm8960_read;
 	codec->write = wm8960_write;
-	codec->dapm_event = wm8960_dapm_event;
+	codec->set_bias_level = wm8960_set_bias_level;
 	codec->dai = &wm8960_dai;
 	codec->num_dai = 1;
 	codec->reg_cache_size = ARRAY_SIZE(wm8960_reg);
@@ -594,7 +593,7 @@ static int wm8960_init(struct snd_soc_device *socdev)
 	wm8960_write(codec, WM8960_POWER1, 0x140);
 	wm8960_write(codec, WM8960_APOP1, 0);
 
-	wm8960_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
+	wm8960_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	/*  set the update bits */
 	reg = wm8960_read(codec, WM8960_LOUT1);
@@ -604,7 +603,7 @@ static int wm8960_init(struct snd_soc_device *socdev)
 
 	wm8960_add_controls(codec);
 	wm8960_add_widgets(codec);
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
 		printk(KERN_ERR "wm8960: failed to register card\n");
 		goto card_err;
@@ -750,7 +749,7 @@ static int wm8960_remove(struct platform_device *pdev)
 	struct snd_soc_codec *codec = socdev->codec;
 
 	if (codec->control_data)
-		wm8960_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
+		wm8960_set_bias_level(codec, SND_SOC_BIAS_OFF);
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
@@ -769,6 +768,18 @@ struct snd_soc_codec_device soc_codec_dev_wm8960 = {
 	.resume =	wm8960_resume,
 };
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8960);
+
+static int __init wm8960_modinit(void)
+{
+	return snd_soc_register_dai(&wm8960_dai);
+}
+module_init(wm8960_modinit);
+
+static void __exit wm8960_exit(void)
+{
+	snd_soc_unregister_dai(&wm8960_dai);
+}
+module_exit(wm8960_exit);
 
 MODULE_DESCRIPTION("ASoC WM8960 driver");
 MODULE_AUTHOR("Liam Girdwood");
