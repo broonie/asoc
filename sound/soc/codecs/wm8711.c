@@ -31,8 +31,6 @@
 #define AUDIO_NAME "wm8711"
 #define WM8711_VERSION "0.3"
 
-struct snd_soc_codec_device soc_codec_dev_wm8711;
-
 /* codec private data */
 struct wm8711_priv {
 	unsigned int sysclk;
@@ -45,8 +43,8 @@ struct wm8711_priv {
  * There is no point in caching the reset register
  */
 static const u16 wm8711_reg[WM8711_CACHEREGNUM] = {
-    0x0079, 0x0079, 0x000a, 0x0008,
-    0x009f, 0x000a, 0x0000, 0x0000
+	0x0079, 0x0079, 0x000a, 0x0008,
+	0x009f, 0x000a, 0x0000, 0x0000
 };
 
 /*
@@ -220,7 +218,8 @@ static inline int get_coeff(int mclk, int rate)
 }
 
 static int wm8711_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+	struct snd_pcm_hw_params *params,
+	struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -249,7 +248,8 @@ static int wm8711_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int wm8711_pcm_prepare(struct snd_pcm_substream *substream)
+static int wm8711_pcm_prepare(struct snd_pcm_substream *substream,
+			      struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -257,10 +257,12 @@ static int wm8711_pcm_prepare(struct snd_pcm_substream *substream)
 
 	/* set active */
 	wm8711_write(codec, WM8711_ACTIVE, 0x0001);
+
 	return 0;
 }
 
-static void wm8711_shutdown(struct snd_pcm_substream *substream)
+static void wm8711_shutdown(struct snd_pcm_substream *substream,
+			    struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -408,8 +410,6 @@ struct snd_soc_dai wm8711_dai = {
 		.prepare = wm8711_pcm_prepare,
 		.hw_params = wm8711_hw_params,
 		.shutdown = wm8711_shutdown,
-	},
-	.dai_ops = {
 		.digital_mute = wm8711_mute,
 		.set_sysclk = wm8711_set_dai_sysclk,
 		.set_fmt = wm8711_set_dai_fmt,
@@ -488,7 +488,7 @@ static int wm8711_init(struct snd_soc_device *socdev)
 
 	wm8711_add_controls(codec);
 	wm8711_add_widgets(codec);
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
 		printk(KERN_ERR "wm8711: failed to register card\n");
 		goto card_err;
@@ -671,6 +671,18 @@ struct snd_soc_codec_device soc_codec_dev_wm8711 = {
 	.resume =	wm8711_resume,
 };
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8711);
+
+static int __init wm8711_modinit(void)
+{
+        return snd_soc_register_dai(&wm8711_dai);
+}
+module_init(wm8711_modinit);
+
+static void __exit wm8711_exit(void)
+{
+        snd_soc_unregister_dai(&wm8711_dai);
+}
+module_exit(wm8711_exit);
 
 MODULE_DESCRIPTION("ASoC WM8711 driver");
 MODULE_AUTHOR("Mike Arthur");
