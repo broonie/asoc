@@ -29,6 +29,7 @@ snd-soc-mainstone-wm9713-objs := mainstone_wm9713.o
 snd-soc-mainstone-wm9712-objs := mainstone_wm9712.o
 snd-soc-mainstone-baseband-objs := mainstone_baseband.o
 snd-soc-mainstone-bluetooth-objs := mainstone_bluetooth.o
+snd-soc-palm27x-objs := palm27x.o
 snd-soc-zylonite-objs := zylonite.o
 
 obj-$(CONFIG_SND_PXA2XX_SOC_CORGI) += snd-soc-corgi.o
@@ -48,4 +49,5 @@ obj-$(CONFIG_SND_PXA2XX_SOC_MAINSTONE_WM9713) += snd-soc-mainstone-wm9713.o
 obj-$(CONFIG_SND_PXA2xx_SOC_MAINSTONE_WM9712) += snd-soc-mainstone-wm9712.o
 obj-$(CONFIG_SND_MAINSTONE_BASEBAND) += snd-soc-mainstone-baseband.o
 obj-$(CONFIG_SND_MAINSTONE_BLUETOOTH) += snd-soc-mainstone-bluetooth.o
+obj-$(CONFIG_SND_PXA2XX_SOC_PALM27X) += snd-soc-palm27x.o
 obj-$(CONFIG_SND_SOC_ZYLONITE) += snd-soc-zylonite.o

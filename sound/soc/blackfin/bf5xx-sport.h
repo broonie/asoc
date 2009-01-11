@@ -114,7 +114,18 @@ struct sport_device {
 	void *tx_data;
 	void (*err_callback)(void *data);
 	void *err_data;
-
+	unsigned char *tx_dma_buf;
+	unsigned char *rx_dma_buf;
+#ifdef CONFIG_SND_BF5XX_MMAP_SUPPORT
+	dma_addr_t tx_dma_phy;
+	dma_addr_t rx_dma_phy;
+	int tx_pos;/*pcm sample count*/
+	int rx_pos;
+	unsigned int tx_buffer_size;
+	unsigned int rx_buffer_size;
+	int tx_delay_pos;
+	int once;
+#endif
 	void *private_data;
 };
 
@@ -168,8 +179,8 @@ int sport_rx_stop(struct sport_device *sport);
 unsigned long sport_curr_offset_rx(struct sport_device *sport);
 unsigned long sport_curr_offset_tx(struct sport_device *sport);
 
-void incfrag(struct sport_device *sport, int *frag, int tx);
-void decfrag(struct sport_device *sport, int *frag, int tx);
+void sport_incfrag(struct sport_device *sport, int *frag, int tx);
+void sport_decfrag(struct sport_device *sport, int *frag, int tx);
 
 int sport_set_rx_callback(struct sport_device *sport,
 		       void (*rx_callback)(void *), void *rx_data);

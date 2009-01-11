@@ -82,13 +82,13 @@ struct clock_event_device {
 	int			shift;
 	int			rating;
 	int			irq;
-	cpumask_t		cpumask;
+	const struct cpumask	*cpumask;
 	int			(*set_next_event)(unsigned long evt,
 						  struct clock_event_device *);
 	void			(*set_mode)(enum clock_event_mode mode,
 					    struct clock_event_device *);
 	void			(*event_handler)(struct clock_event_device *);
-	void			(*broadcast)(cpumask_t mask);
+	void			(*broadcast)(const struct cpumask *mask);
 	struct list_head	list;
 	enum clock_event_mode	mode;
 	ktime_t			next_event;
@@ -126,6 +126,8 @@ extern void clockevents_set_mode(struct clock_event_device *dev,
 extern int clockevents_register_notifier(struct notifier_block *nb);
 extern int clockevents_program_event(struct clock_event_device *dev,
 				     ktime_t expires, ktime_t now);
+
+extern void clockevents_handle_noop(struct clock_event_device *dev);
 
 #ifdef CONFIG_GENERIC_CLOCKEVENTS
 extern void clockevents_notify(unsigned long reason, void *arg);

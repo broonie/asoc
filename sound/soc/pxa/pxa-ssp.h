@@ -1,5 +1,5 @@
 /*
- * linux/sound/arm/pxa-ssp.h
+ * ASoC PXA SSP port support
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as

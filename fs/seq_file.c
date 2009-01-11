@@ -108,9 +108,9 @@ ssize_t seq_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 			goto Done;
 	}
 	/* we need at least one record in buffer */
+	pos = m->index;
+	p = m->op->start(m, &pos);
 	while (1) {
-		pos = m->index;
-		p = m->op->start(m, &pos);
 		err = PTR_ERR(p);
 		if (!p || IS_ERR(p))
 			break;
@@ -119,6 +119,11 @@ ssize_t seq_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 			break;
 		if (unlikely(err))
 			m->count = 0;
+		if (unlikely(!m->count)) {
+			p = m->op->next(m, p, &pos);
+			m->index = pos;
+			continue;
+		}
 		if (m->count < m->size)
 			goto Fill;
 		m->op->stop(m, p);
@@ -128,6 +133,8 @@ ssize_t seq_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 			goto Enomem;
 		m->count = 0;
 		m->version = 0;
+		pos = m->index;
+		p = m->op->start(m, &pos);
 	}
 	m->op->stop(m, p);
 	m->count = 0;
@@ -350,7 +357,18 @@ int seq_printf(struct seq_file *m, const char *f, ...)
 }
 EXPORT_SYMBOL(seq_printf);
 
-static char *mangle_path(char *s, char *p, char *esc)
+/**
+ *	mangle_path -	mangle and copy path to buffer beginning
+ *	@s: buffer start
+ *	@p: beginning of path in above buffer
+ *	@esc: set of characters that need escaping
+ *
+ *      Copy the path from @p to @s, replacing each occurrence of character from
+ *      @esc with usual octal escape.
+ *      Returns pointer past last written character in @s, or NULL in case of
+ *      failure.
+ */
+char *mangle_path(char *s, char *p, char *esc)
 {
 	while (s <= p) {
 		char c = *p++;
@@ -369,9 +387,16 @@ static char *mangle_path(char *s, char *p, char *esc)
 	}
 	return NULL;
 }
+EXPORT_SYMBOL(mangle_path);
 
-/*
- * return the absolute path of 'dentry' residing in mount 'mnt'.
+/**
+ * seq_path - seq_file interface to print a pathname
+ * @m: the seq_file handle
+ * @path: the struct path to print
+ * @esc: set of characters to escape in the output
+ *
+ * return the absolute path of 'path', as represented by the
+ * dentry / mnt pair in the path parameter.
  */
 int seq_path(struct seq_file *m, struct path *path, char *esc)
 {
@@ -443,19 +468,37 @@ int seq_dentry(struct seq_file *m, struct dentry *dentry, char *esc)
 	return -1;
 }
 
-int seq_bitmap(struct seq_file *m, unsigned long *bits, unsigned int nr_bits)
+int seq_bitmap(struct seq_file *m, const unsigned long *bits,
+				   unsigned int nr_bits)
 {
-	size_t len = bitmap_scnprintf_len(nr_bits);
-
-	if (m->count + len < m->size) {
-		bitmap_scnprintf(m->buf + m->count, m->size - m->count,
-				 bits, nr_bits);
-		m->count += len;
-		return 0;
+	if (m->count < m->size) {
+		int len = bitmap_scnprintf(m->buf + m->count,
+				m->size - m->count, bits, nr_bits);
+		if (m->count + len < m->size) {
+			m->count += len;
+			return 0;
+		}
 	}
 	m->count = m->size;
 	return -1;
 }
+EXPORT_SYMBOL(seq_bitmap);
+
+int seq_bitmap_list(struct seq_file *m, unsigned long *bits,
+		unsigned int nr_bits)
+{
+	if (m->count < m->size) {
+		int len = bitmap_scnlistprintf(m->buf + m->count,
+				m->size - m->count, bits, nr_bits);
+		if (m->count + len < m->size) {
+			m->count += len;
+			return 0;
+		}
+	}
+	m->count = m->size;
+	return -1;
+}
+EXPORT_SYMBOL(seq_bitmap_list);
 
 static void *single_start(struct seq_file *p, loff_t *pos)
 {

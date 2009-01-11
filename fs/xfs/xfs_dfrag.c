@@ -49,9 +49,8 @@
  */
 int
 xfs_swapext(
-	xfs_swapext_t	__user *sxu)
+	xfs_swapext_t	*sxp)
 {
-	xfs_swapext_t	*sxp;
 	xfs_inode_t     *ip, *tip;
 	struct file	*file, *target_file;
 	int		error = 0;
@@ -60,11 +59,6 @@ xfs_swapext(
 	if (!sxp) {
 		error = XFS_ERROR(ENOMEM);
 		goto out;
-	}
-
-	if (copy_from_user(sxp, sxu, sizeof(xfs_swapext_t))) {
-		error = XFS_ERROR(EFAULT);
-		goto out_free_sxp;
 	}
 
 	/* Pull information for the target fd */
@@ -149,7 +143,14 @@ xfs_swap_extents(
 
 	sbp = &sxp->sx_stat;
 
-	xfs_lock_two_inodes(ip, tip, lock_flags);
+	/*
+	 * we have to do two separate lock calls here to keep lockdep
+	 * happy. If we try to get all the locks in one call, lock will
+	 * report false positives when we drop the ILOCK and regain them
+	 * below.
+	 */
+	xfs_lock_two_inodes(ip, tip, XFS_IOLOCK_EXCL);
+	xfs_lock_two_inodes(ip, tip, XFS_ILOCK_EXCL);
 	locked = 1;
 
 	/* Verify that both files have the same format */

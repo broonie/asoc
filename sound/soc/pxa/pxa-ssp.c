@@ -1,8 +1,9 @@
+#define DEBUG
 /*
  * pxa-ssp.c  --  ALSA Soc Audio Layer
  *
  * Copyright 2005,2008 Wolfson Microelectronics PLC.
- * Author: Liam Girdwood <liam.girdwood@wolfsonmicro.com>
+ * Author: Liam Girdwood
  *         Mark Brown <broonie@opensource.wolfsonmicro.com>
  *
  *  This program is free software; you can redistribute  it and/or modify it
@@ -211,7 +212,8 @@ static struct pxa2xx_pcm_dma_params *ssp_dma_params[4][4] = {
 	},
 };
 
-static int pxa_ssp_startup(struct snd_pcm_substream *substream)
+static int pxa_ssp_startup(struct snd_pcm_substream *substream,
+			   struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
@@ -227,7 +229,8 @@ static int pxa_ssp_startup(struct snd_pcm_substream *substream)
 	return ret;
 }
 
-static void pxa_ssp_shutdown(struct snd_pcm_substream *substream)
+static void pxa_ssp_shutdown(struct snd_pcm_substream *substream,
+			     struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
@@ -241,8 +244,7 @@ static void pxa_ssp_shutdown(struct snd_pcm_substream *substream)
 
 #ifdef CONFIG_PM
 
-static int pxa_ssp_suspend(struct platform_device *pdev,
-	struct snd_soc_dai *cpu_dai)
+static int pxa_ssp_suspend(struct snd_soc_dai *cpu_dai)
 {
 	struct ssp_priv *priv = cpu_dai->private_data;
 
@@ -254,8 +256,7 @@ static int pxa_ssp_suspend(struct platform_device *pdev,
 	return 0;
 }
 
-static int pxa_ssp_resume(struct platform_device *pdev,
-	struct snd_soc_dai *cpu_dai)
+static int pxa_ssp_resume(struct snd_soc_dai *cpu_dai)
 {
 	struct ssp_priv *priv = cpu_dai->private_data;
 
@@ -525,18 +526,18 @@ static int pxa_ssp_set_dai_fmt(struct snd_soc_dai *cpu_dai,
 	sscr1 = SSCR1_RxTresh(8) | SSCR1_TxTresh(7);
 	sspsp = 0;
 
-        switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-        case SND_SOC_DAIFMT_CBM_CFM:
-                sscr1 |= SSCR1_SCLKDIR | SSCR1_SFRMDIR;
-                break;
-        case SND_SOC_DAIFMT_CBM_CFS:
-                sscr1 |= SSCR1_SCLKDIR;
-                break;
-        case SND_SOC_DAIFMT_CBS_CFS:
-                break;
-        default:
-                return -EINVAL;
-        }
+	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
+	case SND_SOC_DAIFMT_CBM_CFM:
+		sscr1 |= SSCR1_SCLKDIR | SSCR1_SFRMDIR;
+		break;
+	case SND_SOC_DAIFMT_CBM_CFS:
+		sscr1 |= SSCR1_SCLKDIR;
+		break;
+	case SND_SOC_DAIFMT_CBS_CFS:
+		break;
+	default:
+		return -EINVAL;
+	}
 
 	ssp_write_reg(ssp, SSCR0, sscr0);
 	ssp_write_reg(ssp, SSCR1, sscr1);
@@ -544,40 +545,40 @@ static int pxa_ssp_set_dai_fmt(struct snd_soc_dai *cpu_dai,
 
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_I2S:
-                sscr0 |= SSCR0_MOD | SSCR0_PSP;
-                sscr1 |= SSCR1_RWOT | SSCR1_TRAIL;
-        
-                switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
-                case SND_SOC_DAIFMT_NB_NF:
-                        sspsp |= SSPSP_FSRT;
-                        break;
-                case SND_SOC_DAIFMT_NB_IF:
-                        sspsp |= SSPSP_SFRMP | SSPSP_FSRT;
-                        break;
-                case SND_SOC_DAIFMT_IB_IF:
-                        sspsp |= SSPSP_SFRMP;
-                        break;
-                default:
-                        return -EINVAL;
-                }
-                break;
+		sscr0 |= SSCR0_MOD | SSCR0_PSP;
+		sscr1 |= SSCR1_RWOT | SSCR1_TRAIL;
 
-        case SND_SOC_DAIFMT_DSP_A:
+		switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
+		case SND_SOC_DAIFMT_NB_NF:
+			sspsp |= SSPSP_FSRT;
+			break;
+		case SND_SOC_DAIFMT_NB_IF:
+			sspsp |= SSPSP_SFRMP | SSPSP_FSRT;
+			break;
+		case SND_SOC_DAIFMT_IB_IF:
+			sspsp |= SSPSP_SFRMP;
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+
+	case SND_SOC_DAIFMT_DSP_A:
 		sspsp |= SSPSP_FSRT;
-        case SND_SOC_DAIFMT_DSP_B:
-                sscr0 |= SSCR0_MOD | SSCR0_PSP;
-                sscr1 |= SSCR1_TRAIL | SSCR1_RWOT;
+	case SND_SOC_DAIFMT_DSP_B:
+		sscr0 |= SSCR0_MOD | SSCR0_PSP;
+		sscr1 |= SSCR1_TRAIL | SSCR1_RWOT;
 
-                switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
-                case SND_SOC_DAIFMT_NB_NF:
-                        sspsp |= SSPSP_SFRMP;
-                        break;
-                case SND_SOC_DAIFMT_IB_IF:
-                        break;
-                default:
-                        return -EINVAL;
-                }
-                break;
+		switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
+		case SND_SOC_DAIFMT_NB_NF:
+			sspsp |= SSPSP_SFRMP;
+			break;
+		case SND_SOC_DAIFMT_IB_IF:
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
 
 	default:
 		return -EINVAL;
@@ -603,7 +604,8 @@ static int pxa_ssp_set_dai_fmt(struct snd_soc_dai *cpu_dai,
  * Can be called multiple times by oss emulation.
  */
 static int pxa_ssp_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params)
+				struct snd_pcm_hw_params *params,
+				struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
@@ -640,6 +642,8 @@ static int pxa_ssp_hw_params(struct snd_pcm_substream *substream,
 			sscr0 |= SSCR0_FPCKE;
 #endif
 		sscr0 |= SSCR0_DataSize(16);
+		if (params_channels(params) > 1)
+			sscr0 |= SSCR0_EDSS;
 		break;
 	case SNDRV_PCM_FORMAT_S24_LE:
 		sscr0 |= (SSCR0_EDSS | SSCR0_DataSize(8));
@@ -675,7 +679,8 @@ static int pxa_ssp_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int pxa_ssp_trigger(struct snd_pcm_substream *substream, int cmd)
+static int pxa_ssp_trigger(struct snd_pcm_substream *substream, int cmd,
+			   struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
@@ -737,7 +742,7 @@ static int pxa_ssp_trigger(struct snd_pcm_substream *substream, int cmd)
 }
 
 static int pxa_ssp_probe(struct platform_device *pdev,
-			 struct snd_soc_dai *dai)
+			    struct snd_soc_dai *dai)
 {
 	struct ssp_priv *priv;
 	int ret;
@@ -762,7 +767,7 @@ err_priv:
 }
 
 static void pxa_ssp_remove(struct platform_device *pdev,
-			   struct snd_soc_dai *dai)
+			      struct snd_soc_dai *dai)
 {
 	struct ssp_priv *priv = dai->private_data;
 	ssp_free(priv->dev.ssp);
@@ -781,7 +786,6 @@ struct snd_soc_dai pxa_ssp_dai[] = {
 	{
 		.name = "pxa2xx-ssp1",
 		.id = 0,
-		.type = SND_SOC_DAI_PCM,
 		.probe = pxa_ssp_probe,
 		.remove = pxa_ssp_remove,
 		.suspend = pxa_ssp_suspend,
@@ -803,8 +807,6 @@ struct snd_soc_dai pxa_ssp_dai[] = {
 			.shutdown = pxa_ssp_shutdown,
 			.trigger = pxa_ssp_trigger,
 			.hw_params = pxa_ssp_hw_params,
-		 },
-		.dai_ops = {
 			.set_sysclk = pxa_ssp_set_dai_sysclk,
 			.set_clkdiv = pxa_ssp_set_dai_clkdiv,
 			.set_pll = pxa_ssp_set_dai_pll,
@@ -815,7 +817,6 @@ struct snd_soc_dai pxa_ssp_dai[] = {
 	},
 	{	.name = "pxa2xx-ssp2",
 		.id = 1,
-		.type = SND_SOC_DAI_PCM,
 		.probe = pxa_ssp_probe,
 		.remove = pxa_ssp_remove,
 		.suspend = pxa_ssp_suspend,
@@ -837,8 +838,6 @@ struct snd_soc_dai pxa_ssp_dai[] = {
 			.shutdown = pxa_ssp_shutdown,
 			.trigger = pxa_ssp_trigger,
 			.hw_params = pxa_ssp_hw_params,
-		 },
-		.dai_ops = {
 			.set_sysclk = pxa_ssp_set_dai_sysclk,
 			.set_clkdiv = pxa_ssp_set_dai_clkdiv,
 			.set_pll = pxa_ssp_set_dai_pll,
@@ -850,7 +849,6 @@ struct snd_soc_dai pxa_ssp_dai[] = {
 	{
 		.name = "pxa2xx-ssp3",
 		.id = 2,
-		.type = SND_SOC_DAI_PCM,
 		.probe = pxa_ssp_probe,
 		.remove = pxa_ssp_remove,
 		.suspend = pxa_ssp_suspend,
@@ -872,8 +870,6 @@ struct snd_soc_dai pxa_ssp_dai[] = {
 			.shutdown = pxa_ssp_shutdown,
 			.trigger = pxa_ssp_trigger,
 			.hw_params = pxa_ssp_hw_params,
-		 },
-		.dai_ops = {
 			.set_sysclk = pxa_ssp_set_dai_sysclk,
 			.set_clkdiv = pxa_ssp_set_dai_clkdiv,
 			.set_pll = pxa_ssp_set_dai_pll,
@@ -885,7 +881,6 @@ struct snd_soc_dai pxa_ssp_dai[] = {
 	{
 		.name = "pxa2xx-ssp4",
 		.id = 3,
-		.type = SND_SOC_DAI_PCM,
 		.probe = pxa_ssp_probe,
 		.remove = pxa_ssp_remove,
 		.suspend = pxa_ssp_suspend,
@@ -907,8 +902,6 @@ struct snd_soc_dai pxa_ssp_dai[] = {
 			.shutdown = pxa_ssp_shutdown,
 			.trigger = pxa_ssp_trigger,
 			.hw_params = pxa_ssp_hw_params,
-		 },
-		.dai_ops = {
 			.set_sysclk = pxa_ssp_set_dai_sysclk,
 			.set_clkdiv = pxa_ssp_set_dai_clkdiv,
 			.set_pll = pxa_ssp_set_dai_pll,
@@ -919,6 +912,18 @@ struct snd_soc_dai pxa_ssp_dai[] = {
 	},
 };
 EXPORT_SYMBOL_GPL(pxa_ssp_dai);
+
+static int __init pxa_ssp_init(void)
+{
+	return snd_soc_register_dais(pxa_ssp_dai, ARRAY_SIZE(pxa_ssp_dai));
+}
+module_init(pxa_ssp_init);
+
+static void __exit pxa_ssp_exit(void)
+{
+	snd_soc_unregister_dais(pxa_ssp_dai, ARRAY_SIZE(pxa_ssp_dai));
+}
+module_exit(pxa_ssp_exit);
 
 /* Module information */
 MODULE_AUTHOR("Mark Brown <broonie@opensource.wolfsonmicro.com>");

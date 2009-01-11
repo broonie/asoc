@@ -9,9 +9,6 @@
  * published by the Free Software Foundation; either version 2 of the
  * License, or (at your option) any later version.
  *
- * TODO:
- *  - Support 13MHz MCLK
- *
  */
 
 #include <linux/module.h>
@@ -24,17 +21,12 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 
-#include <asm/arch/pxa-regs.h>
-#include <asm/arch/mainstone.h>
-#include <asm/arch/audio.h>
-#include <asm/arch/hardware.h>
-
 #include "../codecs/wm9713.h"
 #include "pxa2xx-pcm.h"
 #include "pxa2xx-ac97.h"
 #include "pxa-ssp.h"
 
-static struct snd_soc_machine zylonite;
+static struct snd_soc_card zylonite;
 
 static const struct snd_soc_dapm_widget zylonite_dapm_widgets[] = {
 	SND_SOC_DAPM_HP("Headphone", NULL),
@@ -62,7 +54,7 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{ "MIC1", NULL, "Mic Bias" },
 	{ "Mic Bias", NULL, "Handset Microphone" },
 
-	/* Multiactor differential input connected over SPKL/SPKR */
+	/* Multiactor differentially connected over SPKL/SPKR */
 	{ "Multiactor", NULL, "SPKL" },
 	{ "Multiactor", NULL, "SPKR" },
 };
@@ -143,7 +135,7 @@ static int zylonite_voice_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0)
 		return ret;
 
-        /* Note that if the PLL is in use the WM9713_PCMCLK_PLL_DIV needs
+	/* Note that if the PLL is in use the WM9713_PCMCLK_PLL_DIV needs
 	 * to be set instead.
 	 */
 	ret = snd_soc_dai_set_clkdiv(codec_dai, WM9713_PCMCLK_DIV,
@@ -181,15 +173,15 @@ static struct snd_soc_dai_link zylonite_dai[] = {
 },
 };
 
-static struct snd_soc_machine zylonite = {
+static struct snd_soc_card zylonite = {
 	.name = "Zylonite",
+	.platform = &pxa2xx_soc_platform,
 	.dai_link = zylonite_dai,
 	.num_links = ARRAY_SIZE(zylonite_dai),
 };
 
 static struct snd_soc_device zylonite_snd_ac97_devdata = {
-	.machine = &zylonite,
-	.platform = &pxa2xx_soc_platform,
+	.card = &zylonite,
 	.codec_dev = &soc_codec_dev_wm9713,
 };
 
@@ -207,7 +199,8 @@ static int __init zylonite_init(void)
 			     &zylonite_snd_ac97_devdata);
 	zylonite_snd_ac97_devdata.dev = &zylonite_snd_ac97_device->dev;
 
-	if((ret = platform_device_add(zylonite_snd_ac97_device)) != 0)
+	ret = platform_device_add(zylonite_snd_ac97_device);
+	if (ret != 0)
 		platform_device_put(zylonite_snd_ac97_device);
 
 	return ret;

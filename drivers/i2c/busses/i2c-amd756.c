@@ -332,10 +332,6 @@ static int __devinit amd756_probe(struct pci_dev *pdev,
 	int error;
 	u8 temp;
 	
-	/* driver_data might come from user-space, so check it */
-	if (id->driver_data >= ARRAY_SIZE(chipname))
-		return -EINVAL;
-
 	if (amd756_ioport) {
 		dev_err(&pdev->dev, "Only one device supported "
 		       "(you have a strange motherboard, btw)\n");
@@ -384,8 +380,9 @@ static int __devinit amd756_probe(struct pci_dev *pdev,
 	/* set up the sysfs linkage to our parent device */
 	amd756_smbus.dev.parent = &pdev->dev;
 
-	sprintf(amd756_smbus.name, "SMBus %s adapter at %04x",
-		chipname[id->driver_data], amd756_ioport);
+	snprintf(amd756_smbus.name, sizeof(amd756_smbus.name),
+		 "SMBus %s adapter at %04x", chipname[id->driver_data],
+		 amd756_ioport);
 
 	error = i2c_add_adapter(&amd756_smbus);
 	if (error) {
@@ -412,7 +409,6 @@ static struct pci_driver amd756_driver = {
 	.id_table	= amd756_ids,
 	.probe		= amd756_probe,
 	.remove		= __devexit_p(amd756_remove),
-	.dynids.use_driver_data = 1,
 };
 
 static int __init amd756_init(void)

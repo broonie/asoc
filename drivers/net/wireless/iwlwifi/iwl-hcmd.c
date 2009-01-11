@@ -22,7 +22,7 @@
  * in the file called LICENSE.GPL.
  *
  * Contact Information:
- * Tomas Winkler <tomas.winkler@intel.com>
+ *  Intel Linux Wireless <ilw@linux.intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *****************************************************************************/
 
@@ -36,7 +36,7 @@
 #include "iwl-core.h"
 
 
-#define IWL_CMD(x) case x : return #x
+#define IWL_CMD(x) case x: return #x
 
 const char *get_cmd_string(u8 cmd)
 {
@@ -120,8 +120,18 @@ static int iwl_generic_cmd_callback(struct iwl_priv *priv,
 		return 1;
 	}
 
-	IWL_DEBUG_HC("back from %s (0x%08X)\n",
-			get_cmd_string(cmd->hdr.cmd), pkt->hdr.flags);
+#ifdef CONFIG_IWLWIFI_DEBUG
+	switch (cmd->hdr.cmd) {
+	case REPLY_TX_LINK_QUALITY_CMD:
+	case SENSITIVITY_CMD:
+		IWL_DEBUG_HC_DUMP("back from %s (0x%08X)\n",
+				get_cmd_string(cmd->hdr.cmd), pkt->hdr.flags);
+				break;
+	default:
+		IWL_DEBUG_HC("back from %s (0x%08X)\n",
+				get_cmd_string(cmd->hdr.cmd), pkt->hdr.flags);
+	}
+#endif
 
 	/* Let iwl_tx_complete free the response skb */
 	return 1;

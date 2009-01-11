@@ -30,7 +30,6 @@
 
 #include "wm8990.h"
 
-#define AUDIO_NAME "wm8990"
 #define WM8990_VERSION "0.2"
 
 /* codec private data */
@@ -130,7 +129,7 @@ static inline void wm8990_write_reg_cache(struct snd_soc_codec *codec,
 	u16 *cache = codec->reg_cache;
 
 	/* Reset register and reserved registers are uncached */
-	if (reg == 0 || reg > (ARRAY_SIZE(wm8990_reg)) - 1)
+	if (reg == 0 || reg > ARRAY_SIZE(wm8990_reg) - 1)
 		return;
 
 	cache[reg] = value;
@@ -1173,7 +1172,8 @@ static int wm8990_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
  * Set PCM DAI bit size and sample rate.
  */
 static int wm8990_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -1363,8 +1363,7 @@ struct snd_soc_dai wm8990_dai = {
 		.rates = WM8990_RATES,
 		.formats = WM8990_FORMATS,},
 	.ops = {
-		.hw_params = wm8990_hw_params,},
-	.dai_ops = {
+		.hw_params = wm8990_hw_params,
 		.digital_mute = wm8990_mute,
 		.set_fmt = wm8990_set_dai_fmt,
 		.set_clkdiv = wm8990_set_dai_clkdiv,
@@ -1463,7 +1462,7 @@ static int wm8990_init(struct snd_soc_device *socdev)
 
 	wm8990_add_controls(codec);
 	wm8990_add_widgets(codec);
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
 		printk(KERN_ERR "wm8990: failed to register card\n");
 		goto card_err;
@@ -1578,7 +1577,7 @@ static int wm8990_probe(struct platform_device *pdev)
 	struct wm8990_setup_data *setup;
 	struct snd_soc_codec *codec;
 	struct wm8990_priv *wm8990;
-	int ret = 0;
+	int ret;
 
 	pr_info("WM8990 Audio Codec %s\n", WM8990_VERSION);
 
@@ -1600,13 +1599,13 @@ static int wm8990_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&codec->dapm_paths);
 	wm8990_socdev = socdev;
 
+	ret = -ENODEV;
+
 #if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	if (setup->i2c_address) {
 		codec->hw_write = (hw_write_t)i2c_master_send;
 		ret = wm8990_add_i2c_device(pdev, setup);
 	}
-#else
-		/* Add other interfaces here */
 #endif
 
 	if (ret != 0) {
@@ -1643,6 +1642,18 @@ struct snd_soc_codec_device soc_codec_dev_wm8990 = {
 	.resume =	wm8990_resume,
 };
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8990);
+
+static int __init wm8990_modinit(void)
+{
+	return snd_soc_register_dai(&wm8990_dai);
+}
+module_init(wm8990_modinit);
+
+static void __exit wm8990_exit(void)
+{
+	snd_soc_unregister_dai(&wm8990_dai);
+}
+module_exit(wm8990_exit);
 
 MODULE_DESCRIPTION("ASoC WM8990 driver");
 MODULE_AUTHOR("Liam Girdwood");

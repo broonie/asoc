@@ -20,7 +20,7 @@
 #define __ASM_ARCH_SSP_H
 
 #include <linux/list.h>
-#include <asm/io.h>
+#include <linux/io.h>
 
 enum pxa_ssp_type {
 	SSP_UNDEFINED = 0,

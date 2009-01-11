@@ -359,36 +359,48 @@ static void notify_port_conf_change(struct ehca_shca *shca, int port_num)
 	*old_attr = new_attr;
 }
 
+/* replay modify_qp for sqps -- return 0 if all is well, 1 if AQP1 destroyed */
+static int replay_modify_qp(struct ehca_sport *sport)
+{
+	int aqp1_destroyed;
+	unsigned long flags;
+
+	spin_lock_irqsave(&sport->mod_sqp_lock, flags);
+
+	aqp1_destroyed = !sport->ibqp_sqp[IB_QPT_GSI];
+
+	if (sport->ibqp_sqp[IB_QPT_SMI])
+		ehca_recover_sqp(sport->ibqp_sqp[IB_QPT_SMI]);
+	if (!aqp1_destroyed)
+		ehca_recover_sqp(sport->ibqp_sqp[IB_QPT_GSI]);
+
+	spin_unlock_irqrestore(&sport->mod_sqp_lock, flags);
+
+	return aqp1_destroyed;
+}
+
 static void parse_ec(struct ehca_shca *shca, u64 eqe)
 {
 	u8 ec   = EHCA_BMASK_GET(NEQE_EVENT_CODE, eqe);
 	u8 port = EHCA_BMASK_GET(NEQE_PORT_NUMBER, eqe);
 	u8 spec_event;
 	struct ehca_sport *sport = &shca->sport[port - 1];
-	unsigned long flags;
 
 	switch (ec) {
 	case 0x30: /* port availability change */
 		if (EHCA_BMASK_GET(NEQE_PORT_AVAILABILITY, eqe)) {
-			int suppress_event;
-			/* replay modify_qp for sqps */
-			spin_lock_irqsave(&sport->mod_sqp_lock, flags);
-			suppress_event = !sport->ibqp_sqp[IB_QPT_GSI];
-			if (sport->ibqp_sqp[IB_QPT_SMI])
-				ehca_recover_sqp(sport->ibqp_sqp[IB_QPT_SMI]);
-			if (!suppress_event)
-				ehca_recover_sqp(sport->ibqp_sqp[IB_QPT_GSI]);
-			spin_unlock_irqrestore(&sport->mod_sqp_lock, flags);
-
-			/* AQP1 was destroyed, ignore this event */
-			if (suppress_event)
-				break;
+			/* only replay modify_qp calls in autodetect mode;
+			 * if AQP1 was destroyed, the port is already down
+			 * again and we can drop the event.
+			 */
+			if (ehca_nr_ports < 0)
+				if (replay_modify_qp(sport))
+					break;
 
 			sport->port_state = IB_PORT_ACTIVE;
 			dispatch_port_event(shca, port, IB_EVENT_PORT_ACTIVE,
 					    "is active");
-			ehca_query_sma_attr(shca, port,
-					    &sport->saved_attr);
+			ehca_query_sma_attr(shca, port, &sport->saved_attr);
 		} else {
 			sport->port_state = IB_PORT_DOWN;
 			dispatch_port_event(shca, port, IB_EVENT_PORT_ERR,
@@ -647,12 +659,12 @@ static inline int find_next_online_cpu(struct ehca_comp_pool *pool)
 
 	WARN_ON_ONCE(!in_interrupt());
 	if (ehca_debug_level >= 3)
-		ehca_dmp(&cpu_online_map, sizeof(cpumask_t), "");
+		ehca_dmp(cpu_online_mask, cpumask_size(), "");
 
 	spin_lock_irqsave(&pool->last_cpu_lock, flags);
-	cpu = next_cpu_nr(pool->last_cpu, cpu_online_map);
+	cpu = cpumask_next(pool->last_cpu, cpu_online_mask);
 	if (cpu >= nr_cpu_ids)
-		cpu = first_cpu(cpu_online_map);
+		cpu = cpumask_first(cpu_online_mask);
 	pool->last_cpu = cpu;
 	spin_unlock_irqrestore(&pool->last_cpu_lock, flags);
 
@@ -843,7 +855,7 @@ static int __cpuinit comp_pool_callback(struct notifier_block *nfb,
 	case CPU_UP_CANCELED_FROZEN:
 		ehca_gen_dbg("CPU: %x (CPU_CANCELED)", cpu);
 		cct = per_cpu_ptr(pool->cpu_comp_tasks, cpu);
-		kthread_bind(cct->task, any_online_cpu(cpu_online_map));
+		kthread_bind(cct->task, cpumask_any(cpu_online_mask));
 		destroy_comp_task(pool, cpu);
 		break;
 	case CPU_ONLINE:
@@ -890,7 +902,7 @@ int ehca_create_comp_pool(void)
 		return -ENOMEM;
 
 	spin_lock_init(&pool->last_cpu_lock);
-	pool->last_cpu = any_online_cpu(cpu_online_map);
+	pool->last_cpu = cpumask_any(cpu_online_mask);
 
 	pool->cpu_comp_tasks = alloc_percpu(struct ehca_cpu_comp_task);
 	if (pool->cpu_comp_tasks == NULL) {
@@ -922,10 +934,9 @@ void ehca_destroy_comp_pool(void)
 
 	unregister_hotcpu_notifier(&comp_pool_callback_nb);
 
-	for (i = 0; i < NR_CPUS; i++) {
-		if (cpu_online(i))
-			destroy_comp_task(pool, i);
-	}
+	for_each_online_cpu(i)
+		destroy_comp_task(pool, i);
+
 	free_percpu(pool->cpu_comp_tasks);
 	kfree(pool);
 }

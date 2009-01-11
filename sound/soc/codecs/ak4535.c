@@ -28,7 +28,6 @@
 
 #include "ak4535.h"
 
-#define AUDIO_NAME "ak4535"
 #define AK4535_VERSION "0.3"
 
 struct snd_soc_codec_device soc_codec_dev_ak4535;
@@ -340,7 +339,8 @@ static int ak4535_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 }
 
 static int ak4535_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -452,8 +452,6 @@ struct snd_soc_dai ak4535_dai = {
 		.formats = SNDRV_PCM_FMTBIT_S16_LE,},
 	.ops = {
 		.hw_params = ak4535_hw_params,
-	},
-	.dai_ops = {
 		.set_fmt = ak4535_set_dai_fmt,
 		.digital_mute = ak4535_mute,
 		.set_sysclk = ak4535_set_dai_sysclk,
@@ -514,7 +512,7 @@ static int ak4535_init(struct snd_soc_device *socdev)
 
 	ak4535_add_controls(codec);
 	ak4535_add_widgets(codec);
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
 		printk(KERN_ERR "ak4535: failed to register card\n");
 		goto card_err;
@@ -622,7 +620,7 @@ static int ak4535_probe(struct platform_device *pdev)
 	struct ak4535_setup_data *setup;
 	struct snd_soc_codec *codec;
 	struct ak4535_priv *ak4535;
-	int ret = 0;
+	int ret;
 
 	printk(KERN_INFO "AK4535 Audio Codec %s", AK4535_VERSION);
 
@@ -644,14 +642,14 @@ static int ak4535_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&codec->dapm_paths);
 
 	ak4535_socdev = socdev;
+	ret = -ENODEV;
+
 #if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	if (setup->i2c_address) {
 		codec->hw_write = (hw_write_t)i2c_master_send;
 		codec->hw_read = (hw_read_t)i2c_master_recv;
 		ret = ak4535_add_i2c_device(pdev, setup);
 	}
-#else
-	/* Add other interfaces here */
 #endif
 
 	if (ret != 0) {
@@ -689,6 +687,18 @@ struct snd_soc_codec_device soc_codec_dev_ak4535 = {
 	.resume =	ak4535_resume,
 };
 EXPORT_SYMBOL_GPL(soc_codec_dev_ak4535);
+
+static int __init ak4535_modinit(void)
+{
+	return snd_soc_register_dai(&ak4535_dai);
+}
+module_init(ak4535_modinit);
+
+static void __exit ak4535_exit(void)
+{
+	snd_soc_unregister_dai(&ak4535_dai);
+}
+module_exit(ak4535_exit);
 
 MODULE_DESCRIPTION("Soc AK4535 driver");
 MODULE_AUTHOR("Richard Purdie");

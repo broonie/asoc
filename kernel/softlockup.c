@@ -164,7 +164,7 @@ unsigned long __read_mostly sysctl_hung_task_check_count = 1024;
 /*
  * Zero means infinite timeout - no checking done:
  */
-unsigned long __read_mostly sysctl_hung_task_timeout_secs = 120;
+unsigned long __read_mostly sysctl_hung_task_timeout_secs = 480;
 
 unsigned long __read_mostly sysctl_hung_task_warnings = 10;
 
@@ -188,7 +188,7 @@ static void check_hung_task(struct task_struct *t, unsigned long now)
 	if ((long)(now - t->last_switch_timestamp) <
 					sysctl_hung_task_timeout_secs)
 		return;
-	if (sysctl_hung_task_warnings < 0)
+	if (!sysctl_hung_task_warnings)
 		return;
 	sysctl_hung_task_warnings--;
 
@@ -226,14 +226,15 @@ static void check_hung_uninterruptible_tasks(int this_cpu)
 	 * If the system crashed already then all bets are off,
 	 * do not report extra hung tasks:
 	 */
-	if ((tainted & TAINT_DIE) || did_panic)
+	if (test_taint(TAINT_DIE) || did_panic)
 		return;
 
 	read_lock(&tasklist_lock);
 	do_each_thread(g, t) {
 		if (!--max_count)
 			goto unlock;
-		if (t->state & TASK_UNINTERRUPTIBLE)
+		/* use "==" to skip the TASK_KILLABLE tasks waiting on NFS */
+		if (t->state == TASK_UNINTERRUPTIBLE)
 			check_hung_task(t, now);
 	} while_each_thread(g, t);
  unlock:
@@ -302,17 +303,15 @@ cpu_callback(struct notifier_block *nfb, unsigned long action, void *hcpu)
 		break;
 	case CPU_ONLINE:
 	case CPU_ONLINE_FROZEN:
-		check_cpu = any_online_cpu(cpu_online_map);
+		check_cpu = cpumask_any(cpu_online_mask);
 		wake_up_process(per_cpu(watchdog_task, hotcpu));
 		break;
 #ifdef CONFIG_HOTPLUG_CPU
 	case CPU_DOWN_PREPARE:
 	case CPU_DOWN_PREPARE_FROZEN:
 		if (hotcpu == check_cpu) {
-			cpumask_t temp_cpu_online_map = cpu_online_map;
-
-			cpu_clear(hotcpu, temp_cpu_online_map);
-			check_cpu = any_online_cpu(temp_cpu_online_map);
+			/* Pick any other online cpu. */
+			check_cpu = cpumask_any_but(cpu_online_mask, hotcpu);
 		}
 		break;
 
@@ -322,7 +321,7 @@ cpu_callback(struct notifier_block *nfb, unsigned long action, void *hcpu)
 			break;
 		/* Unbind so it can run.  Fall thru. */
 		kthread_bind(per_cpu(watchdog_task, hotcpu),
-			     any_online_cpu(cpu_online_map));
+			     cpumask_any(cpu_online_mask));
 	case CPU_DEAD:
 	case CPU_DEAD_FROZEN:
 		p = per_cpu(watchdog_task, hotcpu);

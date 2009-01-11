@@ -1,24 +1,35 @@
 /*
- * bf5xx-i2s.c  --  ALSA Soc Audio Layer
+ * File:         sound/soc/blackfin/bf5xx-i2s.c
+ * Author:       Cliff Cai <Cliff.Cai@analog.com>
  *
- * Copyright 2007 Wolfson Microelectronics PLC.
- * Author: Liam Girdwood
- *         liam.girdwood@wolfsonmicro.com or linux@wolfsonmicro.com
+ * Created:      Tue June 06 2008
+ * Description:  Blackfin I2S CPU DAI driver
  *
- *  This program is free software; you can redistribute  it and/or modify it
- *  under  the terms of  the GNU General  Public License as published by the
- *  Free Software Foundation;  either version 2 of the  License, or (at your
- *  option) any later version.
+ * Modified:
+ *               Copyright 2008 Analog Devices Inc.
  *
- *  Revision history
- *    27th Aug 2007   Initial version.
+ * Bugs:         Enter bugs at http://blackfin.uclinux.org/
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see the file COPYING, or write
+ * to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/delay.h>
-#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -26,318 +37,206 @@
 #include <sound/soc.h>
 
 #include <asm/irq.h>
-#include <asm/gpio.h>
 #include <asm/portmux.h>
 #include <linux/mutex.h>
+#include <linux/gpio.h>
 
 #include "bf5xx-sport.h"
 #include "bf5xx-i2s.h"
 
-#define BF53X_I2S_DEBUG
-
-#ifdef  BF53X_I2S_DEBUG
-#define i2s_printd(format, arg...) printk("sport-i2s: " format, ## arg)
-#endif
-
-/*
- * This is setup by the audio & dai ops and written to sport during prepare ()
- */
 struct bf5xx_i2s_port {
 	u16 tcr1;
 	u16 rcr1;
 	u16 tcr2;
 	u16 rcr2;
-	
-	/* todo - sport master mode */
-	unsigned int tclkdiv;
-	unsigned int tfsdiv;
-	unsigned int rclkdiv;
-	unsigned int rfsdiv;
+	int counter;
 };
-static struct bf5xx_i2s_port bf5xx_i2s[NUM_SPORT_I2S];
 
-/* playback I2S setup */
-static int bf5xx_i2s_set_tx_dai_fmt(struct snd_soc_cpu_dai *cpu_dai,
+static struct bf5xx_i2s_port bf5xx_i2s;
+static int sport_num = CONFIG_SND_BF5XX_SPORT_NUM;
+
+static struct sport_param sport_params[2] = {
+	{
+		.dma_rx_chan	= CH_SPORT0_RX,
+		.dma_tx_chan	= CH_SPORT0_TX,
+		.err_irq	= IRQ_SPORT0_ERROR,
+		.regs		= (struct sport_register *)SPORT0_TCR1,
+	},
+	{
+		.dma_rx_chan	= CH_SPORT1_RX,
+		.dma_tx_chan	= CH_SPORT1_TX,
+		.err_irq	= IRQ_SPORT1_ERROR,
+		.regs		= (struct sport_register *)SPORT1_TCR1,
+	}
+};
+
+/*
+ * Setting the TFS pin selector for SPORT 0 based on whether the selected
+ * port id F or G. If the port is F then no conflict should exist for the
+ * TFS. When Port G is selected and EMAC then there is a conflict between
+ * the PHY interrupt line and TFS.  Current settings prevent the conflict
+ * by ignoring the TFS pin when Port G is selected. This allows both
+ * ssm2602 using Port G and EMAC concurrently.
+ */
+#ifdef CONFIG_BF527_SPORT0_PORTF
+#define LOCAL_SPORT0_TFS (P_SPORT0_TFS)
+#else
+#define LOCAL_SPORT0_TFS (0)
+#endif
+
+static u16 sport_req[][7] = { {P_SPORT0_DTPRI, P_SPORT0_TSCLK, P_SPORT0_RFS,
+		P_SPORT0_DRPRI, P_SPORT0_RSCLK, LOCAL_SPORT0_TFS, 0},
+		{P_SPORT1_DTPRI, P_SPORT1_TSCLK, P_SPORT1_RFS, P_SPORT1_DRPRI,
+		P_SPORT1_RSCLK, P_SPORT1_TFS, 0} };
+
+static int bf5xx_i2s_set_dai_fmt(struct snd_soc_dai *cpu_dai,
 		unsigned int fmt)
 {
-	i2s_printd("%s : fmt %x\n", __func__, fmt);
-	
-	bf5xx_i2s[cpu_dai->id].tcr1 = 0;
-	bf5xx_i2s[cpu_dai->id].tcr2 = 0;
-	bf5xx_i2s[cpu_dai->id].tclkdiv = 0;
-	bf5xx_i2s[cpu_dai->id].tfsdiv = 0;
-	
-	/* interface format */
+	int ret = 0;
+
+	/* interface format:support I2S,slave mode */
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_I2S:
-		bf5xx_i2s[cpu_dai->id].tcr1 |= TFSR | TCKFE;
-		bf5xx_i2s[cpu_dai->id].tcr2 |= TSFSE;
+		bf5xx_i2s.tcr1 |= TFSR | TCKFE;
+		bf5xx_i2s.rcr1 |= RFSR | RCKFE;
+		bf5xx_i2s.tcr2 |= TSFSE;
+		bf5xx_i2s.rcr2 |= RSFSE;
+		break;
+	case SND_SOC_DAIFMT_DSP_A:
+		bf5xx_i2s.tcr1 |= TFSR;
+		bf5xx_i2s.rcr1 |= RFSR;
 		break;
 	case SND_SOC_DAIFMT_LEFT_J:
-		bf5xx_i2s[cpu_dai->id].tcr1 |= TFSR | LATFS | LTFS;
-		bf5xx_i2s[cpu_dai->id].tcr2 |= TSFSE;
+		ret = -EINVAL;
+		break;
+	default:
+		printk(KERN_ERR "%s: Unknown DAI format type\n", __func__);
+		ret = -EINVAL;
 		break;
 	}
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBS_CFS:
-		bf5xx_i2s[cpu_dai->id].tcr1 |= ITCLK | ITFS;
-		break;
-	case SND_SOC_DAIFMT_CBM_CFS:
-		bf5xx_i2s[cpu_dai->id].tcr1 |= ITFS;
-		break;
 	case SND_SOC_DAIFMT_CBM_CFM:
 		break;
-	case SND_SOC_DAIFMT_CBS_CFM:
-		bf5xx_i2s[cpu_dai->id].tcr1 |= ITCLK;
-		break;
-	default:
-		break;
-	}
-	return 0;
-}
-
-/* capture I2S setup */
-static int bf5xx_i2s_set_rx_dai_fmt(struct snd_soc_cpu_dai *cpu_dai,
-		unsigned int fmt)
-{
-	i2s_printd("%s : fmt %x\n", __func__, fmt);
-	
-	bf5xx_i2s[cpu_dai->id].rcr1 = 0;
-	bf5xx_i2s[cpu_dai->id].rcr2 = 0;
-	bf5xx_i2s[cpu_dai->id].rclkdiv = 0;
-	bf5xx_i2s[cpu_dai->id].rfsdiv = 0;
-	
-	/* interface format */
-	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
-	case SND_SOC_DAIFMT_I2S:
-		bf5xx_i2s[cpu_dai->id].rcr1 |= RFSR | RCKFE;
-		bf5xx_i2s[cpu_dai->id].rcr2 |= RSFSE;
-		break;
-	case SND_SOC_DAIFMT_LEFT_J:
-		bf5xx_i2s[cpu_dai->id].rcr1 |= RFSR | LARFS | LRFS;
-		bf5xx_i2s[cpu_dai->id].rcr2 |= RSFSE;
-		break;
-	}
-
-	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
 	case SND_SOC_DAIFMT_CBS_CFS:
-		bf5xx_i2s[cpu_dai->id].rcr1 |= IRCLK | IRFS;
-		break;
 	case SND_SOC_DAIFMT_CBM_CFS:
-		bf5xx_i2s[cpu_dai->id].rcr1 |= IRFS;
-		break;
-	case SND_SOC_DAIFMT_CBM_CFM:
-		break;
 	case SND_SOC_DAIFMT_CBS_CFM:
-		bf5xx_i2s[cpu_dai->id].rcr1 |= IRCLK;
+		ret = -EINVAL;
 		break;
 	default:
+		printk(KERN_ERR "%s: Unknown DAI master type\n", __func__);
+		ret = -EINVAL;
 		break;
 	}
-	return 0;
-}
 
-static int bf5xx_i2s_set_dai_fmt(struct snd_soc_cpu_dai *cpu_dai,
-		unsigned int fmt)
-{
-	int ret;
-	
-	ret = bf5xx_i2s_set_tx_dai_fmt(cpu_dai, fmt);
-	if (ret == 0)
-		return bf5xx_i2s_set_rx_dai_fmt(cpu_dai, fmt);
 	return ret;
 }
 
-static int bf5xx_i2s_tx_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params)
+static int bf5xx_i2s_startup(struct snd_pcm_substream *substream,
+			     struct snd_soc_dai *dai)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_cpu_dai *cpu_dai = rtd->dai->cpu_dai;
+	pr_debug("%s enter\n", __func__);
 
-	i2s_printd("%s : sport %d\n", __func__, cpu_dai->id);
-	
-	bf5xx_i2s[cpu_dai->id].tcr2 &= ~SLEN_T;
-	switch (params_format(params)) {
-	case SNDRV_PCM_FORMAT_S16_LE:
-		bf5xx_i2s[cpu_dai->id].tcr2 |= 15;
-		break;
-	case SNDRV_PCM_FORMAT_S24_LE:
-		bf5xx_i2s[cpu_dai->id].tcr2 |= 23;
-		break;
-	case SNDRV_PCM_FORMAT_S32_LE:
-		bf5xx_i2s[cpu_dai->id].tcr2 |= 31;
-		break;
-	}
-
-	return 0;
-}
-
-static int bf5xx_i2s_rx_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_cpu_dai *cpu_dai = rtd->dai->cpu_dai;
-
-	i2s_printd("%s : sport %d\n", __func__, cpu_dai->id);
-
-	bf5xx_i2s[cpu_dai->id].rcr2 &= ~SLEN_R;
-	switch (params_format(params)) {
-	case SNDRV_PCM_FORMAT_S16_LE:
-		bf5xx_i2s[cpu_dai->id].rcr2 |= 15;
-		break;
-	case SNDRV_PCM_FORMAT_S24_LE:
-		bf5xx_i2s[cpu_dai->id].rcr2 |= 23;
-		break;
-	case SNDRV_PCM_FORMAT_S32_LE:
-		bf5xx_i2s[cpu_dai->id].rcr2 |= 31;
-		break;
-	}
-	
+	/*this counter is used for counting how many pcm streams are opened*/
+	bf5xx_i2s.counter++;
 	return 0;
 }
 
 static int bf5xx_i2s_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params)
+				struct snd_pcm_hw_params *params,
+				struct snd_soc_dai *dai)
 {
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-		return bf5xx_i2s_tx_hw_params(substream, params);
-	else
-		return bf5xx_i2s_rx_hw_params(substream, params);
-}
-
-static int bf5xx_i2s_tx_prepare(struct snd_pcm_substream *substream)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_cpu_dai *cpu_dai = rtd->dai->cpu_dai;
-	struct sport_device *sport = 
-		(struct sport_device*)cpu_dai->private_data;
-	
-	i2s_printd("%s : sport %d\n", __func__, cpu_dai->id);
-	
-	return sport_config_tx(sport, bf5xx_i2s[cpu_dai->id].tcr1, 
-		bf5xx_i2s[cpu_dai->id].tcr2,
-		bf5xx_i2s[cpu_dai->id].tclkdiv, 
-		bf5xx_i2s[cpu_dai->id].tfsdiv);
-}
-
-static int bf5xx_i2s_rx_prepare(struct snd_pcm_substream *substream)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_cpu_dai *cpu_dai = rtd->dai->cpu_dai;
-	struct sport_device *sport = 
-		(struct sport_device*)cpu_dai->private_data;
-	
-	i2s_printd("%s : sport %d\n", __func__, cpu_dai->id);
-	
-	return sport_config_tx(sport, bf5xx_i2s[cpu_dai->id].rcr1, 
-		bf5xx_i2s[cpu_dai->id].rcr2,
-		bf5xx_i2s[cpu_dai->id].rclkdiv, 
-		bf5xx_i2s[cpu_dai->id].rfsdiv);
-}
-
-static int bf5xx_i2s_prepare(struct snd_pcm_substream *substream)
-{
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-		return bf5xx_i2s_tx_prepare(substream);
-	else
-		return bf5xx_i2s_rx_prepare(substream);
-}
-
-static int bf5xx_i2s_tx_trigger(struct snd_pcm_substream *substream, int cmd)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_cpu_dai *cpu_dai = rtd->dai->cpu_dai;
-	struct sport_device *sport = 
-		(struct sport_device*)cpu_dai->private_data;
 	int ret = 0;
 
-	i2s_printd("%s : sport %d cmd %x\n", __func__, cpu_dai->id, cmd);
-	switch (cmd) {
-	case SNDRV_PCM_TRIGGER_RESUME:
-	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:	
-	case SNDRV_PCM_TRIGGER_START:
-		ret = sport_tx_start(sport);
+	bf5xx_i2s.tcr2 &= ~0x1f;
+	bf5xx_i2s.rcr2 &= ~0x1f;
+	switch (params_format(params)) {
+	case SNDRV_PCM_FORMAT_S16_LE:
+		bf5xx_i2s.tcr2 |= 15;
+		bf5xx_i2s.rcr2 |= 15;
+		sport_handle->wdsize = 2;
 		break;
-	case SNDRV_PCM_TRIGGER_STOP:
-	case SNDRV_PCM_TRIGGER_SUSPEND:
-	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-		ret = sport_tx_stop(sport);
+	case SNDRV_PCM_FORMAT_S24_LE:
+		bf5xx_i2s.tcr2 |= 23;
+		bf5xx_i2s.rcr2 |= 23;
+		sport_handle->wdsize = 3;
 		break;
-	default:
-		ret = -EINVAL;
+	case SNDRV_PCM_FORMAT_S32_LE:
+		bf5xx_i2s.tcr2 |= 31;
+		bf5xx_i2s.rcr2 |= 31;
+		sport_handle->wdsize = 4;
+		break;
 	}
 
-	return ret;
-}
+	if (bf5xx_i2s.counter == 1) {
+		/*
+		 * TX and RX are not independent,they are enabled at the
+		 * same time, even if only one side is running. So, we
+		 * need to configure both of them at the time when the first
+		 * stream is opened.
+		 *
+		 * CPU DAI:slave mode.
+		 */
+		ret = sport_config_rx(sport_handle, bf5xx_i2s.rcr1,
+				      bf5xx_i2s.rcr2, 0, 0);
+		if (ret) {
+			pr_err("SPORT is busy!\n");
+			return -EBUSY;
+		}
 
-static int bf5xx_i2s_rx_trigger(struct snd_pcm_substream *substream, int cmd)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_cpu_dai *cpu_dai = rtd->dai->cpu_dai;
-	struct sport_device *sport = 
-		(struct sport_device*)cpu_dai->private_data;
-	int ret = 0;
-
-	i2s_printd("%s : sport %d cmd %x\n", __func__, cpu_dai->id, cmd);
-	switch (cmd) {
-	case SNDRV_PCM_TRIGGER_RESUME:
-	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:	
-	case SNDRV_PCM_TRIGGER_START:
-		ret = sport_rx_start(sport);
-		break;
-	case SNDRV_PCM_TRIGGER_STOP:
-	case SNDRV_PCM_TRIGGER_SUSPEND:
-	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-		ret = sport_rx_stop(sport);
-		break;
-	default:
-		ret = -EINVAL;
+		ret = sport_config_tx(sport_handle, bf5xx_i2s.tcr1,
+				      bf5xx_i2s.tcr2, 0, 0);
+		if (ret) {
+			pr_err("SPORT is busy!\n");
+			return -EBUSY;
+		}
 	}
 
-	return ret;
+	return 0;
 }
 
-static int bf5xx_i2s_trigger(struct snd_pcm_substream *substream, int cmd)
+static void bf5xx_i2s_shutdown(struct snd_pcm_substream *substream,
+			       struct snd_soc_dai *dai)
 {
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-		return bf5xx_i2s_tx_trigger(substream, cmd);
-	else
-		return bf5xx_i2s_rx_trigger(substream, cmd);
+	pr_debug("%s enter\n", __func__);
+	bf5xx_i2s.counter--;
 }
 
-static void bf5xx_i2s_shutdown(struct snd_pcm_substream *substream)
+static int bf5xx_i2s_probe(struct platform_device *pdev,
+			   struct snd_soc_dai *dai)
 {
-	i2s_printd("%s\n", __func__);
+	pr_debug("%s enter\n", __func__);
+	if (peripheral_request_list(&sport_req[sport_num][0], "soc-audio")) {
+		pr_err("Requesting Peripherals failed\n");
+		return -EFAULT;
+	}
+
+	/* request DMA for SPORT */
+	sport_handle = sport_init(&sport_params[sport_num], 4, \
+			2 * sizeof(u32), NULL);
+	if (!sport_handle) {
+		peripheral_free_list(&sport_req[sport_num][0]);
+		return -ENODEV;
+	}
+
+	return 0;
 }
 
-static int bf5xx_i2s_startup(struct snd_pcm_substream *substream)
+static void bf5xx_i2s_remove(struct snd_soc_dai *dai)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_cpu_dai *cpu_dai = rtd->dai->cpu_dai;
-	struct sport_device *sport = 
-		(struct sport_device*)cpu_dai->private_data;
-	
-	i2s_printd("%s : sport %d\n", __func__, cpu_dai->id);
-	
-	if (sport == NULL) {
-		printk(KERN_ERR "%s : invalid sport device\n", __func__);
-		return -EINVAL;
-	} else
-		return 0;
+	pr_debug("%s enter\n", __func__);
+	peripheral_free_list(&sport_req[sport_num][0]);
 }
 
 #ifdef CONFIG_PM
-static int bf5xx_i2s_suspend(struct platform_device *dev,
-	struct snd_soc_cpu_dai *dai)
+static int bf5xx_i2s_suspend(struct snd_soc_dai *dai)
 {
-	struct sport_device *sport = 
-		(struct sport_device*)dai->private_data;
-		
-	i2s_printd("%s : sport %d\n", __func__, dai->id);
+	struct sport_device *sport =
+		(struct sport_device *)dai->private_data;
+
+	pr_debug("%s : sport %d\n", __func__, dai->id);
 	if (!dai->active)
 		return 0;
-
 	if (dai->capture.active)
 		sport_rx_stop(sport);
 	if (dai->playback.active)
@@ -346,29 +245,32 @@ static int bf5xx_i2s_suspend(struct platform_device *dev,
 }
 
 static int bf5xx_i2s_resume(struct platform_device *pdev,
-	struct snd_soc_cpu_dai *dai)
+			    struct snd_soc_dai *dai)
 {
-	struct sport_device *sport = 
-		(struct sport_device*)dai->private_data;
-		
-	i2s_printd("%s : sport %d\n", __func__, cpu_dai->id);
+	int ret;
+	struct sport_device *sport =
+		(struct sport_device *)dai->private_data;
+
+	pr_debug("%s : sport %d\n", __func__, dai->id);
 	if (!dai->active)
 		return 0;
 
-	if (dai->capture.active) {
-		sport_config_tx(sport, bf5xx_i2s[dai->id].rcr1, 
-			bf5xx_i2s[dai->id].rcr2,
-			bf5xx_i2s[dai->id].rclkdiv, 
-			bf5xx_i2s[dai->id].rfsdiv);
+	ret = sport_config_rx(sport_handle, RFSR | RCKFE, RSFSE|0x1f, 0, 0);
+	if (ret) {
+		pr_err("SPORT is busy!\n");
+		return -EBUSY;
+	}
+
+	ret = sport_config_tx(sport_handle, TFSR | TCKFE, TSFSE|0x1f, 0, 0);
+	if (ret) {
+		pr_err("SPORT is busy!\n");
+		return -EBUSY;
+	}
+
+	if (dai->capture.active)
 		sport_rx_start(sport);
-	}
-	if (dai->playback.active) {
-		sport_config_tx(sport, bf5xx_i2s[dai->id].tcr1, 
-			bf5xx_i2s[dai->id].tcr2,
-			bf5xx_i2s[dai->id].tclkdiv, 
-			bf5xx_i2s[dai->id].tfsdiv);
+	if (dai->playback.active)
 		sport_tx_start(sport);
-	}
 	return 0;
 }
 
@@ -381,15 +283,15 @@ static int bf5xx_i2s_resume(struct platform_device *pdev,
 		SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 | \
 		SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_48000 | \
 		SNDRV_PCM_RATE_96000)
-		
+
 #define BF5XX_I2S_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE |\
 	SNDRV_PCM_FMTBIT_S32_LE)
 
-struct snd_soc_cpu_dai bf5xx_i2s_dai[NUM_SPORT_I2S] = {
-{
-	.name = "bf5xx-i2s-0",
+struct snd_soc_dai bf5xx_i2s_dai = {
+	.name = "bf5xx-i2s",
 	.id = 0,
-	.type = SND_SOC_DAI_I2S,
+	.probe = bf5xx_i2s_probe,
+	.remove = bf5xx_i2s_remove,
 	.suspend = bf5xx_i2s_suspend,
 	.resume = bf5xx_i2s_resume,
 	.playback = {
@@ -403,97 +305,28 @@ struct snd_soc_cpu_dai bf5xx_i2s_dai[NUM_SPORT_I2S] = {
 		.rates = BF5XX_I2S_RATES,
 		.formats = BF5XX_I2S_FORMATS,},
 	.ops = {
-		.startup = bf5xx_i2s_startup,
-		.shutdown = bf5xx_i2s_shutdown,
-		.trigger = bf5xx_i2s_trigger,
+		.startup   = bf5xx_i2s_startup,
+		.shutdown  = bf5xx_i2s_shutdown,
 		.hw_params = bf5xx_i2s_hw_params,
-		.prepare = bf5xx_i2s_prepare,},
-	.dai_ops = {
 		.set_fmt = bf5xx_i2s_set_dai_fmt,
 	},
-},
-{
-	.name = "bf5xx-i2s-1",
-	.id = 1,
-	.type = SND_SOC_DAI_I2S,
-	.suspend = bf5xx_i2s_suspend,
-	.resume = bf5xx_i2s_resume,
-	.playback = {
-		.channels_min = 1,
-		.channels_max = 2,
-		.rates = BF5XX_I2S_RATES,
-		.formats = BF5XX_I2S_FORMATS,},
-	.capture = {
-		.channels_min = 1,
-		.channels_max = 2,
-		.rates = BF5XX_I2S_RATES,
-		.formats = BF5XX_I2S_FORMATS,},
-	.ops = {
-		.startup = bf5xx_i2s_startup,
-		.shutdown = bf5xx_i2s_shutdown,
-		.trigger = bf5xx_i2s_trigger,
-		.hw_params = bf5xx_i2s_hw_params,
-		.prepare = bf5xx_i2s_prepare,},
-	.dai_ops = {
-		.set_fmt = bf5xx_i2s_set_dai_fmt,
-	},
-},
-{
-	.name = "bf5xx-i2s-2",
-	.id = 2,
-	.type = SND_SOC_DAI_I2S,
-	.suspend = bf5xx_i2s_suspend,
-	.resume = bf5xx_i2s_resume,
-	.playback = {
-		.channels_min = 1,
-		.channels_max = 2,
-		.rates = BF5XX_I2S_RATES,
-		.formats = BF5XX_I2S_FORMATS,},
-	.capture = {
-		.channels_min = 1,
-		.channels_max = 2,
-		.rates = BF5XX_I2S_RATES,
-		.formats = BF5XX_I2S_FORMATS,},
-	.ops = {
-		.startup = bf5xx_i2s_startup,
-		.shutdown = bf5xx_i2s_shutdown,
-		.trigger = bf5xx_i2s_trigger,
-		.hw_params = bf5xx_i2s_hw_params,
-		.prepare = bf5xx_i2s_prepare,},
-	.dai_ops = {
-		.set_fmt = bf5xx_i2s_set_dai_fmt,
-	},
-},
-{
-	.name = "bf5xx-i2s-3",
-	.id = 3,
-	.type = SND_SOC_DAI_I2S,
-	.suspend = bf5xx_i2s_suspend,
-	.resume = bf5xx_i2s_resume,
-	.playback = {
-		.channels_min = 1,
-		.channels_max = 2,
-		.rates = BF5XX_I2S_RATES,
-		.formats = BF5XX_I2S_FORMATS,},
-	.capture = {
-		.channels_min = 1,
-		.channels_max = 2,
-		.rates = BF5XX_I2S_RATES,
-		.formats = BF5XX_I2S_FORMATS,},
-	.ops = {
-		.startup = bf5xx_i2s_startup,
-		.shutdown = bf5xx_i2s_shutdown,
-		.trigger = bf5xx_i2s_trigger,
-		.hw_params = bf5xx_i2s_hw_params,
-		.prepare = bf5xx_i2s_prepare,},
-	.dai_ops = {
-		.set_fmt = bf5xx_i2s_set_dai_fmt,
-	},
-},};
-
+};
 EXPORT_SYMBOL_GPL(bf5xx_i2s_dai);
 
+static int __init bfin_i2s_init(void)
+{
+	return snd_soc_register_dai(&bf5xx_i2s_dai);
+}
+module_init(bfin_i2s_init);
+
+static void __exit bfin_i2s_exit(void)
+{
+	snd_soc_unregister_dai(&bf5xx_i2s_dai);
+}
+module_exit(bfin_i2s_exit);
+
 /* Module information */
-MODULE_AUTHOR("Liam Girdwood, liam.girdwood@wolfsonmicro.com, www.wolfsonmicro.com");
-MODULE_DESCRIPTION("Blackfin I2S SoC Interface");
+MODULE_AUTHOR("Cliff Cai");
+MODULE_DESCRIPTION("I2S driver for ADI Blackfin");
 MODULE_LICENSE("GPL");
+

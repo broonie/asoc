@@ -77,18 +77,18 @@ static irqreturn_t netxen_msi_intr(int irq, void *data);
 
 /*  PCI Device ID Table  */
 #define ENTRY(device) \
-	{PCI_DEVICE(0x4040, (device)), \
+	{PCI_DEVICE(PCI_VENDOR_ID_NETXEN, (device)), \
 	.class = PCI_CLASS_NETWORK_ETHERNET << 8, .class_mask = ~0}
 
 static struct pci_device_id netxen_pci_tbl[] __devinitdata = {
-	ENTRY(0x0001),
-	ENTRY(0x0002),
-	ENTRY(0x0003),
-	ENTRY(0x0004),
-	ENTRY(0x0005),
-	ENTRY(0x0024),
-	ENTRY(0x0025),
-	ENTRY(0x0100),
+	ENTRY(PCI_DEVICE_ID_NX2031_10GXSR),
+	ENTRY(PCI_DEVICE_ID_NX2031_10GCX4),
+	ENTRY(PCI_DEVICE_ID_NX2031_4GCU),
+	ENTRY(PCI_DEVICE_ID_NX2031_IMEZ),
+	ENTRY(PCI_DEVICE_ID_NX2031_HMEZ),
+	ENTRY(PCI_DEVICE_ID_NX2031_XG_MGMT),
+	ENTRY(PCI_DEVICE_ID_NX2031_XG_MGMT2),
+	ENTRY(PCI_DEVICE_ID_NX3031),
 	{0,}
 };
 
@@ -241,7 +241,7 @@ static void netxen_check_options(struct netxen_adapter *adapter)
 	case NETXEN_BRDTYPE_P3_REF_QG:
 	case NETXEN_BRDTYPE_P3_4_GB:
 	case NETXEN_BRDTYPE_P3_4_GB_MM:
-		adapter->msix_supported = 0;
+		adapter->msix_supported = !!use_msi_x;
 		adapter->max_rx_desc_count = MAX_RCV_DESCRIPTORS_10G;
 		break;
 
@@ -359,16 +359,6 @@ static void netxen_pcie_strap_init(struct netxen_adapter *adapter)
 	int i, pos;
 	struct pci_dev *pdev;
 
-	pdev = pci_get_device(0x1166, 0x0140, NULL);
-	if (pdev) {
-		pci_dev_put(pdev);
-		adapter->hw_read_wx(adapter,
-			NETXEN_PCIE_REG(PCIE_TGT_SPLIT_CHICKEN), &chicken, 4);
-		chicken |= 0x4000;
-		adapter->hw_write_wx(adapter,
-			NETXEN_PCIE_REG(PCIE_TGT_SPLIT_CHICKEN), &chicken, 4);
-	}
-
 	pdev = adapter->pdev;
 
 	adapter->hw_read_wx(adapter,
@@ -449,7 +439,6 @@ netxen_read_mac_addr(struct netxen_adapter *adapter)
 	int i;
 	unsigned char *p;
 	__le64 mac_addr;
-	DECLARE_MAC_BUF(mac);
 	struct net_device *netdev = adapter->netdev;
 	struct pci_dev *pdev = adapter->pdev;
 
@@ -472,14 +461,38 @@ netxen_read_mac_addr(struct netxen_adapter *adapter)
 
 	/* set station address */
 
-	if (!is_valid_ether_addr(netdev->perm_addr)) {
-		dev_warn(&pdev->dev, "Bad MAC address %s.\n",
-				print_mac(mac, netdev->dev_addr));
-	} else
+	if (!is_valid_ether_addr(netdev->perm_addr))
+		dev_warn(&pdev->dev, "Bad MAC address %pM.\n", netdev->dev_addr);
+	else
 		adapter->macaddr_set(adapter, netdev->dev_addr);
 
 	return 0;
 }
+
+static void netxen_set_multicast_list(struct net_device *dev)
+{
+	struct netxen_adapter *adapter = netdev_priv(dev);
+
+	if (NX_IS_REVISION_P3(adapter->ahw.revision_id))
+		netxen_p3_nic_set_multi(dev);
+	else
+		netxen_p2_nic_set_multi(dev);
+}
+
+static const struct net_device_ops netxen_netdev_ops = {
+	.ndo_open	   = netxen_nic_open,
+	.ndo_stop	   = netxen_nic_close,
+	.ndo_start_xmit    = netxen_nic_xmit_frame,
+	.ndo_get_stats	   = netxen_nic_get_stats,
+	.ndo_validate_addr = eth_validate_addr,
+	.ndo_set_multicast_list = netxen_set_multicast_list,
+	.ndo_set_mac_address    = netxen_nic_set_mac,
+	.ndo_change_mtu	   = netxen_nic_change_mtu,
+	.ndo_tx_timeout	   = netxen_tx_timeout,
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	.ndo_poll_controller = netxen_nic_poll_controller,
+#endif
+};
 
 /*
  * netxen_nic_probe()
@@ -553,7 +566,7 @@ netxen_nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	SET_NETDEV_DEV(netdev, &pdev->dev);
 
-	adapter = netdev->priv;
+	adapter = netdev_priv(netdev);
 	adapter->netdev  = netdev;
 	adapter->pdev    = pdev;
 	adapter->ahw.pci_func  = pci_func_id;
@@ -692,25 +705,13 @@ netxen_nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	else
 		adapter->max_mc_count = 16;
 
-	netdev->open		   = netxen_nic_open;
-	netdev->stop		   = netxen_nic_close;
-	netdev->hard_start_xmit    = netxen_nic_xmit_frame;
-	netdev->get_stats	   = netxen_nic_get_stats;
-	if (NX_IS_REVISION_P3(revision_id))
-		netdev->set_multicast_list = netxen_p3_nic_set_multi;
-	else
-		netdev->set_multicast_list = netxen_p2_nic_set_multi;
-	netdev->set_mac_address    = netxen_nic_set_mac;
-	netdev->change_mtu	   = netxen_nic_change_mtu;
-	netdev->tx_timeout	   = netxen_tx_timeout;
+	netdev->netdev_ops	   = &netxen_netdev_ops;
 	netdev->watchdog_timeo     = 2*HZ;
 
 	netxen_nic_change_mtu(netdev, netdev->mtu);
 
 	SET_ETHTOOL_OPS(netdev, &netxen_nic_ethtool_ops);
-#ifdef CONFIG_NET_POLL_CONTROLLER
-	netdev->poll_controller = netxen_nic_poll_controller;
-#endif
+
 	/* ScatterGather support */
 	netdev->features = NETIF_F_SG;
 	netdev->features |= NETIF_F_IP_CSUM;
@@ -998,7 +999,7 @@ static void __devexit netxen_nic_remove(struct pci_dev *pdev)
  */
 static int netxen_nic_open(struct net_device *netdev)
 {
-	struct netxen_adapter *adapter = (struct netxen_adapter *)netdev->priv;
+	struct netxen_adapter *adapter = netdev_priv(netdev);
 	int err = 0;
 	int ctx, ring;
 	irq_handler_t handler;
@@ -1087,7 +1088,7 @@ static int netxen_nic_open(struct net_device *netdev)
 
 	netxen_nic_set_link_parameters(adapter);
 
-	netdev->set_multicast_list(netdev);
+	netxen_set_multicast_list(netdev);
 	if (adapter->set_mtu)
 		adapter->set_mtu(adapter, netdev->mtu);
 
@@ -1582,7 +1583,7 @@ static int netxen_nic_poll(struct napi_struct *napi, int budget)
 	}
 
 	if ((work_done < budget) && tx_complete) {
-		netif_rx_complete(adapter->netdev, &adapter->napi);
+		netif_rx_complete(&adapter->napi);
 		netxen_nic_enable_int(adapter);
 	}
 

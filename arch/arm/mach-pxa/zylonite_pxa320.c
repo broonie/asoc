@@ -16,8 +16,8 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/gpio.h>
 
-#include <mach/gpio.h>
 #include <mach/mfp-pxa320.h>
 #include <mach/zylonite.h>
 
@@ -122,6 +122,10 @@ static mfp_cfg_t mfp_cfg[] __initdata = {
 	GPIO27_MMC2_DAT3,
 	GPIO28_MMC2_CLK,
 	GPIO29_MMC2_CMD,
+
+	/* USB Host */
+	GPIO2_2_USBH_PEN,
+	GPIO3_2_USBH_PWR,
 
 	/* Debug LEDs */
 	GPIO1_2_GPIO | MFP_LPM_DRIVE_HIGH,

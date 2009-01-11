@@ -1,10 +1,12 @@
 /*
- * File:         bf5xx_ac97_sport.c
+ * File:         bf5xx_sport.c
  * Based on:
  * Author:       Roy Huang <roy.huang@analog.com>
  *
  * Created:      Tue Sep 21 10:52:42 CEST 2004
  * Description:
+ *               Blackfin SPORT Driver
+ *
  *               Copyright 2004-2007 Analog Devices Inc.
  *
  * Bugs:         Enter bugs at http://blackfin.uclinux.org/
@@ -29,23 +31,25 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
-#include <asm/bug.h>
+#include <linux/gpio.h>
+#include <linux/bug.h>
+#include <asm/portmux.h>
 #include <asm/dma.h>
 #include <asm/blackfin.h>
-#include <asm/dma.h>
 #include <asm/cacheflush.h>
 
 #include "bf5xx-sport.h"
-
 /* delay between frame sync pulse and first data bit in multichannel mode */
 #define FRAME_DELAY (1<<12)
 
+struct sport_device *sport_handle;
+EXPORT_SYMBOL(sport_handle);
 /* note: multichannel is in units of 8 channels,
  * tdm_count is # channels NOT / 8 ! */
 int sport_set_multichannel(struct sport_device *sport,
 		int tdm_count, u32 mask, int packed)
 {
-	pr_debug("%s tdm_count=%d mask:0x%08x packed=%d\n", __FUNCTION__,
+	pr_debug("%s tdm_count=%d mask:0x%08x packed=%d\n", __func__,
 			tdm_count, mask, packed);
 
 	if ((sport->regs->tcr1 & TSPEN) || (sport->regs->rcr1 & RSPEN))
@@ -85,6 +89,7 @@ int sport_set_multichannel(struct sport_device *sport,
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_set_multichannel);
 
 int sport_config_rx(struct sport_device *sport, unsigned int rcr1,
 		unsigned int rcr2, unsigned int clkdiv, unsigned int fsdiv)
@@ -101,6 +106,7 @@ int sport_config_rx(struct sport_device *sport, unsigned int rcr1,
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_config_rx);
 
 int sport_config_tx(struct sport_device *sport, unsigned int tcr1,
 		unsigned int tcr2, unsigned int clkdiv, unsigned int fsdiv)
@@ -117,6 +123,7 @@ int sport_config_tx(struct sport_device *sport, unsigned int tcr1,
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_config_tx);
 
 static void setup_desc(struct dmasg *desc, void *buf, int fragcount,
 		size_t fragsize, unsigned int cfg,
@@ -143,15 +150,15 @@ static void setup_desc(struct dmasg *desc, void *buf, int fragcount,
 		&(desc[0]), desc[0].next_desc_addr,
 		&(desc[1]), desc[1].next_desc_addr,
 		desc[0].x_count, desc[0].y_count,
-		desc[0].start_addr,desc[0].cfg);
+		desc[0].start_addr, desc[0].cfg);
 }
 
 static int sport_start(struct sport_device *sport)
 {
 	enable_dma(sport->dma_rx_chan);
 	enable_dma(sport->dma_tx_chan);
-	sport->regs->tcr1 |= TSPEN;
 	sport->regs->rcr1 |= RSPEN;
+	sport->regs->tcr1 |= TSPEN;
 	SSYNC();
 
 	return 0;
@@ -165,7 +172,6 @@ static int sport_stop(struct sport_device *sport)
 
 	disable_dma(sport->dma_rx_chan);
 	disable_dma(sport->dma_tx_chan);
-
 	return 0;
 }
 
@@ -179,20 +185,21 @@ static inline int sport_hook_rx_dummy(struct sport_device *sport)
 
 	/* Maybe the dummy buffer descriptor ring is damaged */
 	sport->dummy_rx_desc->next_desc_addr = \
-			(unsigned long)sport->dummy_rx_desc;
+			(unsigned long)(sport->dummy_rx_desc+1);
 
 	local_irq_save(flags);
 	desc = (struct dmasg *)get_dma_next_desc_ptr(sport->dma_rx_chan);
 	/* Copy the descriptor which will be damaged to backup */
 	temp_desc = *desc;
-	desc->x_count = 0x10;
+	desc->x_count = 0xa;
 	desc->y_count = 0;
 	desc->next_desc_addr = (unsigned long)(sport->dummy_rx_desc);
 	local_irq_restore(flags);
 	/* Waiting for dummy buffer descriptor is already hooked*/
-	while ((get_dma_curr_desc_ptr(sport->dma_rx_chan) - \
-			sizeof(struct dmasg)) != \
-			(unsigned long)sport->dummy_rx_desc) {}
+	while ((get_dma_curr_desc_ptr(sport->dma_rx_chan) -
+			sizeof(struct dmasg)) !=
+			(unsigned long)sport->dummy_rx_desc)
+		;
 	sport->curr_rx_desc = sport->dummy_rx_desc;
 	/* Restore the damaged descriptor */
 	*desc = temp_desc;
@@ -214,7 +221,7 @@ static inline int sport_rx_dma_start(struct sport_device *sport, int dummy)
 	set_dma_x_count(sport->dma_rx_chan, 0);
 	set_dma_x_modify(sport->dma_rx_chan, 0);
 	set_dma_config(sport->dma_rx_chan, (DMAFLOW_LARGE | NDSIZE_9 | \
-				WDSIZE_16 | WNR));
+				WDSIZE_32 | WNR));
 	set_dma_curr_addr(sport->dma_rx_chan, sport->curr_rx_desc->start_addr);
 	SSYNC();
 
@@ -234,7 +241,8 @@ static inline int sport_tx_dma_start(struct sport_device *sport, int dummy)
 			(unsigned long)(sport->curr_tx_desc));
 	set_dma_x_count(sport->dma_tx_chan, 0);
 	set_dma_x_modify(sport->dma_tx_chan, 0);
-	set_dma_config(sport->dma_tx_chan, (DMAFLOW_LARGE | NDSIZE_9 | WDSIZE_16));
+	set_dma_config(sport->dma_tx_chan,
+			(DMAFLOW_LARGE | NDSIZE_9 | WDSIZE_32));
 	set_dma_curr_addr(sport->dma_tx_chan, sport->curr_tx_desc->start_addr);
 	SSYNC();
 
@@ -244,17 +252,19 @@ static inline int sport_tx_dma_start(struct sport_device *sport, int dummy)
 int sport_rx_start(struct sport_device *sport)
 {
 	unsigned long flags;
-
-	pr_debug("%s enter\n", __FUNCTION__);
+	pr_debug("%s enter\n", __func__);
 	if (sport->rx_run)
 		return -EBUSY;
-
 	if (sport->tx_run) {
 		/* tx is running, rx is not running */
 		BUG_ON(sport->dma_rx_desc == NULL);
 		BUG_ON(sport->curr_rx_desc != sport->dummy_rx_desc);
 		local_irq_save(flags);
-		sport->dummy_rx_desc->next_desc_addr = \
+		while ((get_dma_curr_desc_ptr(sport->dma_rx_chan) -
+			sizeof(struct dmasg)) !=
+			(unsigned long)sport->dummy_rx_desc)
+			;
+		sport->dummy_rx_desc->next_desc_addr =
 				(unsigned long)(sport->dma_rx_desc);
 		local_irq_restore(flags);
 		sport->curr_rx_desc = sport->dma_rx_desc;
@@ -268,13 +278,14 @@ int sport_rx_start(struct sport_device *sport)
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_rx_start);
 
 int sport_rx_stop(struct sport_device *sport)
 {
-	pr_debug("%s enter\n", __FUNCTION__);
+	pr_debug("%s enter\n", __func__);
+
 	if (!sport->rx_run)
 		return 0;
-
 	if (sport->tx_run) {
 		/* TX dma is still running, hook the dummy buffer */
 		sport_hook_rx_dummy(sport);
@@ -289,6 +300,7 @@ int sport_rx_stop(struct sport_device *sport)
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_rx_stop);
 
 static inline int sport_hook_tx_dummy(struct sport_device *sport)
 {
@@ -299,21 +311,22 @@ static inline int sport_hook_tx_dummy(struct sport_device *sport)
 	BUG_ON(sport->curr_tx_desc == sport->dummy_tx_desc);
 
 	sport->dummy_tx_desc->next_desc_addr = \
-			(unsigned long)sport->dummy_tx_desc;
+			(unsigned long)(sport->dummy_tx_desc+1);
 
 	/* Shorten the time on last normal descriptor */
 	local_irq_save(flags);
 	desc = (struct dmasg *)get_dma_next_desc_ptr(sport->dma_tx_chan);
 	/* Store the descriptor which will be damaged */
 	temp_desc = *desc;
-	desc->x_count = 0x10;
+	desc->x_count = 0xa;
 	desc->y_count = 0;
 	desc->next_desc_addr = (unsigned long)(sport->dummy_tx_desc);
 	local_irq_restore(flags);
 	/* Waiting for dummy buffer descriptor is already hooked*/
 	while ((get_dma_curr_desc_ptr(sport->dma_tx_chan) - \
 			sizeof(struct dmasg)) != \
-			(unsigned long)sport->dummy_tx_desc) {}
+			(unsigned long)sport->dummy_tx_desc)
+		;
 	sport->curr_tx_desc = sport->dummy_tx_desc;
 	/* Restore the damaged descriptor */
 	*desc = temp_desc;
@@ -324,37 +337,39 @@ static inline int sport_hook_tx_dummy(struct sport_device *sport)
 int sport_tx_start(struct sport_device *sport)
 {
 	unsigned flags;
-
-	pr_debug("%s: tx_run:%d, rx_run:%d\n", __FUNCTION__,
+	pr_debug("%s: tx_run:%d, rx_run:%d\n", __func__,
 			sport->tx_run, sport->rx_run);
 	if (sport->tx_run)
 		return -EBUSY;
-
 	if (sport->rx_run) {
 		BUG_ON(sport->dma_tx_desc == NULL);
 		BUG_ON(sport->curr_tx_desc != sport->dummy_tx_desc);
 		/* Hook the normal buffer descriptor */
 		local_irq_save(flags);
-		sport->dummy_tx_desc->next_desc_addr = \
+		while ((get_dma_curr_desc_ptr(sport->dma_tx_chan) -
+			sizeof(struct dmasg)) !=
+			(unsigned long)sport->dummy_tx_desc)
+			;
+		sport->dummy_tx_desc->next_desc_addr =
 				(unsigned long)(sport->dma_tx_desc);
 		local_irq_restore(flags);
 		sport->curr_tx_desc = sport->dma_tx_desc;
 	} else {
+
 		sport_tx_dma_start(sport, 0);
 		/* Let rx dma run the dummy buffer */
 		sport_rx_dma_start(sport, 1);
 		sport_start(sport);
 	}
 	sport->tx_run = 1;
-
 	return 0;
 }
+EXPORT_SYMBOL(sport_tx_start);
 
 int sport_tx_stop(struct sport_device *sport)
 {
 	if (!sport->tx_run)
 		return 0;
-
 	if (sport->rx_run) {
 		/* RX is still running, hook the dummy buffer */
 		sport_hook_tx_dummy(sport);
@@ -369,6 +384,7 @@ int sport_tx_stop(struct sport_device *sport)
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_tx_stop);
 
 static inline int compute_wdsize(size_t wdsize)
 {
@@ -391,7 +407,7 @@ int sport_config_rx_dma(struct sport_device *sport, void *buf,
 	unsigned int cfg;
 	dma_addr_t addr;
 
-	pr_debug("%s buf:%p, frag:%d, fragsize:0x%lx\n", __FUNCTION__, \
+	pr_debug("%s buf:%p, frag:%d, fragsize:0x%lx\n", __func__, \
 			buf, fragcount, fragsize);
 
 	x_count = fragsize / sport->wdsize;
@@ -414,24 +430,26 @@ int sport_config_rx_dma(struct sport_device *sport, void *buf,
 		if (i == 0)
 			return -EINVAL;
 	}
-	pr_debug("%s(x_count:0x%x, y_count:0x%x)\n", __FUNCTION__,
+	pr_debug("%s(x_count:0x%x, y_count:0x%x)\n", __func__,
 			x_count, y_count);
 
-	if (sport->dma_rx_desc) {
-		dma_free_coherent(NULL, sport->rx_desc_bytes, sport->dma_rx_desc, 0);
-	}
+	if (sport->dma_rx_desc)
+		dma_free_coherent(NULL, sport->rx_desc_bytes,
+					sport->dma_rx_desc, 0);
 
 	/* Allocate a new descritor ring as current one. */
 	sport->dma_rx_desc = dma_alloc_coherent(NULL, \
-			fragcount * sizeof(struct dmasg),	&addr, 0);
+			fragcount * sizeof(struct dmasg), &addr, 0);
 	sport->rx_desc_bytes = fragcount * sizeof(struct dmasg);
 
 	if (!sport->dma_rx_desc) {
-		printk(KERN_ERR "Failed to allocate memory for rx desc\n");
+		pr_err("Failed to allocate memory for rx desc\n");
 		return -ENOMEM;
 	}
 
 	sport->rx_buf = buf;
+	sport->rx_fragsize = fragsize;
+	sport->rx_frags = fragcount;
 
 	cfg     = 0x7000 | DI_EN | compute_wdsize(sport->wdsize) | WNR | \
 		  (DESC_ELEMENT_COUNT << 8); /* large descriptor mode */
@@ -444,6 +462,7 @@ int sport_config_rx_dma(struct sport_device *sport, void *buf,
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_config_rx_dma);
 
 int sport_config_tx_dma(struct sport_device *sport, void *buf, \
 		int fragcount, size_t fragsize)
@@ -454,7 +473,7 @@ int sport_config_tx_dma(struct sport_device *sport, void *buf, \
 	dma_addr_t addr;
 
 	pr_debug("%s buf:%p, fragcount:%d, fragsize:0x%lx\n",
-			__FUNCTION__, buf, fragcount, fragsize);
+			__func__, buf, fragcount, fragsize);
 
 	x_count = fragsize/sport->wdsize;
 	y_count = 0;
@@ -476,7 +495,7 @@ int sport_config_tx_dma(struct sport_device *sport, void *buf, \
 		if (i == 0)
 			return -EINVAL;
 	}
-	pr_debug("%s x_count:0x%x, y_count:0x%x\n", __FUNCTION__,
+	pr_debug("%s x_count:0x%x, y_count:0x%x\n", __func__,
 			x_count, y_count);
 
 
@@ -489,12 +508,13 @@ int sport_config_tx_dma(struct sport_device *sport, void *buf, \
 			fragcount * sizeof(struct dmasg), &addr, 0);
 	sport->tx_desc_bytes = fragcount * sizeof(struct dmasg);
 	if (!sport->dma_tx_desc) {
-		printk(KERN_ERR "Failed to allocate memory for tx desc\n");
+		pr_err("Failed to allocate memory for tx desc\n");
 		return -ENOMEM;
 	}
 
 	sport->tx_buf = buf;
-
+	sport->tx_fragsize = fragsize;
+	sport->tx_frags = fragcount;
 	cfg     = 0x7000 | DI_EN | compute_wdsize(sport->wdsize) | \
 		  (DESC_ELEMENT_COUNT << 8); /* large descriptor mode */
 
@@ -506,6 +526,7 @@ int sport_config_tx_dma(struct sport_device *sport, void *buf, \
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_config_tx_dma);
 
 /* setup dummy dma descriptor ring, which don't generate interrupts,
  * the x_modify is set to 0 */
@@ -514,9 +535,9 @@ static int sport_config_rx_dummy(struct sport_device *sport)
 	struct dmasg *desc;
 	unsigned config;
 
-	pr_debug("%s entered\n", __FUNCTION__);
+	pr_debug("%s entered\n", __func__);
 #if L1_DATA_A_LENGTH != 0
-	desc = (struct dmasg*)l1_data_sram_alloc(2 * sizeof(*desc));
+	desc = (struct dmasg *) l1_data_sram_alloc(2 * sizeof(*desc));
 #else
 	{
 		dma_addr_t addr;
@@ -524,22 +545,22 @@ static int sport_config_rx_dummy(struct sport_device *sport)
 	}
 #endif
 	if (desc == NULL) {
-		printk(KERN_ERR "Failed to allocate memory for dummy rx desc\n");
+		pr_err("Failed to allocate memory for dummy rx desc\n");
 		return -ENOMEM;
 	}
-
 	memset(desc, 0, 2 * sizeof(*desc));
 	sport->dummy_rx_desc = desc;
-
-	desc->next_desc_addr = (unsigned long)desc;
 	desc->start_addr = (unsigned long)sport->dummy_buf;
-	config = DMAFLOW_LARGE | NDSIZE_9 | compute_wdsize(sport->wdsize) | WNR | DMAEN;
+	config = DMAFLOW_LARGE | NDSIZE_9 | compute_wdsize(sport->wdsize)
+		 | WNR | DMAEN;
 	desc->cfg = config;
-	desc->x_count = sport->dummy_count;
-	desc->x_modify = 0;
+	desc->x_count = sport->dummy_count/sport->wdsize;
+	desc->x_modify = sport->wdsize;
 	desc->y_count = 0;
 	desc->y_modify = 0;
-
+	memcpy(desc+1, desc, sizeof(*desc));
+	desc->next_desc_addr = (unsigned long)(desc+1);
+	desc[1].next_desc_addr = (unsigned long)desc;
 	return 0;
 }
 
@@ -548,33 +569,34 @@ static int sport_config_tx_dummy(struct sport_device *sport)
 	struct dmasg *desc;
 	unsigned int config;
 
-	pr_debug("%s entered\n", __FUNCTION__);
+	pr_debug("%s entered\n", __func__);
 
 #if L1_DATA_A_LENGTH != 0
-	desc = (struct dmasg*)l1_data_sram_alloc(2 * sizeof(*desc));
+	desc = (struct dmasg *) l1_data_sram_alloc(2 * sizeof(*desc));
 #else
 	{
 		dma_addr_t addr;
-		desc = dma_alloc_coherent(NULL, 2*sizeof(*desc), &addr, 0);
+		desc = dma_alloc_coherent(NULL, 2 * sizeof(*desc), &addr, 0);
 	}
 #endif
 	if (!desc) {
-		printk(KERN_ERR "Failed to allocate memory for dummy tx desc\n");
+		pr_err("Failed to allocate memory for dummy tx desc\n");
 		return -ENOMEM;
 	}
-
 	memset(desc, 0, 2 * sizeof(*desc));
 	sport->dummy_tx_desc = desc;
-
-	desc->next_desc_addr = (unsigned long)desc;
-	desc->start_addr = (unsigned long)sport->dummy_buf + sport->wdsize;
-	config = DMAFLOW_LARGE | NDSIZE_9 | compute_wdsize(sport->wdsize) | DMAEN;
+	desc->start_addr = (unsigned long)sport->dummy_buf + \
+		sport->dummy_count;
+	config = DMAFLOW_LARGE | NDSIZE_9 |
+		 compute_wdsize(sport->wdsize) | DMAEN;
 	desc->cfg = config;
-	desc->x_count = sport->dummy_count;
-	desc->x_modify = 0;
+	desc->x_count = sport->dummy_count/sport->wdsize;
+	desc->x_modify = sport->wdsize;
 	desc->y_count = 0;
 	desc->y_modify = 0;
-
+	memcpy(desc+1, desc, sizeof(*desc));
+	desc->next_desc_addr = (unsigned long)(desc+1);
+	desc[1].next_desc_addr = (unsigned long)desc;
 	return 0;
 }
 
@@ -582,16 +604,19 @@ unsigned long sport_curr_offset_rx(struct sport_device *sport)
 {
 	unsigned long curr = get_dma_curr_addr(sport->dma_rx_chan);
 
-	return ((unsigned char *)curr - sport->rx_buf);
+	return (unsigned char *)curr - sport->rx_buf;
 }
+EXPORT_SYMBOL(sport_curr_offset_rx);
 
 unsigned long sport_curr_offset_tx(struct sport_device *sport)
 {
 	unsigned long curr = get_dma_curr_addr(sport->dma_tx_chan);
-	return ((unsigned char *)curr - sport->tx_buf);
-}
 
-void incfrag(struct sport_device *sport, int *frag, int tx)
+	return (unsigned char *)curr - sport->tx_buf;
+}
+EXPORT_SYMBOL(sport_curr_offset_tx);
+
+void sport_incfrag(struct sport_device *sport, int *frag, int tx)
 {
 	++(*frag);
 	if (tx == 1 && *frag == sport->tx_frags)
@@ -600,8 +625,9 @@ void incfrag(struct sport_device *sport, int *frag, int tx)
 	if (tx == 0 && *frag == sport->rx_frags)
 		*frag = 0;
 }
+EXPORT_SYMBOL(sport_incfrag);
 
-void decfrag(struct sport_device *sport, int *frag, int tx)
+void sport_decfrag(struct sport_device *sport, int *frag, int tx)
 {
 	--(*frag);
 	if (tx == 1 && *frag == 0)
@@ -610,6 +636,7 @@ void decfrag(struct sport_device *sport, int *frag, int tx)
 	if (tx == 0 && *frag == 0)
 		*frag = sport->rx_frags;
 }
+EXPORT_SYMBOL(sport_decfrag);
 
 static int sport_check_status(struct sport_device *sport,
 		unsigned int *sport_stat,
@@ -679,11 +706,11 @@ static irqreturn_t rx_handler(int irq, void *dev_id)
 	unsigned int rx_stat;
 	struct sport_device *sport = dev_id;
 
-	pr_debug("%s enter\n", __FUNCTION__);
+	pr_debug("%s enter\n", __func__);
 	sport_check_status(sport, NULL, &rx_stat, NULL);
-	if (!(rx_stat & DMA_DONE)) {
-		printk(KERN_ERR "rx dma is already stopped\n");
-	}
+	if (!(rx_stat & DMA_DONE))
+		pr_err("rx dma is already stopped\n");
+
 	if (sport->rx_callback) {
 		sport->rx_callback(sport->rx_data);
 		return IRQ_HANDLED;
@@ -696,14 +723,12 @@ static irqreturn_t tx_handler(int irq, void *dev_id)
 {
 	unsigned int tx_stat;
 	struct sport_device *sport = dev_id;
-
-	pr_debug("%s enter\n", __FUNCTION__);
+	pr_debug("%s enter\n", __func__);
 	sport_check_status(sport, NULL, NULL, &tx_stat);
 	if (!(tx_stat & DMA_DONE)) {
-		printk(KERN_ERR "tx dma is already stopped\n");
+		pr_err("tx dma is already stopped\n");
 		return IRQ_HANDLED;
 	}
-
 	if (sport->tx_callback) {
 		sport->tx_callback(sport->tx_data);
 		return IRQ_HANDLED;
@@ -714,23 +739,41 @@ static irqreturn_t tx_handler(int irq, void *dev_id)
 
 static irqreturn_t err_handler(int irq, void *dev_id)
 {
-	unsigned int status;
+	unsigned int status = 0;
 	struct sport_device *sport = dev_id;
 
-	pr_debug("%s\n", __FUNCTION__);
+	pr_debug("%s\n", __func__);
 	if (sport_check_status(sport, &status, NULL, NULL)) {
-		printk(KERN_ERR "error checking status ??");
+		pr_err("error checking status ??");
 		return IRQ_NONE;
 	}
 
 	if (status & (TOVF|TUVF|ROVF|RUVF)) {
-		printk(KERN_WARNING  "sport status error:%s%s%s%s\n",
+		pr_info("sport status error:%s%s%s%s\n",
 				status & TOVF ? " TOVF" : "",
 				status & TUVF ? " TUVF" : "",
 				status & ROVF ? " ROVF" : "",
 				status & RUVF ? " RUVF" : "");
-		sport_stop(sport);
+		if (status & TOVF || status & TUVF) {
+			disable_dma(sport->dma_tx_chan);
+			if (sport->tx_run)
+				sport_tx_dma_start(sport, 0);
+			else
+				sport_tx_dma_start(sport, 1);
+			enable_dma(sport->dma_tx_chan);
+		} else {
+			disable_dma(sport->dma_rx_chan);
+			if (sport->rx_run)
+				sport_rx_dma_start(sport, 0);
+			else
+				sport_rx_dma_start(sport, 1);
+			enable_dma(sport->dma_rx_chan);
+		}
 	}
+	status = sport->regs->stat;
+	if (status & (TOVF|TUVF|ROVF|RUVF))
+		sport->regs->stat = (status & (TOVF|TUVF|ROVF|RUVF));
+	SSYNC();
 
 	if (sport->err_callback)
 		sport->err_callback(sport->err_data);
@@ -747,6 +790,7 @@ int sport_set_rx_callback(struct sport_device *sport,
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_set_rx_callback);
 
 int sport_set_tx_callback(struct sport_device *sport,
 		void (*tx_callback)(void *), void *tx_data)
@@ -757,6 +801,8 @@ int sport_set_tx_callback(struct sport_device *sport,
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_set_tx_callback);
+
 int sport_set_err_callback(struct sport_device *sport,
 		void (*err_callback)(void *), void *err_data)
 {
@@ -766,18 +812,19 @@ int sport_set_err_callback(struct sport_device *sport,
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_set_err_callback);
 
 struct sport_device *sport_init(struct sport_param *param, unsigned wdsize,
 		unsigned dummy_count, void *private_data)
 {
+	int ret;
 	struct sport_device *sport;
-
-	pr_debug("%s enter\n", __FUNCTION__);
+	pr_debug("%s enter\n", __func__);
 	BUG_ON(param == NULL);
 	BUG_ON(wdsize == 0 || dummy_count == 0);
 	sport = kmalloc(sizeof(struct sport_device), GFP_KERNEL);
 	if (!sport) {
-		printk(KERN_ERR "Failed to allocate for sport device\n");
+		pr_err("Failed to allocate for sport device\n");
 		return NULL;
 	}
 
@@ -789,37 +836,36 @@ struct sport_device *sport_init(struct sport_param *param, unsigned wdsize,
 	sport->private_data = private_data;
 
 	if (request_dma(sport->dma_rx_chan, "SPORT RX Data") == -EBUSY) {
-		printk(KERN_ERR "Failed to request RX dma %d\n", \
+		pr_err("Failed to request RX dma %d\n", \
 				sport->dma_rx_chan);
 		goto __init_err1;
 	}
-
 	if (set_dma_callback(sport->dma_rx_chan, rx_handler, sport) != 0) {
-		printk(KERN_ERR "Failed to request RX irq %d\n", \
+		pr_err("Failed to request RX irq %d\n", \
 				sport->dma_rx_chan);
 		goto __init_err2;
 	}
 
 	if (request_dma(sport->dma_tx_chan, "SPORT TX Data") == -EBUSY) {
-		printk(KERN_ERR "Failed to request TX dma %d\n", \
+		pr_err("Failed to request TX dma %d\n", \
 				sport->dma_tx_chan);
 		goto __init_err2;
 	}
 
 	if (set_dma_callback(sport->dma_tx_chan, tx_handler, sport) != 0) {
-		printk(KERN_ERR "Failed to request TX irq %d\n", \
+		pr_err("Failed to request TX irq %d\n", \
 				sport->dma_tx_chan);
 		goto __init_err3;
 	}
 
 	if (request_irq(sport->err_irq, err_handler, IRQF_SHARED, "SPORT err",
 			sport) < 0) {
-		printk(KERN_ERR "Failed to request err irq:%d\n", \
+		pr_err("Failed to request err irq:%d\n", \
 				sport->err_irq);
 		goto __init_err3;
 	}
 
-	pr_debug("dma rx:%d tx:%d, err irq:%d, regs:%p\n",
+	pr_err("dma rx:%d tx:%d, err irq:%d, regs:%p\n",
 			sport->dma_rx_chan, sport->dma_tx_chan,
 			sport->err_irq, sport->regs);
 
@@ -827,18 +873,26 @@ struct sport_device *sport_init(struct sport_param *param, unsigned wdsize,
 	sport->dummy_count = dummy_count;
 
 #if L1_DATA_A_LENGTH != 0
-	sport->dummy_buf = l1_data_sram_alloc(wdsize * 2);
+	sport->dummy_buf = l1_data_sram_alloc(dummy_count * 2);
 #else
-	sport->dummy_buf = kmalloc(wdsize * 2, GFP_KERNEL);
+	sport->dummy_buf = kmalloc(dummy_count * 2, GFP_KERNEL);
 #endif
 	if (sport->dummy_buf == NULL) {
-		printk(KERN_ERR "Failed to allocate dummy buffer\n");
+		pr_err("Failed to allocate dummy buffer\n");
 		goto __error;
 	}
 
-	memset(sport->dummy_buf, 0, wdsize * 2);
-	sport_config_rx_dummy(sport);
-	sport_config_tx_dummy(sport);
+	memset(sport->dummy_buf, 0, dummy_count * 2);
+	ret = sport_config_rx_dummy(sport);
+	if (ret) {
+		pr_err("Failed to config rx dummy ring\n");
+		goto __error;
+	}
+	ret = sport_config_tx_dummy(sport);
+	if (ret) {
+		pr_err("Failed to config tx dummy ring\n");
+		goto __error;
+	}
 
 	return sport;
 __error:
@@ -851,6 +905,7 @@ __init_err1:
 	kfree(sport);
 	return NULL;
 }
+EXPORT_SYMBOL(sport_init);
 
 void sport_done(struct sport_device *sport)
 {
@@ -859,17 +914,21 @@ void sport_done(struct sport_device *sport)
 
 	sport_stop(sport);
 	if (sport->dma_rx_desc)
-		dma_free_coherent(NULL, sport->rx_desc_bytes, sport->dma_rx_desc, 0);
+		dma_free_coherent(NULL, sport->rx_desc_bytes,
+			sport->dma_rx_desc, 0);
 	if (sport->dma_tx_desc)
-		dma_free_coherent(NULL, sport->tx_desc_bytes, sport->dma_tx_desc, 0);
+		dma_free_coherent(NULL, sport->tx_desc_bytes,
+			sport->dma_tx_desc, 0);
 
 #if L1_DATA_A_LENGTH != 0
 	l1_data_sram_free(sport->dummy_rx_desc);
 	l1_data_sram_free(sport->dummy_tx_desc);
 	l1_data_sram_free(sport->dummy_buf);
 #else
-	dma_free_coherent(NULL, 2*sizeof(struct dmasg), sport->dummy_rx_desc, 0);
-	dma_free_coherent(NULL, 2*sizeof(struct dmasg), sport->dummy_tx_desc, 0);
+	dma_free_coherent(NULL, 2*sizeof(struct dmasg),
+		sport->dummy_rx_desc, 0);
+	dma_free_coherent(NULL, 2*sizeof(struct dmasg),
+		sport->dummy_tx_desc, 0);
 	kfree(sport->dummy_buf);
 #endif
 	free_dma(sport->dma_rx_chan);
@@ -877,8 +936,9 @@ void sport_done(struct sport_device *sport)
 	free_irq(sport->err_irq, sport);
 
 	kfree(sport);
+		sport = NULL;
 }
-
+EXPORT_SYMBOL(sport_done);
 /*
 * It is only used to send several bytes when dma is not enabled
  * sport controller is configured but not enabled.
@@ -893,7 +953,7 @@ int sport_send_and_recv(struct sport_device *sport, u8 *out_data, \
 	unsigned long wait = 0;
 
 	pr_debug("%s enter, out_data:%p, in_data:%p len:%d\n", \
-			__FUNCTION__, out_data, in_data, len);
+			__func__, out_data, in_data, len);
 	pr_debug("tcr1:0x%04x, tcr2:0x%04x, tclkdiv:0x%04x, tfsdiv:0x%04x\n"
 			"mcmc1:0x%04x, mcmc2:0x%04x\n",
 			sport->regs->tcr1, sport->regs->tcr2,
@@ -940,7 +1000,7 @@ int sport_send_and_recv(struct sport_device *sport, u8 *out_data, \
 	while (!(status & TXHRE)) {
 		pr_debug("sport status:0x%04x\n", status);
 		udelay(1);
-		status = *(volatile unsigned short*)&sport->regs->stat;
+		status = *(unsigned short *)&sport->regs->stat;
 		if (wait++ > 1000)
 			goto __over;
 	}
@@ -964,3 +1024,9 @@ __over:
 
 	return 0;
 }
+EXPORT_SYMBOL(sport_send_and_recv);
+
+MODULE_AUTHOR("Roy Huang");
+MODULE_DESCRIPTION("SPORT driver for ADI Blackfin");
+MODULE_LICENSE("GPL");
+

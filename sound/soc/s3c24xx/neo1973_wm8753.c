@@ -24,6 +24,7 @@
 #include <sound/soc-dapm.h>
 #include <sound/tlv.h>
 
+#include <asm/mach-types.h>
 #include <asm/hardware/scoop.h>
 #include <mach/regs-clock.h>
 #include <mach/regs-gpio.h>
@@ -58,7 +59,7 @@
 #define NEO_CAPTURE_HEADSET		7
 #define NEO_CAPTURE_BLUETOOTH		8
 
-static struct snd_soc_machine neo1973;
+static struct snd_soc_card neo1973;
 static struct i2c_client *i2c;
 
 static int neo1973_hifi_hw_params(struct snd_pcm_substream *substream,
@@ -547,7 +548,6 @@ static int neo1973_wm8753_init(struct snd_soc_codec *codec)
 static struct snd_soc_dai bt_dai = {
 	.name = "Bluetooth",
 	.id = 0,
-	.type = SND_SOC_DAI_PCM,
 	.playback = {
 		.channels_min = 1,
 		.channels_max = 1,
@@ -578,8 +578,9 @@ static struct snd_soc_dai_link neo1973_dai[] = {
 },
 };
 
-static struct snd_soc_machine neo1973 = {
+static struct snd_soc_card neo1973 = {
 	.name = "neo1973",
+	.platform = &s3c24xx_soc_platform,
 	.dai_link = neo1973_dai,
 	.num_links = ARRAY_SIZE(neo1973_dai),
 };
@@ -590,8 +591,7 @@ static struct wm8753_setup_data neo1973_wm8753_setup = {
 };
 
 static struct snd_soc_device neo1973_snd_devdata = {
-	.machine = &neo1973,
-	.platform = &s3c24xx_soc_platform,
+	.card = &neo1973,
 	.codec_dev = &soc_codec_dev_wm8753,
 	.codec_data = &neo1973_wm8753_setup,
 };
@@ -601,6 +601,8 @@ static int lm4857_i2c_probe(struct i2c_client *client,
 {
 	DBG("Entered %s\n", __func__);
 
+	i2c = client;
+
 	lm4857_write_regs();
 	return 0;
 }
@@ -608,6 +610,8 @@ static int lm4857_i2c_probe(struct i2c_client *client,
 static int lm4857_i2c_remove(struct i2c_client *client)
 {
 	DBG("Entered %s\n", __func__);
+
+	i2c = NULL;
 
 	return 0;
 }
@@ -648,7 +652,7 @@ static void lm4857_shutdown(struct i2c_client *dev)
 }
 
 static const struct i2c_device_id lm4857_i2c_id[] = {
-        { "neo1973_lm4857", 0 },
+	{ "neo1973_lm4857", 0 },
 	{ }
 };
 
@@ -666,54 +670,18 @@ static struct i2c_driver lm4857_i2c_driver = {
 };
 
 static struct platform_device *neo1973_snd_device;
-static struct i2c_client *lm4857_client;
-
-static int __init neo1973_add_lm4857_device(struct platform_device *pdev,
-					    int i2c_bus,
-					    unsigned short i2c_address)
-{
-	struct i2c_board_info info;
-	struct i2c_adapter *adapter;
-	struct i2c_client *client;
-	int ret;
-
-	ret = i2c_add_driver(&lm4857_i2c_driver);
-	if (ret != 0) {
-		dev_err(&pdev->dev, "can't add lm4857 driver\n");
-		return ret;
-	}
-
-	memset(&info, 0, sizeof(struct i2c_board_info));
-	info.addr = i2c_address;
-	strlcpy(info.type, "neo1973_lm4857", I2C_NAME_SIZE);
-
-	adapter = i2c_get_adapter(i2c_bus);
-	if (!adapter) {
-		dev_err(&pdev->dev, "can't get i2c adapter %d\n", i2c_bus);
-		goto err_driver;
-	}
-
-	client = i2c_new_device(adapter, &info);
-	i2c_put_adapter(adapter);
-	if (!client) {
-		dev_err(&pdev->dev, "can't add lm4857 device at 0x%x\n",
-			(unsigned int)info.addr);
-		goto err_driver;
-	}
-
-	lm4857_client = client;
-	return 0;
-
-err_driver:
-	i2c_del_driver(&lm4857_i2c_driver);
-	return -ENODEV;
-}
 
 static int __init neo1973_init(void)
 {
 	int ret;
 
 	DBG("Entered %s\n", __func__);
+
+	if (!machine_is_neo1973_gta01()) {
+		printk(KERN_INFO
+			"Only GTA01 hardware supported by ASoC driver\n");
+		return -ENODEV;
+	}
 
 	neo1973_snd_device = platform_device_alloc("soc-audio", -1);
 	if (!neo1973_snd_device)
@@ -728,8 +696,8 @@ static int __init neo1973_init(void)
 		return ret;
 	}
 
-	ret = neo1973_add_lm4857_device(neo1973_snd_device,
-					0, 0x7C);
+	ret = i2c_add_driver(&lm4857_i2c_driver);
+
 	if (ret != 0)
 		platform_device_unregister(neo1973_snd_device);
 
@@ -740,7 +708,6 @@ static void __exit neo1973_exit(void)
 {
 	DBG("Entered %s\n", __func__);
 
-	i2c_unregister_device(lm4857_client);
 	i2c_del_driver(&lm4857_i2c_driver);
 	platform_device_unregister(neo1973_snd_device);
 }

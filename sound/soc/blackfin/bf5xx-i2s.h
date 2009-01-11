@@ -9,8 +9,6 @@
 #ifndef _BF5XX_I2S_H
 #define _BF5XX_I2S_H
 
-#define NUM_SPORT_I2S	4 /* lrg - must be cpu dependant way to select this */
-
-extern struct snd_soc_cpu_dai bf5xx_i2s_dai[NUM_SPORT_I2S];
+extern struct snd_soc_dai bf5xx_i2s_dai;
 
 #endif

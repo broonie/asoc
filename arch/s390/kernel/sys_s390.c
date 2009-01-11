@@ -103,25 +103,6 @@ out:
 	return error;
 }
 
-#ifndef CONFIG_64BIT
-struct sel_arg_struct {
-	unsigned long n;
-	fd_set __user *inp, *outp, *exp;
-	struct timeval __user *tvp;
-};
-
-asmlinkage long old_select(struct sel_arg_struct __user *arg)
-{
-	struct sel_arg_struct a;
-
-	if (copy_from_user(&a, arg, sizeof(a)))
-		return -EFAULT;
-	/* sys_select() does the appropriate kernel locking */
-	return sys_select(a.n, a.inp, a.outp, a.exp, a.tvp);
-
-}
-#endif /* CONFIG_64BIT */
-
 /*
  * sys_ipc() is the de-multiplexer for the SysV IPC calls..
  *
@@ -198,7 +179,7 @@ asmlinkage long s390x_newuname(struct new_utsname __user *name)
 {
 	int ret = sys_newuname(name);
 
-	if (current->personality == PER_LINUX32 && !ret) {
+	if (personality(current->personality) == PER_LINUX32 && !ret) {
 		ret = copy_to_user(name->machine, "s390\0\0\0\0", 8);
 		if (ret) ret = -EFAULT;
 	}

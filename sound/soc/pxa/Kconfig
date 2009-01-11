@@ -1,6 +1,7 @@
 config SND_PXA2XX_SOC
 	tristate "SoC Audio for the Intel PXA2xx chip"
 	depends on ARCH_PXA
+	select SND_PXA2XX_LIB
 	help
 	  Say Y or M if you want to add support for codecs attached to
 	  the PXA2xx AC97, I2S or SSP interface. You will also need
@@ -9,6 +10,8 @@ config SND_PXA2XX_SOC
 config SND_PXA2XX_SOC_AC97
 	tristate
 	select AC97_BUS
+	select SND_ARM
+	select SND_PXA2XX_LIB_AC97
 	select SND_SOC_AC97_BUS
 
 config SND_PXA2XX_SOC_I2S
@@ -20,7 +23,6 @@ config SND_PXA2XX_SOC_SSP
 
 config SND_PXA_SOC_SSP
 	tristate
-	select PXA_SSP
 
 config SND_PXA2XX_SOC_CORGI
 	tristate "SoC Audio support for Sharp Zaurus SL-C7x0"
@@ -177,6 +179,15 @@ config SND_PXA2xx_SOC_MAINSTONE_WM9712
 	help
 	  Say Y if you want to add support for SoC voice audio on Mainstone
 	  with the WM9712.
+
+config SND_PXA2XX_SOC_PALM27X
+	bool "SoC Audio support for Palm T|X, T5 and LifeDrive"
+	depends on SND_PXA2XX_SOC && (MACH_PALMLD || MACH_PALMTX || MACH_PALMT5)
+	select SND_PXA2XX_SOC_AC97
+	select SND_SOC_WM9712
+	help
+	  Say Y if you want to add support for SoC audio on
+	  Palm T|X, T5 or LifeDrive handheld computer.
 
 config SND_SOC_ZYLONITE
 	tristate "SoC Audio support for Marvell Zylonite"

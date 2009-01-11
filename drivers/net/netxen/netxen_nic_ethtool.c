@@ -38,7 +38,6 @@
 #include <asm/io.h>
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
-#include <linux/version.h>
 
 #include "netxen_nic.h"
 #include "netxen_nic_hw.h"
@@ -276,11 +275,11 @@ netxen_nic_set_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 	} else
 		return -EOPNOTSUPP;
 
-	if (netif_running(dev)) {
-		dev->stop(dev);
-		dev->open(dev);
-	}
-	return 0;
+	if (!netif_running(dev))
+		return 0;
+
+	dev->netdev_ops->ndo_stop(dev);
+	return dev->netdev_ops->ndo_open(dev);
 }
 
 static int netxen_nic_get_regs_len(struct net_device *dev)

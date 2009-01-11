@@ -29,7 +29,6 @@
 
 #include "wm8750.h"
 
-#define AUDIO_NAME "WM8750"
 #define WM8750_VERSION "0.12"
 
 /* codec private data */
@@ -615,7 +614,8 @@ static int wm8750_set_dai_fmt(struct snd_soc_dai *codec_dai,
 }
 
 static int wm8750_pcm_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+				struct snd_pcm_hw_params *params,
+				struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -710,8 +710,6 @@ struct snd_soc_dai wm8750_dai = {
 		.formats = WM8750_FORMATS,},
 	.ops = {
 		.hw_params = wm8750_pcm_hw_params,
-	},
-	.dai_ops = {
 		.digital_mute = wm8750_mute,
 		.set_fmt = wm8750_set_dai_fmt,
 		.set_sysclk = wm8750_set_dai_sysclk,
@@ -820,7 +818,7 @@ static int wm8750_init(struct snd_soc_device *socdev)
 
 	wm8750_add_controls(codec);
 	wm8750_add_widgets(codec);
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
 		printk(KERN_ERR "wm8750: failed to register card\n");
 		goto card_err;
@@ -991,7 +989,7 @@ static int wm8750_probe(struct platform_device *pdev)
 	struct wm8750_setup_data *setup = socdev->codec_data;
 	struct snd_soc_codec *codec;
 	struct wm8750_priv *wm8750;
-	int ret = 0;
+	int ret;
 
 	pr_info("WM8750 Audio Codec %s", WM8750_VERSION);
 	codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);
@@ -1011,6 +1009,8 @@ static int wm8750_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&codec->dapm_paths);
 	wm8750_socdev = socdev;
 	INIT_DELAYED_WORK(&codec->delayed_work, wm8750_work);
+
+	ret = -ENODEV;
 
 #if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	if (setup->i2c_address) {
@@ -1084,6 +1084,18 @@ struct snd_soc_codec_device soc_codec_dev_wm8750 = {
 	.resume =	wm8750_resume,
 };
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8750);
+
+static int __init wm8750_modinit(void)
+{
+	return snd_soc_register_dai(&wm8750_dai);
+}
+module_init(wm8750_modinit);
+
+static void __exit wm8750_exit(void)
+{
+	snd_soc_unregister_dai(&wm8750_dai);
+}
+module_exit(wm8750_exit);
 
 MODULE_DESCRIPTION("ASoC WM8750 driver");
 MODULE_AUTHOR("Liam Girdwood");
