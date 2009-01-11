@@ -39,27 +39,27 @@ struct snd_soc_codec_device soc_codec_dev_wm8950;
  * using 2 wire for device control, so we cache them instead.
  */
 static const u16 wm8950_reg[WM8950_CACHEREGNUM] = {
-    0x0000, 0x0000, 0x0000, 0x0000,
-    0x0050, 0x0000, 0x0140, 0x0000,
-    0x0000, 0x0000, 0x0000, 0x00ff,
-    0x0000, 0x0000, 0x0100, 0x00ff,
-    0x0000, 0x0000, 0x012c, 0x002c,
-    0x002c, 0x002c, 0x002c, 0x0000,
-    0x0032, 0x0000, 0x0000, 0x0000,
-    0x0000, 0x0000, 0x0000, 0x0000,
-    0x0038, 0x000b, 0x0032, 0x0000,
-    0x0008, 0x000c, 0x0093, 0x00e9,
-    0x0000, 0x0000, 0x0000, 0x0000,
-    0x0003, 0x0010, 0x0000, 0x0000,
-    0x0000, 0x0002, 0x0000, 0x0000,
-    0x0000, 0x0000, 0x0039, 0x0000,
-    0x0000,
+	0x0000, 0x0000, 0x0000, 0x0000,
+	0x0050, 0x0000, 0x0140, 0x0000,
+	0x0000, 0x0000, 0x0000, 0x00ff,
+	0x0000, 0x0000, 0x0100, 0x00ff,
+	0x0000, 0x0000, 0x012c, 0x002c,
+	0x002c, 0x002c, 0x002c, 0x0000,
+	0x0032, 0x0000, 0x0000, 0x0000,
+	0x0000, 0x0000, 0x0000, 0x0000,
+	0x0038, 0x000b, 0x0032, 0x0000,
+	0x0008, 0x000c, 0x0093, 0x00e9,
+	0x0000, 0x0000, 0x0000, 0x0000,
+	0x0003, 0x0010, 0x0000, 0x0000,
+	0x0000, 0x0002, 0x0000, 0x0000,
+	0x0000, 0x0000, 0x0039, 0x0000,
+	0x0000,
 };
 
 /*
  * read wm8950 register cache
  */
-static inline unsigned int wm8950_read_reg_cache(struct snd_soc_codec * codec,
+static inline unsigned int wm8950_read_reg_cache(struct snd_soc_codec *codec,
 	unsigned int reg)
 {
 	u16 *cache = codec->reg_cache;
@@ -97,7 +97,7 @@ static int wm8950_write(struct snd_soc_codec *codec, unsigned int reg,
 	data[0] = (reg << 1) | ((value >> 8) & 0x0001);
 	data[1] = value & 0x00ff;
 
-	wm8950_write_reg_cache (codec, reg, value);
+	wm8950_write_reg_cache(codec, reg, value);
 	if (codec->hw_write(codec->control_data, data, 2) == 2)
 		return 0;
 	else
@@ -128,7 +128,7 @@ static const struct soc_enum wm8950_enum[] = {
 	SOC_ENUM_SINGLE(WM8950_EQ3,  5, 4, wm8950_eq3),
 	SOC_ENUM_SINGLE(WM8950_EQ4,  8, 2, wm8950_bw),
 	SOC_ENUM_SINGLE(WM8950_EQ4,  5, 4, wm8950_eq4),
-	
+
 	SOC_ENUM_SINGLE(WM8950_EQ5,  5, 4, wm8950_eq5),
 	SOC_ENUM_SINGLE(WM8950_ALC3,  8, 2, wm8950_alc),
 };
@@ -188,16 +188,8 @@ SOC_SINGLE("Capture Boost(+20dB)", WM8950_ADCBOOST,  8, 1, 0),
 /* add non dapm controls */
 static int wm8950_add_controls(struct snd_soc_codec *codec)
 {
-	int err, i;
-
-	for (i = 0; i < ARRAY_SIZE(wm8950_snd_controls); i++) {
-		err = snd_ctl_add(codec->card,
-				snd_soc_cnew(&wm8950_snd_controls[i],codec, NULL));
-		if (err < 0)
-			return err;
-	}
-
-	return 0;
+	return snd_soc_add_controls(codec, wm8950_snd_controls,
+				    ARRAY_SIZE(wm8950_snd_controls));
 }
 
 /* AUX Input boost vol */
@@ -295,17 +287,19 @@ static int wm8950_set_dai_pll(struct snd_soc_dai *codec_dai,
 	int i;
 	u16 reg;
 
-	if(freq_in == 0 || freq_out == 0) {
+	if (freq_in == 0 || freq_out == 0) {
 		reg = wm8950_read_reg_cache(codec, WM8950_POWER1);
 		wm8950_write(codec, WM8950_POWER1, reg & 0x1df);
 		return 0;
 	}
 
-	for(i = 0; i < ARRAY_SIZE(pll); i++) {
+	for (i = 0; i < ARRAY_SIZE(pll); i++) {
 		if (freq_in == pll[i].in_hz && freq_out == pll[i].out_hz) {
-			wm8950_write(codec, WM8950_PLLN, (pll[i].pre << 4) | pll[i].n);
+			wm8950_write(codec, WM8950_PLLN,
+				     (pll[i].pre << 4) | pll[i].n);
 			wm8950_write(codec, WM8950_PLLK1, pll[i].k >> 18);
-			wm8950_write(codec, WM8950_PLLK1, (pll[i].k >> 9) && 0x1ff);
+			wm8950_write(codec, WM8950_PLLK1,
+				     (pll[i].k >> 9) && 0x1ff);
 			wm8950_write(codec, WM8950_PLLK1, pll[i].k && 0x1ff);
 			reg = wm8950_read_reg_cache(codec, WM8950_POWER1);
 			wm8950_write(codec, WM8950_POWER1, reg | 0x020);
@@ -406,7 +400,8 @@ static int wm8950_set_dai_fmt(struct snd_soc_dai *codec_dai,
 }
 
 static int wm8950_pcm_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+				struct snd_pcm_hw_params *params,
+				struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -479,9 +474,7 @@ static int wm8950_set_bias_level(struct snd_soc_codec *codec,
 	return 0;
 }
 
-#define WM8950_RATES (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |\
-		SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 | SNDRV_PCM_RATE_44100 | \
-		SNDRV_PCM_RATE_48000)
+#define WM8950_RATES (SNDRV_PCM_RATE_8000_48000)
 
 #define WM8950_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 	SNDRV_PCM_FMTBIT_S24_LE)
@@ -496,8 +489,6 @@ struct snd_soc_dai wm8950_dai = {
 		.formats = WM8950_FORMATS,},
 	.ops = {
 		.hw_params = wm8950_pcm_hw_params,
-	},
-	.dai_ops = {
 		.set_fmt = wm8950_set_dai_fmt,
 		.set_clkdiv = wm8950_set_dai_clkdiv,
 		.set_pll = wm8950_set_dai_pll,
@@ -559,8 +550,8 @@ static int wm8950_init(struct snd_soc_device *socdev)
 
 	/* register pcms */
 	ret = snd_soc_new_pcms(socdev, SNDRV_DEFAULT_IDX1, SNDRV_DEFAULT_STR1);
-	if(ret < 0) {
-		printk(KERN_ERR "wm8950: failed to create pcms\n");
+	if (ret < 0) {
+		pr_err("wm8950: failed to create pcms\n");
 		goto pcm_err;
 	}
 
@@ -568,9 +559,9 @@ static int wm8950_init(struct snd_soc_device *socdev)
 	wm8950_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	wm8950_add_controls(codec);
 	wm8950_add_widgets(codec);
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
-		printk(KERN_ERR "wm8950: failed to register card\n");
+		pr_err("wm8950: failed to register card\n");
 		goto card_err;
 	}
 	return ret;
@@ -626,13 +617,13 @@ static int wm8950_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 	codec->control_data = i2c;
 
 	ret = i2c_attach_client(i2c);
-	if(ret < 0) {
+	if (ret < 0) {
 		pr_err("failed to attach codec at addr %x\n", addr);
 		goto err;
 	}
 
 	ret = wm8950_init(socdev);
-	if(ret < 0) {
+	if (ret < 0) {
 		pr_err("failed to initialise WM8950\n");
 		goto err;
 	}
@@ -721,7 +712,7 @@ static int wm8950_remove(struct platform_device *pdev)
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
+#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
 	i2c_del_driver(&wm8950_i2c_driver);
 #endif
 	kfree(codec);
@@ -735,8 +726,19 @@ struct snd_soc_codec_device soc_codec_dev_wm8950 = {
 	.suspend = 	wm8950_suspend,
 	.resume =	wm8950_resume,
 };
-
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8950);
+
+static int __init wm8950_modinit(void)
+{
+	return snd_soc_register_dai(&wm8950_dai);
+}
+module_init(wm8950_modinit);
+
+static void __exit wm8950_exit(void)
+{
+	snd_soc_unregister_dai(&wm8950_dai);
+}
+module_exit(wm8950_exit);
 
 MODULE_DESCRIPTION("ASoC WM8950 driver");
 MODULE_AUTHOR("Liam Girdwood");
