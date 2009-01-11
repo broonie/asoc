@@ -674,13 +674,13 @@ EXPORT_SYMBOL_GPL(soc_codec_dev_wm8711);
 
 static int __init wm8711_modinit(void)
 {
-        return snd_soc_register_dai(&wm8711_dai);
+	return snd_soc_register_dai(&wm8711_dai);
 }
 module_init(wm8711_modinit);
 
 static void __exit wm8711_exit(void)
 {
-        snd_soc_unregister_dai(&wm8711_dai);
+	snd_soc_unregister_dai(&wm8711_dai);
 }
 module_exit(wm8711_exit);
 
