@@ -32,30 +32,27 @@
 #define AUDIO_NAME "wm8980"
 #define WM8980_VERSION "0.3"
 
-
-struct snd_soc_codec_device soc_codec_dev_wm8980;
-
 /*
  * wm8980 register cache
  * We can't read the WM8980 register space when we are
  * using 2 wire for device control, so we cache them instead.
  */
 static const u16 wm8980_reg[WM8980_CACHEREGNUM] = {
-    0x0000, 0x0000, 0x0000, 0x0000,
-    0x0050, 0x0000, 0x0140, 0x0000,
-    0x0000, 0x0000, 0x0000, 0x00ff,
-    0x00ff, 0x0000, 0x0100, 0x00ff,
-    0x00ff, 0x0000, 0x012c, 0x002c,
-    0x002c, 0x002c, 0x002c, 0x0000,
-    0x0032, 0x0000, 0x0000, 0x0000,
-    0x0000, 0x0000, 0x0000, 0x0000,
-    0x0038, 0x000b, 0x0032, 0x0000,
-    0x0008, 0x000c, 0x0093, 0x00e9,
-    0x0000, 0x0000, 0x0000, 0x0000,
-    0x0033, 0x0010, 0x0010, 0x0100,
-    0x0100, 0x0002, 0x0001, 0x0001,
-    0x0039, 0x0039, 0x0039, 0x0039,
-    0x0001, 0x0001,
+	0x0000, 0x0000, 0x0000, 0x0000,
+	0x0050, 0x0000, 0x0140, 0x0000,
+	0x0000, 0x0000, 0x0000, 0x00ff,
+	0x00ff, 0x0000, 0x0100, 0x00ff,
+	0x00ff, 0x0000, 0x012c, 0x002c,
+	0x002c, 0x002c, 0x002c, 0x0000,
+	0x0032, 0x0000, 0x0000, 0x0000,
+	0x0000, 0x0000, 0x0000, 0x0000,
+	0x0038, 0x000b, 0x0032, 0x0000,
+	0x0008, 0x000c, 0x0093, 0x00e9,
+	0x0000, 0x0000, 0x0000, 0x0000,
+	0x0033, 0x0010, 0x0010, 0x0100,
+	0x0100, 0x0002, 0x0001, 0x0001,
+	0x0039, 0x0039, 0x0039, 0x0039,
+	0x0001, 0x0001,
 };
 
 /*
@@ -487,7 +484,8 @@ static int wm8980_set_dai_fmt(struct snd_soc_dai *codec_dai,
 }
 
 static int wm8980_hw_params(struct snd_pcm_substream *substream,
-	struct snd_pcm_hw_params *params)
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
@@ -632,8 +630,6 @@ struct snd_soc_dai wm8980_dai = {
 		.formats = WM8980_FORMATS,},
 	.ops = {
 		.hw_params = wm8980_hw_params,
-	},
-	.dai_ops = {
 		.digital_mute = wm8980_mute,
 		.set_fmt = wm8980_set_dai_fmt,
 		.set_clkdiv = wm8980_set_dai_clkdiv,
@@ -705,7 +701,7 @@ static int wm8980_init(struct snd_soc_device* socdev)
 	wm8980_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	wm8980_add_controls(codec);
 	wm8980_add_widgets(codec);
-	ret = snd_soc_register_card(socdev);
+	ret = snd_soc_init_card(socdev);
 	if (ret < 0) {
       	printk(KERN_ERR "wm8980: failed to register card\n");
 		goto card_err;
@@ -875,8 +871,19 @@ struct snd_soc_codec_device soc_codec_dev_wm8980 = {
 	.suspend = 	wm8980_suspend,
 	.resume =	wm8980_resume,
 };
-
 EXPORT_SYMBOL_GPL(soc_codec_dev_wm8980);
+
+static int __init wm8980_modinit(void)
+{
+	return snd_soc_register_dai(&wm8980_dai);
+}
+module_init(wm8980_modinit);
+
+static void __exit wm8980_exit(void)
+{
+	snd_soc_unregister_dai(&wm8980_dai);
+}
+module_exit(wm8980_exit);
 
 MODULE_DESCRIPTION("ASoC WM8980 driver");
 MODULE_AUTHOR("Mike Arthur");
