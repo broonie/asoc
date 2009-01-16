@@ -221,7 +221,7 @@ static unsigned int ac97_read(struct snd_soc_codec *codec, unsigned int reg)
 	default:
 		reg = reg >> 1;
 
-		if (reg > (ARRAY_SIZE(wm9705_reg)))
+		if (reg >= (ARRAY_SIZE(wm9705_reg)))
 			return -EIO;
 
 		return cache[reg];
@@ -235,7 +235,7 @@ static int ac97_write(struct snd_soc_codec *codec, unsigned int reg,
 
 	soc_ac97_ops.write(codec->ac97, reg, val);
 	reg = reg >> 1;
-	if (reg <= (ARRAY_SIZE(wm9705_reg)))
+	if (reg < (ARRAY_SIZE(wm9705_reg)))
 		cache[reg] = val;
 
 	return 0;
@@ -327,15 +327,12 @@ static int wm9705_soc_probe(struct platform_device *pdev)
 	codec = socdev->codec;
 	mutex_init(&codec->mutex);
 
-	codec->reg_cache =
-		kzalloc(sizeof(u16) * ARRAY_SIZE(wm9705_reg), GFP_KERNEL);
+	codec->reg_cache = kmemdup(wm9705_reg, sizeof(wm9705_reg), GFP_KERNEL);
 	if (codec->reg_cache == NULL) {
 		ret = -ENOMEM;
 		goto cache_err;
 	}
-	memcpy(codec->reg_cache, wm9705_reg,
-		sizeof(u16) * ARRAY_SIZE(wm9705_reg));
-	codec->reg_cache_size = sizeof(u16) * ARRAY_SIZE(wm9705_reg);
+	codec->reg_cache_size = sizeof(wm9705_reg);
 	codec->reg_cache_step = 2;
 
 	codec->name = "WM9705";
