@@ -186,6 +186,12 @@ static int __init mainstone_init(void)
 	if (ret)
 		platform_device_put(mainstone_snd_device);
 
+	/* I2S SoC master */
+	pxa_gpio_mode(GPIO29_SDATA_IN_I2S_MD);
+	pxa_gpio_mode(GPIO30_SDATA_OUT_I2S_MD);
+	pxa_gpio_mode(GPIO31_SYNC_I2S_MD);
+	pxa_gpio_mode(GPIO28_BITCLK_OUT_I2S_MD);
+
 	return ret;
 }
 
