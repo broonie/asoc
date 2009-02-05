@@ -222,6 +222,11 @@ static int mainstone_hifi_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0)
 		return ret;
 
+	if (fmt == SND_SOC_DAIFMT_CBM_CFS)
+		pxa_gpio_mode(GPIO28_BITCLK_IN_I2S_MD);
+	else
+		pxa_gpio_mode(GPIO28_BITCLK_OUT_I2S_MD);
+
 	/* set the codec system clock for DAC and ADC */
 	ret = codec_dai->dai_ops.set_sysclk(codec_dai, WM8753_MCLK, pll_out,
 		SND_SOC_CLOCK_IN);
@@ -529,6 +534,11 @@ static int __init mainstone_init(void)
 	pxa_gpio_mode(GPIO13_SSP2TX_MD);
 	pxa_gpio_mode(GPIO22_SSP2CLKS_MD);
 	pxa_gpio_mode(GPIO88_SSP2FRMS_MD);
+
+	/* I2S SoC */
+	pxa_gpio_mode(GPIO29_SDATA_IN_I2S_MD);
+	pxa_gpio_mode(GPIO30_SDATA_OUT_I2S_MD);
+	pxa_gpio_mode(GPIO31_SYNC_I2S_MD);
 
 	return ret;
 }
