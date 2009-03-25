@@ -45,9 +45,9 @@
 
 #define WM8960_LINPATH		0x20
 #define WM8960_RINPATH		0x21
-#define WM8960_LOUTMIX1		0x22
+#define WM8960_LOUTMIX		0x22
 
-#define WM8960_ROUTMIX2		0x25
+#define WM8960_ROUTMIX		0x25
 #define WM8960_MONOMIX1		0x26
 #define WM8960_MONOMIX2		0x27
 #define WM8960_LOUT2		0x28
@@ -111,11 +111,17 @@
 #define WM8960_OPCLK_DIV_5_5		(4 << 0)
 #define WM8960_OPCLK_DIV_6		(5 << 0)
 
-struct wm8960_setup_data {
-	unsigned short i2c_address;
-};
-
 extern struct snd_soc_dai wm8960_dai;
 extern struct snd_soc_codec_device soc_codec_dev_wm8960;
+
+#define WM8960_DRES_400R 0
+#define WM8960_DRES_200R 1
+#define WM8960_DRES_600R 2
+#define WM8960_DRES_150R 3
+#define WM8960_DRES_MAX  3
+
+struct wm8960_data {
+	int dres;
+};
 
 #endif
