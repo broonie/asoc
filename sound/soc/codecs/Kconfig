@@ -44,6 +44,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_WM8976 if I2C
 	select SND_SOC_WM8978 if I2C
 	select SND_SOC_WM8980 if I2C
+	select SND_SOC_WM8988 if SND_SOC_I2C_AND_SPI
 	select SND_SOC_WM8990 if I2C
 	select SND_SOC_WM8991 if I2C
 	select SND_SOC_WM9705 if SND_SOC_AC97_BUS
@@ -183,6 +184,9 @@ config SND_SOC_WM8978
 	tristate
 
 config SND_SOC_WM8980
+	tristate
+
+config SND_SOC_WM8988
 	tristate
 
 config SND_SOC_WM8990
