@@ -430,7 +430,7 @@ static int wm8960_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	u16 iface = wm8960_read(codec, WM8960_IFACE1) & 0xfff3;
 
 	/* bit size */
@@ -685,14 +685,6 @@ static int wm8960_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
 	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE | \
 	SNDRV_PCM_FMTBIT_S24_LE)
 
-static struct snd_soc_dai_ops wm8960_dai_ops = {
-	.hw_params = wm8960_hw_params,
-	.digital_mute = wm8960_mute,
-	.set_fmt = wm8960_set_dai_fmt,
-	.set_clkdiv = wm8960_set_dai_clkdiv,
-	.set_pll = wm8960_set_dai_pll,
-};
-
 struct snd_soc_dai wm8960_dai = {
 	.name = "WM8960",
 	.playback = {
@@ -707,7 +699,13 @@ struct snd_soc_dai wm8960_dai = {
 		.channels_max = 2,
 		.rates = WM8960_RATES,
 		.formats = WM8960_FORMATS,},
-	.ops = &wm8960_dai_ops,
+	.ops = {
+		 .hw_params = wm8960_hw_params,
+		 .digital_mute = wm8960_mute,
+		 .set_fmt = wm8960_set_dai_fmt,
+		 .set_clkdiv = wm8960_set_dai_clkdiv,
+		 .set_pll = wm8960_set_dai_pll,
+	 },
 };
 EXPORT_SYMBOL_GPL(wm8960_dai);
 
@@ -716,7 +714,7 @@ EXPORT_SYMBOL_GPL(wm8960_dai);
 static int wm8960_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 
 	wm8960_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
@@ -725,7 +723,7 @@ static int wm8960_suspend(struct platform_device *pdev, pm_message_t state)
 static int wm8960_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->card->codec;
+	struct snd_soc_codec *codec = socdev->codec;
 	int i;
 	u8 data[2];
 	u16 *cache = codec->reg_cache;
@@ -755,7 +753,7 @@ static int wm8960_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	socdev->card->codec = wm8960_codec;
+	socdev->codec = wm8960_codec;
 	codec = wm8960_codec;
 
 	/* register pcms */
