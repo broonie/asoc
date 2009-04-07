@@ -706,6 +706,7 @@ struct snd_soc_dai wm8960_dai = {
 		 .set_clkdiv = wm8960_set_dai_clkdiv,
 		 .set_pll = wm8960_set_dai_pll,
 	 },
+	.symmetric_rates = 1,
 };
 EXPORT_SYMBOL_GPL(wm8960_dai);
 
