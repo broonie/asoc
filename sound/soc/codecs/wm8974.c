@@ -373,8 +373,8 @@ static int wm8974_set_dai_pll(struct snd_soc_dai *codec_dai,
 		if (freq_in == pll[i].in_hz && freq_out == pll[i].out_hz) {
 			wm8974_write(codec, WM8974_PLLN, (pll[i].pre << 4) | pll[i].n);
 			wm8974_write(codec, WM8974_PLLK1, pll[i].k >> 18);
-			wm8974_write(codec, WM8974_PLLK1, (pll[i].k >> 9) && 0x1ff);
-			wm8974_write(codec, WM8974_PLLK1, pll[i].k && 0x1ff);
+			wm8974_write(codec, WM8974_PLLK2, (pll[i].k >> 9) & 0x1ff);
+			wm8974_write(codec, WM8974_PLLK3, pll[i].k & 0x1ff);
 			reg = wm8974_read_reg_cache(codec, WM8974_POWER1);
 			wm8974_write(codec, WM8974_POWER1, reg | 0x020);
 			return 0;
@@ -394,23 +394,23 @@ static int wm8974_set_dai_clkdiv(struct snd_soc_dai *codec_dai,
 
 	switch (div_id) {
 	case WM8974_OPCLKDIV:
-		reg = wm8974_read_reg_cache(codec, WM8974_GPIO & 0x1cf);
+		reg = wm8974_read_reg_cache(codec, WM8974_GPIO) & 0x1cf; 
 		wm8974_write(codec, WM8974_GPIO, reg | div);
 		break;
 	case WM8974_MCLKDIV:
-		reg = wm8974_read_reg_cache(codec, WM8974_CLOCK & 0x1f);
+		reg = wm8974_read_reg_cache(codec, WM8974_CLOCK) & 0x11f;
 		wm8974_write(codec, WM8974_CLOCK, reg | div);
 		break;
 	case WM8974_ADCCLK:
-		reg = wm8974_read_reg_cache(codec, WM8974_ADC & 0x1f7);
+		reg = wm8974_read_reg_cache(codec, WM8974_ADC) & 0x1f7;
 		wm8974_write(codec, WM8974_ADC, reg | div);
 		break;
 	case WM8974_DACCLK:
-		reg = wm8974_read_reg_cache(codec, WM8974_DAC & 0x1f7);
+		reg = wm8974_read_reg_cache(codec, WM8974_DAC) & 0x1f7;
 		wm8974_write(codec, WM8974_DAC, reg | div);
 		break;
 	case WM8974_BCLKDIV:
-		reg = wm8974_read_reg_cache(codec, WM8974_CLOCK & 0x1e3);
+		reg = wm8974_read_reg_cache(codec, WM8974_CLOCK) & 0x1e3;
 		wm8974_write(codec, WM8974_CLOCK, reg | div);
 		break;
 	default:
