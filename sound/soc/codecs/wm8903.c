@@ -1521,6 +1521,7 @@ struct snd_soc_dai wm8903_dai = {
 		 .set_fmt = wm8903_set_dai_fmt,
 		 .set_sysclk = wm8903_set_dai_sysclk
 	}
+	.symmetric_rates = 1,
 };
 EXPORT_SYMBOL_GPL(wm8903_dai);
 
