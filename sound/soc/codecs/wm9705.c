@@ -20,6 +20,8 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 
+#include "wm9705.h"
+
 /*
  * WM9705 register cache
  */
@@ -57,8 +59,8 @@ static const struct snd_kcontrol_new wm9705_snd_ac97_controls[] = {
 	SOC_DOUBLE("CD Playback Volume", AC97_CD, 8, 0, 31, 1),
 	SOC_SINGLE("Mic Playback Volume", AC97_MIC, 0, 31, 1),
 	SOC_SINGLE("Mic 20dB Boost Switch", AC97_MIC, 6, 1, 0),
-	SOC_DOUBLE("PCM Capture Volume", AC97_REC_GAIN, 8, 0, 15, 0),
-	SOC_SINGLE("PCM Capture Switch", AC97_REC_GAIN, 15, 1, 1),
+	SOC_DOUBLE("Capture Volume", AC97_REC_GAIN, 8, 0, 15, 0),
+	SOC_SINGLE("Capture Switch", AC97_REC_GAIN, 15, 1, 1),
 };
 
 static const char *wm9705_mic[] = {"Mic 1", "Mic 2"};
@@ -247,7 +249,7 @@ static int ac97_prepare(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	int reg;
 	u16 vra;
 
@@ -267,6 +269,10 @@ static int ac97_prepare(struct snd_pcm_substream *substream,
 			SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 | \
 			SNDRV_PCM_RATE_48000)
 
+static struct snd_soc_dai_ops wm9705_dai_ops = {
+	.prepare	= ac97_prepare,
+};
+
 struct snd_soc_dai wm9705_dai[] = {
 	{
 		.name = "AC97 HiFi",
@@ -276,18 +282,16 @@ struct snd_soc_dai wm9705_dai[] = {
 			.channels_min = 1,
 			.channels_max = 2,
 			.rates = WM9705_AC97_RATES,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.formats = SND_SOC_STD_AC97_FMTS,
 		},
 		.capture = {
 			.stream_name = "HiFi Capture",
 			.channels_min = 1,
 			.channels_max = 2,
 			.rates = WM9705_AC97_RATES,
-			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.formats = SND_SOC_STD_AC97_FMTS,
 		},
-		.ops = {
-			.prepare = ac97_prepare,
-		},
+		.ops = &wm9705_dai_ops,
 	},
 	{
 		.name = "AC97 Aux",
@@ -356,10 +360,11 @@ static int wm9705_soc_probe(struct platform_device *pdev)
 
 	printk(KERN_INFO "WM9705 SoC Audio Codec\n");
 
-	socdev->codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);
-	if (socdev->codec == NULL)
+	socdev->card->codec = kzalloc(sizeof(struct snd_soc_codec),
+				      GFP_KERNEL);
+	if (socdev->card->codec == NULL)
 		return -ENOMEM;
-	codec = socdev->codec;
+	codec = socdev->card->codec;
 	mutex_init(&codec->mutex);
 
 	codec->reg_cache = kmemdup(wm9705_reg, sizeof(wm9705_reg), GFP_KERNEL);
@@ -413,15 +418,15 @@ pcm_err:
 codec_err:
 	kfree(codec->reg_cache);
 cache_err:
-	kfree(socdev->codec);
-	socdev->codec = NULL;
+	kfree(socdev->card->codec);
+	socdev->card->codec = NULL;
 	return ret;
 }
 
 static int wm9705_soc_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	if (codec == NULL)
 		return 0;

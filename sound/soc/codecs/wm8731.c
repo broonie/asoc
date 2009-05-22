@@ -258,7 +258,7 @@ static int wm8731_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct wm8731_priv *wm8731 = codec->private_data;
 	u16 iface = wm8731_read_reg_cache(codec, WM8731_IFACE) & 0xfff3;
 	int i = get_coeff(wm8731->sysclk, params_rate(params));
@@ -288,7 +288,7 @@ static int wm8731_pcm_prepare(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	/* set active */
 	wm8731_write(codec, WM8731_ACTIVE, 0x0001);
@@ -301,7 +301,7 @@ static void wm8731_shutdown(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	/* deactivate */
 	if (!codec->active) {
@@ -433,6 +433,15 @@ static int wm8731_set_bias_level(struct snd_soc_codec *codec,
 #define WM8731_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 	SNDRV_PCM_FMTBIT_S24_LE)
 
+static struct snd_soc_dai_ops wm8731_dai_ops = {
+	.prepare	= wm8731_pcm_prepare,
+	.hw_params	= wm8731_hw_params,
+	.shutdown	= wm8731_shutdown,
+	.digital_mute	= wm8731_mute,
+	.set_sysclk	= wm8731_set_dai_sysclk,
+	.set_fmt	= wm8731_set_dai_fmt,
+};
+
 struct snd_soc_dai wm8731_dai = {
 	.name = "WM8731",
 	.playback = {
@@ -447,21 +456,14 @@ struct snd_soc_dai wm8731_dai = {
 		.channels_max = 2,
 		.rates = WM8731_RATES,
 		.formats = WM8731_FORMATS,},
-	.ops = {
-		.prepare = wm8731_pcm_prepare,
-		.hw_params = wm8731_hw_params,
-		.shutdown = wm8731_shutdown,
-		.digital_mute = wm8731_mute,
-		.set_sysclk = wm8731_set_dai_sysclk,
-		.set_fmt = wm8731_set_dai_fmt,
-	}
+	.ops = &wm8731_dai_ops,
 };
 EXPORT_SYMBOL_GPL(wm8731_dai);
 
 static int wm8731_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	wm8731_write(codec, WM8731_ACTIVE, 0x0);
 	wm8731_set_bias_level(codec, SND_SOC_BIAS_OFF);
@@ -471,7 +473,7 @@ static int wm8731_suspend(struct platform_device *pdev, pm_message_t state)
 static int wm8731_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	int i;
 	u8 data[2];
 	u16 *cache = codec->reg_cache;
@@ -498,7 +500,7 @@ static int wm8731_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	socdev->codec = wm8731_codec;
+	socdev->card->codec = wm8731_codec;
 	codec = wm8731_codec;
 
 	/* register pcms */
@@ -664,14 +666,14 @@ static int __devinit wm8731_spi_probe(struct spi_device *spi)
 	codec->hw_write = (hw_write_t)wm8731_spi_write;
 	codec->dev = &spi->dev;
 
-	spi->dev.driver_data = wm8731;
+	dev_set_drvdata(&spi->dev, wm8731);
 
 	return wm8731_register(wm8731);
 }
 
 static int __devexit wm8731_spi_remove(struct spi_device *spi)
 {
-	struct wm8731_priv *wm8731 = spi->dev.driver_data;
+	struct wm8731_priv *wm8731 = dev_get_drvdata(&spi->dev);
 
 	wm8731_unregister(wm8731);
 

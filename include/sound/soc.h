@@ -16,6 +16,8 @@
 #include <linux/platform_device.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
+#include <linux/interrupt.h>
+#include <linux/kernel.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/control.h>
@@ -116,6 +118,14 @@
 	.info = snd_soc_info_volsw, \
 	.get = xhandler_get, .put = xhandler_put, \
 	.private_value = SOC_SINGLE_VALUE(xreg, xshift, xmax, xinvert) }
+#define SOC_DOUBLE_EXT(xname, xreg, shift_left, shift_right, xmax, xinvert,\
+	 xhandler_get, xhandler_put) \
+{	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = (xname),\
+	.info = snd_soc_info_volsw, \
+	.get = xhandler_get, .put = xhandler_put, \
+	.private_value = (unsigned long)&(struct soc_mixer_control) \
+		{.reg = xreg, .shift = shift_left, .rshift = shift_right, \
+		 .max = xmax, .invert = xinvert} }
 #define SOC_SINGLE_EXT_TLV(xname, xreg, xshift, xmax, xinvert,\
 	 xhandler_get, xhandler_put, tlv_array) \
 {	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = xname, \
@@ -168,6 +178,9 @@ struct soc_enum;
 struct snd_soc_ac97_ops;
 struct snd_soc_jack;
 struct snd_soc_jack_pin;
+#ifdef CONFIG_GPIOLIB
+struct snd_soc_jack_gpio;
+#endif
 
 typedef int (*hw_write_t)(void *,const char* ,int);
 typedef int (*hw_read_t)(void *,char* ,int);
@@ -194,10 +207,12 @@ int snd_soc_jack_new(struct snd_soc_card *card, const char *id, int type,
 void snd_soc_jack_report(struct snd_soc_jack *jack, int status, int mask);
 int snd_soc_jack_add_pins(struct snd_soc_jack *jack, int count,
 			  struct snd_soc_jack_pin *pins);
-
-/* codec IO */
-#define snd_soc_read(codec, reg) codec->read(codec, reg)
-#define snd_soc_write(codec, reg, value) codec->write(codec, reg, value)
+#ifdef CONFIG_GPIOLIB
+int snd_soc_jack_add_gpios(struct snd_soc_jack *jack, int count,
+			struct snd_soc_jack_gpio *gpios);
+void snd_soc_jack_free_gpios(struct snd_soc_jack *jack, int count,
+			struct snd_soc_jack_gpio *gpios);
+#endif
 
 /* codec register bit access */
 int snd_soc_update_bits(struct snd_soc_codec *codec, unsigned short reg,
@@ -264,6 +279,27 @@ struct snd_soc_jack_pin {
 	bool invert;
 };
 
+/**
+ * struct snd_soc_jack_gpio - Describes a gpio pin for jack detection
+ *
+ * @gpio:         gpio number
+ * @name:         gpio name
+ * @report:       value to report when jack detected
+ * @invert:       report presence in low state
+ * @debouce_time: debouce time in ms
+ */
+#ifdef CONFIG_GPIOLIB
+struct snd_soc_jack_gpio {
+	unsigned int gpio;
+	const char *name;
+	int report;
+	int invert;
+	int debounce_time;
+	struct snd_soc_jack *jack;
+	struct work_struct work;
+};
+#endif
+
 struct snd_soc_jack {
 	struct snd_jack *jack;
 	struct snd_soc_card *card;
@@ -299,6 +335,7 @@ struct snd_soc_codec {
 	struct module *owner;
 	struct mutex mutex;
 	struct device *dev;
+	struct snd_soc_device *socdev;
 
 	struct list_head list;
 
@@ -332,6 +369,8 @@ struct snd_soc_codec {
 	enum snd_soc_bias_level bias_level;
 	enum snd_soc_bias_level suspend_bias_level;
 	struct delayed_work delayed_work;
+	struct list_head up_list;
+	struct list_head down_list;
 
 	/* codec DAI's */
 	struct snd_soc_dai *dai;
@@ -424,6 +463,8 @@ struct snd_soc_card {
 
 	struct snd_soc_device *socdev;
 
+	struct snd_soc_codec *codec;
+
 	struct snd_soc_platform *platform;
 	struct delayed_work delayed_work;
 	struct work_struct deferred_resume_work;
@@ -433,7 +474,6 @@ struct snd_soc_card {
 struct snd_soc_device {
 	struct device *dev;
 	struct snd_soc_card *card;
-	struct snd_soc_codec *codec;
 	struct snd_soc_codec_device *codec_dev;
 	void *codec_data;
 };
@@ -462,6 +502,19 @@ struct soc_enum {
 	const unsigned int *values;
 	void *dapm;
 };
+
+/* codec IO */
+static inline unsigned int snd_soc_read(struct snd_soc_codec *codec,
+					unsigned int reg)
+{
+	return codec->read(codec, reg);
+}
+
+static inline unsigned int snd_soc_write(struct snd_soc_codec *codec,
+					 unsigned int reg, unsigned int val)
+{
+	return codec->write(codec, reg, val);
+}
 
 #include <sound/soc-dai.h>
 

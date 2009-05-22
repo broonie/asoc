@@ -651,7 +651,7 @@ static int wm8988_pcm_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct wm8988_priv *wm8988 = codec->private_data;
 	u16 iface = wm8988_read_reg_cache(codec, WM8988_IFACE) & 0x1f3;
 	u16 srate = wm8988_read_reg_cache(codec, WM8988_SRATE) & 0x180;
@@ -745,6 +745,14 @@ static int wm8988_set_bias_level(struct snd_soc_codec *codec,
 #define WM8988_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 	SNDRV_PCM_FMTBIT_S24_LE)
 
+static struct snd_soc_dai_ops wm8988_ops = {
+	.startup = wm8988_pcm_startup,
+	.hw_params = wm8988_pcm_hw_params,
+	.set_fmt = wm8988_set_dai_fmt,
+	.set_sysclk = wm8988_set_dai_sysclk,
+	.digital_mute = wm8988_mute,
+};
+
 struct snd_soc_dai wm8988_dai = {
 	.name = "WM8988",
 	.playback = {
@@ -761,13 +769,7 @@ struct snd_soc_dai wm8988_dai = {
 		.rates = WM8988_RATES,
 		.formats = WM8988_FORMATS,
 	 },
-	.ops = {
-		.startup = wm8988_pcm_startup,
-		.hw_params = wm8988_pcm_hw_params,
-		.set_fmt = wm8988_set_dai_fmt,
-		.set_sysclk = wm8988_set_dai_sysclk,
-		.digital_mute = wm8988_mute,
-	},
+	.ops = &wm8988_ops,
 	.symmetric_rates = 1,
 };
 EXPORT_SYMBOL_GPL(wm8988_dai);
@@ -775,7 +777,7 @@ EXPORT_SYMBOL_GPL(wm8988_dai);
 static int wm8988_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	wm8988_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
@@ -784,7 +786,7 @@ static int wm8988_suspend(struct platform_device *pdev, pm_message_t state)
 static int wm8988_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	int i;
 	u8 data[2];
 	u16 *cache = codec->reg_cache;
@@ -816,7 +818,7 @@ static int wm8988_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	socdev->codec = wm8988_codec;
+	socdev->card->codec = wm8988_codec;
 	codec = wm8988_codec;
 
 	/* register pcms */

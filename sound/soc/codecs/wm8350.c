@@ -1301,7 +1301,7 @@ static int wm8350_set_bias_level(struct snd_soc_codec *codec,
 static int wm8350_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	wm8350_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
@@ -1310,7 +1310,7 @@ static int wm8350_suspend(struct platform_device *pdev, pm_message_t state)
 static int wm8350_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	wm8350_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
@@ -1423,8 +1423,8 @@ static int wm8350_probe(struct platform_device *pdev)
 
 	BUG_ON(!wm8350_codec);
 
-	socdev->codec = wm8350_codec;
-	codec = socdev->codec;
+	socdev->card->codec = wm8350_codec;
+	codec = socdev->card->codec;
 	wm8350 = codec->control_data;
 	priv = codec->private_data;
 
@@ -1498,7 +1498,7 @@ card_err:
 static int wm8350_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct wm8350 *wm8350 = codec->control_data;
 	struct wm8350_data *priv = codec->private_data;
 	int ret;
@@ -1538,6 +1538,16 @@ static int wm8350_remove(struct platform_device *pdev)
 			SNDRV_PCM_FMTBIT_S20_3LE |\
 			SNDRV_PCM_FMTBIT_S24_LE)
 
+static struct snd_soc_dai_ops wm8350_dai_ops = {
+	 .hw_params	= wm8350_pcm_hw_params,
+	 .digital_mute	= wm8350_mute,
+	 .trigger	= wm8350_pcm_trigger,
+	 .set_fmt	= wm8350_set_dai_fmt,
+	 .set_sysclk	= wm8350_set_dai_sysclk,
+	 .set_pll	= wm8350_set_fll,
+	 .set_clkdiv	= wm8350_set_clkdiv,
+};
+
 struct snd_soc_dai wm8350_dai = {
 	.name = "WM8350",
 	.playback = {
@@ -1554,15 +1564,7 @@ struct snd_soc_dai wm8350_dai = {
 		 .rates = WM8350_RATES,
 		 .formats = WM8350_FORMATS,
 	 },
-	.ops = {
-		 .hw_params = wm8350_pcm_hw_params,
-		 .digital_mute = wm8350_mute,
-		 .trigger = wm8350_pcm_trigger,
-		 .set_fmt = wm8350_set_dai_fmt,
-		 .set_sysclk = wm8350_set_dai_sysclk,
-		 .set_pll = wm8350_set_fll,
-		 .set_clkdiv = wm8350_set_clkdiv,
-	 },
+	.ops = &wm8350_dai_ops,
 };
 EXPORT_SYMBOL_GPL(wm8350_dai);
 

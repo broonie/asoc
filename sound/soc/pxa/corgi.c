@@ -26,8 +26,6 @@
 #include <sound/soc-dapm.h>
 
 #include <asm/mach-types.h>
-#include <mach/pxa-regs.h>
-#include <mach/hardware.h>
 #include <mach/corgi.h>
 #include <mach/audio.h>
 
@@ -101,7 +99,7 @@ static void corgi_ext_control(struct snd_soc_codec *codec)
 static int corgi_startup(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_codec *codec = rtd->socdev->codec;
+	struct snd_soc_codec *codec = rtd->socdev->card->codec;
 
 	/* check the jack status at stream startup */
 	corgi_ext_control(codec);
@@ -276,18 +274,16 @@ static const struct snd_kcontrol_new wm8731_corgi_controls[] = {
  */
 static int corgi_wm8731_init(struct snd_soc_codec *codec)
 {
-	int i, err;
+	int err;
 
 	snd_soc_dapm_nc_pin(codec, "LLINEIN");
 	snd_soc_dapm_nc_pin(codec, "RLINEIN");
 
 	/* Add corgi specific controls */
-	for (i = 0; i < ARRAY_SIZE(wm8731_corgi_controls); i++) {
-		err = snd_ctl_add(codec->card,
-			snd_soc_cnew(&wm8731_corgi_controls[i], codec, NULL));
-		if (err < 0)
-			return err;
-	}
+	err = snd_soc_add_controls(codec, wm8731_corgi_controls,
+				ARRAY_SIZE(wm8731_corgi_controls));
+	if (err < 0)
+		return err;
 
 	/* Add corgi specific widgets */
 	snd_soc_dapm_new_controls(codec, wm8731_dapm_widgets,

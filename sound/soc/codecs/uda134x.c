@@ -173,7 +173,7 @@ static int uda134x_startup(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct uda134x_priv *uda134x = codec->private_data;
 	struct snd_pcm_runtime *master_runtime;
 
@@ -206,7 +206,7 @@ static void uda134x_shutdown(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct uda134x_priv *uda134x = codec->private_data;
 
 	if (uda134x->master_substream == substream)
@@ -221,7 +221,7 @@ static int uda134x_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct uda134x_priv *uda134x = codec->private_data;
 	u8 hw_params;
 
@@ -431,6 +431,15 @@ SOC_ENUM("PCM Playback De-emphasis", uda134x_mixer_enum[1]),
 SOC_SINGLE("DC Filter Enable Switch", UDA134X_STATUS0, 0, 1, 0),
 };
 
+static struct snd_soc_dai_ops uda134x_dai_ops = {
+	.startup	= uda134x_startup,
+	.shutdown	= uda134x_shutdown,
+	.hw_params	= uda134x_hw_params,
+	.digital_mute	= uda134x_mute,
+	.set_sysclk	= uda134x_set_dai_sysclk,
+	.set_fmt	= uda134x_set_dai_fmt,
+};
+
 struct snd_soc_dai uda134x_dai = {
 	.name = "UDA134X",
 	/* playback capabilities */
@@ -450,14 +459,7 @@ struct snd_soc_dai uda134x_dai = {
 		.formats = UDA134X_FORMATS,
 	},
 	/* pcm operations */
-	.ops = {
-		.startup = uda134x_startup,
-		.shutdown = uda134x_shutdown,
-		.hw_params = uda134x_hw_params,
-		.digital_mute = uda134x_mute,
-		.set_sysclk = uda134x_set_dai_sysclk,
-		.set_fmt = uda134x_set_dai_fmt,
-	}
+	.ops = &uda134x_dai_ops,
 };
 EXPORT_SYMBOL(uda134x_dai);
 
@@ -492,11 +494,11 @@ static int uda134x_soc_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	socdev->codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);
-	if (socdev->codec == NULL)
+	socdev->card->codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);
+	if (socdev->card->codec == NULL)
 		return ret;
 
-	codec = socdev->codec;
+	codec = socdev->card->codec;
 
 	uda134x = kzalloc(sizeof(struct uda134x_priv), GFP_KERNEL);
 	if (uda134x == NULL)
@@ -584,7 +586,7 @@ priv_err:
 static int uda134x_soc_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	uda134x_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	uda134x_set_bias_level(codec, SND_SOC_BIAS_OFF);
@@ -604,7 +606,7 @@ static int uda134x_soc_suspend(struct platform_device *pdev,
 						pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	uda134x_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	uda134x_set_bias_level(codec, SND_SOC_BIAS_OFF);
@@ -614,7 +616,7 @@ static int uda134x_soc_suspend(struct platform_device *pdev,
 static int uda134x_soc_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	uda134x_set_bias_level(codec, SND_SOC_BIAS_PREPARE);
 	uda134x_set_bias_level(codec, SND_SOC_BIAS_ON);
