@@ -170,7 +170,7 @@ static int ad1939_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct ad1939_private *ad = codec->private_data;
 	unsigned char dac0, dac1, dac2, adc0, adc1, adc2;
 	unsigned long rate;
@@ -427,6 +427,13 @@ static int ad1939_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 #define AD1939_FORMATS	\
 	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE)
 
+static struct snd_soc_dai_ops ad1939_ops = {
+	.hw_params = ad1939_hw_params,
+	.digital_mute = ad1939_digmute,
+	.set_sysclk = ad1939_set_dai_sysclk,
+	.set_fmt = ad1939_set_dai_fmt,
+};
+
 struct snd_soc_dai ad1939_dai = {
 	.name = "AD1939",
 	.playback = {
@@ -441,19 +448,14 @@ struct snd_soc_dai ad1939_dai = {
 		.channels_max = 4,	/* yes, 2 DACs! */
 		.rates = AD1939_RATES,
 		.formats = AD1939_FORMATS,},
-	.ops = {
-		.hw_params = ad1939_hw_params,
-		.digital_mute = ad1939_digmute,
-		.set_sysclk = ad1939_set_dai_sysclk,
-		.set_fmt = ad1939_set_dai_fmt,
-	}
+	.ops = &ad1939_ops,
 };
 EXPORT_SYMBOL_GPL(ad1939_dai);
 
 
 static int ad1939_init(struct snd_soc_device *socdev)
 {
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct ad1939_setup_data *setup = socdev->codec_data;
 	struct ad1939_private *ad = codec->private_data;
 	unsigned char r0, r1;
@@ -534,7 +536,7 @@ static struct snd_soc_device *ad1939_socdev;
 static int ad1939_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 {
 	struct snd_soc_device *socdev = ad1939_socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct ad1939_setup_data *setup = socdev->codec_data;
 	struct i2c_client *i2c;
 	int ret;
@@ -630,7 +632,7 @@ static int ad1939_probe(struct platform_device *pdev)
 	}
 	ad->codec = codec;
 	codec->private_data = ad;
-	socdev->codec = codec;
+	socdev->card->codec = codec;
 	mutex_init(&codec->mutex);
 	INIT_LIST_HEAD(&codec->dapm_widgets);
 	INIT_LIST_HEAD(&codec->dapm_paths);
@@ -652,7 +654,7 @@ out:
 static int ad1939_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	if (codec->control_data)
 		ad1939_set_bias_level(codec, SND_SOC_BIAS_OFF);
