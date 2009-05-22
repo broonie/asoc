@@ -490,7 +490,7 @@ static int wm8978_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	u16 iface = wm8978_read_reg_cache(codec, WM8978_IFACE) & 0xff9f;
 	u16 adn = wm8978_read_reg_cache(codec, WM8978_ADD) & 0x1f1;
 
@@ -612,6 +612,14 @@ static int wm8978_set_bias_level(struct snd_soc_codec *codec,
 	(SNDRV_PCM_FORMAT_S16_LE | SNDRV_PCM_FORMAT_S20_3LE | \
 	SNDRV_PCM_FORMAT_S24_3LE | SNDRV_PCM_FORMAT_S24_LE)
 
+static struct snd_soc_dai_ops wm8978_ops = {
+	.hw_params = wm8978_hw_params,
+	.digital_mute = wm8978_mute,
+	.set_fmt = wm8978_set_dai_fmt,
+	.set_clkdiv = wm8978_set_dai_clkdiv,
+	.set_pll = wm8978_set_dai_pll,
+};
+
 struct snd_soc_dai wm8978_dai = {
 	.name = "WM8978 HiFi",
 	.playback = {
@@ -626,20 +634,14 @@ struct snd_soc_dai wm8978_dai = {
 		.channels_max = 2,
 		.rates = WM8978_RATES,
 		.formats = WM8978_FORMATS,},
-	.ops = {
-		.hw_params = wm8978_hw_params,
-		.digital_mute = wm8978_mute,
-		.set_fmt = wm8978_set_dai_fmt,
-		.set_clkdiv = wm8978_set_dai_clkdiv,
-		.set_pll = wm8978_set_dai_pll,
-	},
+	.ops = &wm8978_ops,
 };
 EXPORT_SYMBOL_GPL(wm8978_dai);
 
 static int wm8978_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	wm8978_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
@@ -648,7 +650,7 @@ static int wm8978_suspend(struct platform_device *pdev, pm_message_t state)
 static int wm8978_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	int i;
 	u8 data[2];
 	u16 *cache = codec->reg_cache;
@@ -670,7 +672,7 @@ static int wm8978_resume(struct platform_device *pdev)
  */
 static int wm8978_init(struct snd_soc_device* socdev)
 {
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	int ret = 0;
 
 	codec->name = "WM8978";
@@ -738,7 +740,7 @@ static int wm8978_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 {
 	struct snd_soc_device *socdev = wm8978_socdev;
 	struct wm8978_setup_data *setup = socdev->codec_data;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct i2c_client *i2c;
 	int ret;
 
@@ -824,7 +826,7 @@ static int wm8978_probe(struct platform_device *pdev)
 	if (codec == NULL)
 		return -ENOMEM;
 
-	socdev->codec = codec;
+	socdev->card->codec = codec;
 	mutex_init(&codec->mutex);
 	INIT_LIST_HEAD(&codec->dapm_widgets);
 	INIT_LIST_HEAD(&codec->dapm_paths);
@@ -848,7 +850,7 @@ static int wm8978_probe(struct platform_device *pdev)
 static int wm8978_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	if (codec->control_data)
 		wm8978_set_bias_level(codec, SND_SOC_BIAS_OFF);

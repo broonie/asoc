@@ -484,7 +484,7 @@ static int wm8976_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	u16 iface = wm8976_read_reg_cache(codec, WM8976_IFACE) & 0xff9f;
 	u16 adn = wm8976_read_reg_cache(codec, WM8976_ADD) & 0x1f1;
 
@@ -609,6 +609,14 @@ static int wm8976_set_bias_level(struct snd_soc_codec *codec,
 	(SNDRV_PCM_FORMAT_S16_LE | SNDRV_PCM_FORMAT_S20_3LE | \
 	SNDRV_PCM_FORMAT_S24_3LE | SNDRV_PCM_FORMAT_S24_LE)
 
+static struct snd_soc_dai_ops wm8976_dai_ops = {
+	.hw_params = wm8976_hw_params,
+	.digital_mute = wm8976_mute,
+	.set_fmt = wm8976_set_dai_fmt,
+	.set_clkdiv = wm8976_set_dai_clkdiv,
+	.set_pll = wm8976_set_dai_pll,
+};
+
 struct snd_soc_dai wm8976_dai = {
 	.name = "WM8976 HiFi",
 	.playback = {
@@ -623,20 +631,14 @@ struct snd_soc_dai wm8976_dai = {
 		.channels_max = 1,
 		.rates = WM8976_RATES,
 		.formats = WM8976_FORMATS,},
-	.ops = {
-		.hw_params = wm8976_hw_params,
-		.digital_mute = wm8976_mute,
-		.set_fmt = wm8976_set_dai_fmt,
-		.set_clkdiv = wm8976_set_dai_clkdiv,
-		.set_pll = wm8976_set_dai_pll,
-	},
+	.ops = &wm8976_dai_ops,
 };
 EXPORT_SYMBOL_GPL(wm8976_dai);
 
 static int wm8976_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	wm8976_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
@@ -645,7 +647,7 @@ static int wm8976_suspend(struct platform_device *pdev, pm_message_t state)
 static int wm8976_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	int i;
 	u8 data[2];
 	u16 *cache = codec->reg_cache;
@@ -667,7 +669,7 @@ static int wm8976_resume(struct platform_device *pdev)
  */
 static int wm8976_init(struct snd_soc_device* socdev)
 {
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	int ret = 0;
 
 	codec->name = "WM8976";
@@ -735,7 +737,7 @@ static int wm8976_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 {
 	struct snd_soc_device *socdev = wm8976_socdev;
 	struct wm8976_setup_data *setup = socdev->codec_data;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct i2c_client *i2c;
 	int ret;
 
@@ -821,7 +823,7 @@ static int wm8976_probe(struct platform_device *pdev)
 	if (codec == NULL)
 		return -ENOMEM;
 
-	socdev->codec = codec;
+	socdev->card->codec = codec;
 	mutex_init(&codec->mutex);
 	INIT_LIST_HEAD(&codec->dapm_widgets);
 	INIT_LIST_HEAD(&codec->dapm_paths);
@@ -845,7 +847,7 @@ static int wm8976_probe(struct platform_device *pdev)
 static int wm8976_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	if (codec->control_data)
 		wm8976_set_bias_level(codec, SND_SOC_BIAS_OFF);

@@ -291,9 +291,7 @@ static int wm8772_hw_params(struct snd_pcm_substream *substream,
 			    struct snd_pcm_hw_params *params,
 			    struct snd_soc_dai *dai)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = dai->codec;
 	struct wm8772_priv *wm8772 = codec->private_data;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
@@ -401,6 +399,18 @@ static int wm8772_set_bias_level(struct snd_soc_codec *codec,
 	return 0;
 }
 
+static struct snd_soc_dai_ops wm8772_dac_ops = {
+	.hw_params = wm8772_hw_params,
+	.set_fmt = wm8772_set_dac_dai_fmt,
+	.set_sysclk = wm8772_set_dai_sysclk,
+};
+
+static struct snd_soc_dai_ops wm8772_adc_ops = {
+	.hw_params = wm8772_hw_params,
+	.set_fmt = wm8772_set_adc_dai_fmt,
+	.set_sysclk = wm8772_set_dai_sysclk,
+};
+
 struct snd_soc_dai wm8772_dai[] = {
 {
 	.name = "WM8772",
@@ -409,11 +419,7 @@ struct snd_soc_dai wm8772_dai[] = {
 		.channels_min = 2,
 		.channels_max = 6,
 	},
-	.ops = {
-		.hw_params = wm8772_hw_params,
-		.set_fmt = wm8772_set_dac_dai_fmt,
-		.set_sysclk = wm8772_set_dai_sysclk,
-	},
+	.ops = &wm8772_dac_ops,
 },
 {
 	.name = "WM8772",
@@ -422,11 +428,7 @@ struct snd_soc_dai wm8772_dai[] = {
 		.channels_min = 2,
 		.channels_max = 2,
 	},
-	.ops = {
-		.hw_params = wm8772_hw_params,
-		.set_fmt = wm8772_set_adc_dai_fmt,
-		.set_sysclk = wm8772_set_dai_sysclk,
-	},
+	.ops = &wm8772_adc_ops,
 },
 };
 EXPORT_SYMBOL_GPL(wm8772_dai);
@@ -434,7 +436,7 @@ EXPORT_SYMBOL_GPL(wm8772_dai);
 static int wm8772_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	wm8772_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
@@ -443,7 +445,7 @@ static int wm8772_suspend(struct platform_device *pdev, pm_message_t state)
 static int wm8772_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	int i;
 	u8 data[2];
 	u16 *cache = codec->reg_cache;
@@ -465,7 +467,7 @@ static int wm8772_resume(struct platform_device *pdev)
  */
 static int wm8772_init(struct snd_soc_device *socdev)
 {
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	int reg, ret = 0;
 
 	codec->name = "WM8772";
@@ -549,7 +551,7 @@ static int wm8772_probe(struct platform_device *pdev)
 	}
 
 	codec->private_data = wm8772;
-	socdev->codec = codec;
+	socdev->card->codec = codec;
 	mutex_init(&codec->mutex);
 	INIT_LIST_HEAD(&codec->dapm_widgets);
 	INIT_LIST_HEAD(&codec->dapm_paths);
@@ -566,7 +568,7 @@ static int wm8772_probe(struct platform_device *pdev)
 static int wm8772_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	if (codec->control_data)
 		wm8772_set_bias_level(codec, SND_SOC_BIAS_OFF);

@@ -1137,7 +1137,7 @@ static int wm8991_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	u16 audio1 = wm8991_read_reg_cache(codec, WM8991_AUDIO_INTERFACE_1);
 
 	audio1 &= ~WM8991_AIF_WL_MASK;
@@ -1178,6 +1178,15 @@ static int wm8991_set_bias_level(struct snd_soc_codec *codec,
 #define WM8991_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 	SNDRV_PCM_FMTBIT_S24_LE)
 
+static struct snd_soc_dai_ops wm8991_ops = {
+	.hw_params = wm8991_hw_params,
+	.digital_mute = wm8991_mute,
+	.set_fmt = wm8991_set_dai_fmt,
+	.set_clkdiv = wm8991_set_dai_clkdiv,
+	.set_pll = wm8991_set_dai_pll,
+	.set_sysclk = wm8991_set_dai_sysclk,
+};
+
 /*
  * The WM8991 supports 2 different and mutually exclusive DAI
  * configurations.
@@ -1201,21 +1210,14 @@ struct snd_soc_dai wm8991_dai = {
 		.channels_max = 2,
 		.rates = WM8991_RATES,
 		.formats = WM8991_FORMATS,},
-	.ops = {
-		 .hw_params = wm8991_hw_params,
-		 .digital_mute = wm8991_mute,
-		 .set_fmt = wm8991_set_dai_fmt,
-		 .set_clkdiv = wm8991_set_dai_clkdiv,
-		 .set_pll = wm8991_set_dai_pll,
-		 .set_sysclk = wm8991_set_dai_sysclk,
-	},
+	.ops = &wm8991_ops,
 };
 EXPORT_SYMBOL_GPL(wm8991_dai);
 
 static int wm8991_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	/* we only need to suspend if we are a valid card */
 	if (!codec->card)
@@ -1228,7 +1230,7 @@ static int wm8991_suspend(struct platform_device *pdev, pm_message_t state)
 static int wm8991_resume(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	int i;
 	u8 data[2];
 	u16 *cache = codec->reg_cache;
@@ -1256,7 +1258,7 @@ static int wm8991_resume(struct platform_device *pdev)
  */
 static int wm8991_init(struct snd_soc_device *socdev)
 {
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	u16 reg;
 	int ret = 0;
 
@@ -1345,7 +1347,7 @@ static int wm8991_codec_probe(struct i2c_adapter *adap, int addr, int kind)
 {
 	struct snd_soc_device *socdev = wm8991_socdev;
 	struct wm8991_setup_data *setup = socdev->codec_data;
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 	struct i2c_client *i2c;
 	int ret;
 
@@ -1435,7 +1437,7 @@ static int wm8991_probe(struct platform_device *pdev)
 	}
 
 	codec->private_data = wm8991;
-	socdev->codec = codec;
+	socdev->card->codec = codec;
 	mutex_init(&codec->mutex);
 	INIT_LIST_HEAD(&codec->dapm_widgets);
 	INIT_LIST_HEAD(&codec->dapm_paths);
@@ -1459,7 +1461,7 @@ static int wm8991_probe(struct platform_device *pdev)
 static int wm8991_remove(struct platform_device *pdev)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
+	struct snd_soc_codec *codec = socdev->card->codec;
 
 	if (codec->control_data)
 		wm8991_set_bias_level(codec, SND_SOC_BIAS_OFF);
