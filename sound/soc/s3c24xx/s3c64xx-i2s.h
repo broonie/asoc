@@ -28,6 +28,7 @@ struct clk;
 #define S3C64XX_CLKSRC_CDCLK    (2)
 
 extern struct snd_soc_dai s3c64xx_i2s_dai[];
+extern struct snd_soc_dai s3c64xx_i2s_v4_dai[];
 
 extern struct clk *s3c64xx_i2s_get_clock(struct snd_soc_dai *dai);
 
